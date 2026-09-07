@@ -1,39 +1,65 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import {
-  TEHRAN_PROVINCE_ID,
   ACTIVE_COUNTY_NAMES,
   ROBAT_KARIM_COUNTY_NAME,
   ROBAT_KARIM_NEIGHBORHOODS,
 } from '@/lib/constants';
 import type { Province, County, District, City, Neighborhood } from '@/lib/types';
 
+// Resolve Tehran dynamically. Database seeds generate UUIDs, so a hard-coded ID
+// cannot be assumed to match every installation.
+let tehranProvinceIdPromise: Promise<string | null> | null = null;
+
+export function getTehranProvinceId(): Promise<string | null> {
+  if (tehranProvinceIdPromise) return tehranProvinceIdPromise;
+  tehranProvinceIdPromise = (async () => {
+    let { data } = await supabase.from('provinces').select('id').eq('slug', 'tehran').maybeSingle();
+    if (!data) ({ data } = await supabase.from('provinces').select('id').eq('name', 'تهران').maybeSingle());
+    const id = data?.id ?? null;
+    if (!id) tehranProvinceIdPromise = null;
+    return id;
+  })().catch(() => {
+    tehranProvinceIdPromise = null;
+    return null;
+  });
+  return tehranProvinceIdPromise;
+}
+
 // One-time idempotent seeding of the geographic rows the app relies on.
-// Runs as the logged-in user (RLS allows authenticated inserts). Safe to call repeatedly.
 let geoSeedPromise: Promise<void> | null = null;
 
 export function ensureActiveGeo(): Promise<void> {
   if (geoSeedPromise) return geoSeedPromise;
   geoSeedPromise = (async () => {
+    const tehranProvinceId = await getTehranProvinceId();
+    if (!tehranProvinceId) {
+      geoSeedPromise = null;
+      return;
+    }
+
     // ۱) شهرستان‌های جاافتاده استان تهران
     const { data: existingCounties } = await supabase
       .from('counties')
-      .select('id, name')
-      .eq('province_id', TEHRAN_PROVINCE_ID)
+      .select('id, name, active')
+      .eq('province_id', tehranProvinceId)
       .in('name', ACTIVE_COUNTY_NAMES);
     const have = new Set((existingCounties ?? []).map((c) => c.name));
     const missing = ACTIVE_COUNTY_NAMES.filter((n) => !have.has(n));
+    for (const county of existingCounties ?? []) {
+      if (!county.active) await supabase.from('counties').update({ active: true }).eq('id', county.id);
+    }
     for (const name of missing) {
       await supabase
         .from('counties')
-        .insert({ province_id: TEHRAN_PROVINCE_ID, name, slug: `auto-${name.replace(/\s+/g, '-')}`, active: true });
+        .insert({ province_id: tehranProvinceId, name, slug: `auto-${name.replace(/\s+/g, '-')}`, active: true });
     }
 
     // ۲) شهر انکر برای محله‌های رباط کریم
     const { data: rkCounty } = await supabase
       .from('counties')
       .select('id')
-      .eq('province_id', TEHRAN_PROVINCE_ID)
+      .eq('province_id', tehranProvinceId)
       .eq('name', ROBAT_KARIM_COUNTY_NAME)
       .maybeSingle();
     if (!rkCounty) return;
@@ -46,7 +72,7 @@ export function ensureActiveGeo(): Promise<void> {
     if (!city) {
       const { data: created } = await supabase
         .from('cities')
-        .insert({ province_id: TEHRAN_PROVINCE_ID, county_id: rkCounty.id, name: ROBAT_KARIM_COUNTY_NAME, slug: 'robat-karim-city', active: true })
+        .insert({ province_id: tehranProvinceId, county_id: rkCounty.id, name: ROBAT_KARIM_COUNTY_NAME, slug: 'robat-karim-city', active: true })
         .select()
         .maybeSingle();
       city = created;
@@ -69,23 +95,23 @@ export function ensureActiveGeo(): Promise<void> {
   return geoSeedPromise;
 }
 
-// شهرستان‌های فعال — بعد از seed کامل می‌گیرد
+// شهرستان‌های مورد استفاده را فوراً از داده موجود می‌گیرد. Seed در پس‌زمینه
+// انجام می‌شود و شکست آن مانع نمایش گزینه‌های موجود نخواهد شد.
 export function useActiveCounties() {
   const [counties, setCounties] = useState<County[]>([]);
 
   useEffect(() => {
     let active = true;
-    (async () => {
-      await ensureActiveGeo();
-      const { data } = await supabase
-        .from('counties')
-        .select('*')
-        .eq('province_id', TEHRAN_PROVINCE_ID)
-        .eq('active', true)
-        .in('name', ACTIVE_COUNTY_NAMES)
-        .order('name');
-      if (active) setCounties((data as County[]) ?? []);
-    })();
+    const load = async () => {
+      const provinceId = await getTehranProvinceId();
+      let query = supabase.from('counties').select('*').in('name', ACTIVE_COUNTY_NAMES).order('name');
+      if (provinceId) query = query.eq('province_id', provinceId);
+      const { data } = await query;
+      if (active && data) setCounties(data as County[]);
+    };
+
+    void load();
+    void ensureActiveGeo().then(load);
     return () => { active = false; };
   }, []);
 

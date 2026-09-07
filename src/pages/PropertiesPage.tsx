@@ -18,7 +18,6 @@ import {
   validatePhone,
   toEnglishDigits,
   timeAgo,
-  TEHRAN_PROVINCE_ID,
   ACTIVE_COUNTY_NAMES,
   ROBAT_KARIM_COUNTY_NAME,
   ROBAT_KARIM_NEIGHBORHOODS,
@@ -70,6 +69,7 @@ export function PropertiesPage({ initialId }: { initialId?: string }) {
   const [view, setView] = useState<'list' | 'detail' | 'create' | 'edit'>('list');
   const [properties, setProperties] = useState<PropertyListItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
   const [search, setSearch] = useState('');
   const [sortKey, setSortKey] = useState('newest');
   const [page, setPage] = useState(1);
@@ -92,12 +92,32 @@ export function PropertiesPage({ initialId }: { initialId?: string }) {
 
   const loadProperties = useCallback(async () => {
     setLoading(true);
-    const { data, count } = await supabase
-      .from('properties')
-      .select('*, owners(name, phone), provinces(name), counties(name), cities(name), neighborhoods(name)', { count: 'exact' });
-    setProperties((data as PropertyListItem[]) ?? []);
-    setTotal(count ?? 0);
-    setLoading(false);
+    setLoadError('');
+    try {
+      // Optional embedded relations must never be able to hide the properties themselves.
+      const richResult = await supabase
+        .from('properties')
+        .select('*, owners(name, phone), provinces(name), counties(name), cities(name), neighborhoods(name)', { count: 'exact' });
+
+      if (!richResult.error) {
+        setProperties((richResult.data as PropertyListItem[]) ?? []);
+        setTotal(richResult.count ?? richResult.data?.length ?? 0);
+        return;
+      }
+
+      // Some installations do not expose every geographic relationship in the
+      // PostgREST schema cache. Retry without embeds so registered files remain visible.
+      const fallbackResult = await supabase.from('properties').select('*', { count: 'exact' });
+      if (fallbackResult.error) throw fallbackResult.error;
+      setProperties((fallbackResult.data as PropertyListItem[]) ?? []);
+      setTotal(fallbackResult.count ?? fallbackResult.data?.length ?? 0);
+    } catch (error) {
+      setProperties([]);
+      setTotal(0);
+      setLoadError(error instanceof Error ? error.message : 'دریافت فایل‌ها انجام نشد.');
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   useEffect(() => {
@@ -234,9 +254,16 @@ export function PropertiesPage({ initialId }: { initialId?: string }) {
         </div>
       )}
 
+      {loadError && !loading && (
+        <div className="mb-4 flex items-center justify-between gap-3 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+          <span>دریافت فایل‌ها انجام نشد. لطفاً دوباره تلاش کنید.</span>
+          <button type="button" onClick={loadProperties} className="shrink-0 font-bold">تلاش مجدد</button>
+        </div>
+      )}
+
       {loading ? (
         <div className="flex justify-center py-16"><Spinner size={32} /></div>
-      ) : visibleProperties.length === 0 ? (
+      ) : loadError ? null : visibleProperties.length === 0 ? (
         <EmptyState
           icon={<Home size={48} />}
           title="فایلی یافت نشد"
@@ -401,13 +428,16 @@ function PropertyDetail({ propertyId, onBack, onEdit }: { propertyId: string; on
 
   const loadDetail = useCallback(async () => {
     setLoading(true);
-    const [propRes, callsRes, fuRes, matchRes] = await Promise.all([
+    const [richPropRes, callsRes, fuRes, matchRes] = await Promise.all([
       supabase.from('properties').select('*, owners(name, phone), counties(name), neighborhoods(name)').eq('id', propertyId).maybeSingle(),
       supabase.from('calls').select('*').eq('property_id', propertyId).order('call_date', { ascending: false }).limit(10),
       supabase.from('follow_ups').select('*').eq('property_id', propertyId).order('due_date', { ascending: false }).limit(10),
       supabase.from('property_matches').select('*, customers(id, first_name, last_name, mobile, temperature)').eq('property_id', propertyId).order('score', { ascending: false }).limit(5),
     ]);
-    setProperty(propRes.data as PropertyListItem);
+    const propRes = richPropRes.error
+      ? await supabase.from('properties').select('*').eq('id', propertyId).maybeSingle()
+      : richPropRes;
+    setProperty((propRes.data as PropertyListItem) ?? null);
     setOwner(null);
     setColleague(null);
     if (propRes.data?.owner_id) {
@@ -1130,7 +1160,7 @@ function PropertyForm({ propertyId, onBack, onSaved }: { propertyId?: string; on
       owner_id: ownerId,
       owner_relationship: form.contact_type === 'colleague' ? form.colleague_id : null,
       assigned_consultant_id: editingConsultantId || user?.id,
-      province_id: TEHRAN_PROVINCE_ID,
+      province_id: selectedCounty?.province_id ?? null,
       county_id: form.county_id || null,
       district_id: null,
       city_id: null,
