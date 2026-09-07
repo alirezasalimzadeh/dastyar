@@ -1,6 +1,6 @@
 import { ReactNode, useState } from 'react';
 import { Loader2, Copy, Check, ArrowUpDown } from 'lucide-react';
-import { copyText } from '@/lib/constants';
+import { copyText, formatMoneyInput, moneyToPersianWords, normalizeMoneyInput } from '@/lib/constants';
 
 export function Spinner({ size = 20 }: { size?: number }) {
   return <Loader2 size={size} className="animate-spin text-slate-400" />;
@@ -10,6 +10,38 @@ export function FullPageSpinner() {
   return (
     <div className="flex items-center justify-center min-h-[60vh]">
       <Spinner size={32} />
+    </div>
+  );
+}
+
+export function MoneyInput({
+  value,
+  onChange,
+  placeholder,
+  className = '',
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  placeholder?: string;
+  className?: string;
+}) {
+  const words = moneyToPersianWords(value);
+  return (
+    <div>
+      <input
+        type="text"
+        inputMode="numeric"
+        dir="ltr"
+        className={`input text-left font-medium tracking-wide ${className}`}
+        value={formatMoneyInput(value)}
+        onChange={(event) => onChange(normalizeMoneyInput(event.target.value))}
+        placeholder={formatMoneyInput(placeholder ?? '')}
+      />
+      {words && (
+        <p className="mt-1.5 min-h-5 rounded-md bg-emerald-50 px-2.5 py-1 text-right text-[11px] leading-5 text-emerald-700">
+          {words}
+        </p>
+      )}
     </div>
   );
 }

@@ -272,6 +272,57 @@ export function formatPrice(value?: number | null): string {
   return new Intl.NumberFormat('fa-IR').format(value);
 }
 
+// Keep money form state as plain English digits while presenting thousands separators.
+export function normalizeMoneyInput(value: string): string {
+  return toEnglishDigits(value).replace(/[^0-9]/g, '').replace(/^0+(?=\d)/, '');
+}
+
+export function formatMoneyInput(value: string): string {
+  const digits = normalizeMoneyInput(value);
+  return digits ? digits.replace(/\B(?=(\d{3})+(?!\d))/g, ',') : '';
+}
+
+const PERSIAN_ONES = ['', 'یک', 'دو', 'سه', 'چهار', 'پنج', 'شش', 'هفت', 'هشت', 'نه'];
+const PERSIAN_TEENS = ['ده', 'یازده', 'دوازده', 'سیزده', 'چهارده', 'پانزده', 'شانزده', 'هفده', 'هجده', 'نوزده'];
+const PERSIAN_TENS = ['', '', 'بیست', 'سی', 'چهل', 'پنجاه', 'شصت', 'هفتاد', 'هشتاد', 'نود'];
+const PERSIAN_HUNDREDS = ['', 'صد', 'دویست', 'سیصد', 'چهارصد', 'پانصد', 'ششصد', 'هفتصد', 'هشتصد', 'نهصد'];
+const PERSIAN_SCALES = ['', 'هزار', 'میلیون', 'میلیارد', 'تریلیون', 'کوادریلیون'];
+
+function threeDigitsToPersianWords(value: number): string {
+  const parts: string[] = [];
+  const hundreds = Math.floor(value / 100);
+  const remainder = value % 100;
+  if (hundreds) parts.push(PERSIAN_HUNDREDS[hundreds]);
+  if (remainder >= 10 && remainder < 20) parts.push(PERSIAN_TEENS[remainder - 10]);
+  else {
+    const tens = Math.floor(remainder / 10);
+    const ones = remainder % 10;
+    if (tens) parts.push(PERSIAN_TENS[tens]);
+    if (ones) parts.push(PERSIAN_ONES[ones]);
+  }
+  return parts.join(' و ');
+}
+
+export function moneyToPersianWords(value: string | number): string {
+  const digits = normalizeMoneyInput(String(value));
+  if (!digits) return '';
+  if (/^0+$/.test(digits)) return 'صفر تومان';
+
+  const groups: number[] = [];
+  for (let end = digits.length; end > 0; end -= 3) {
+    groups.push(Number(digits.slice(Math.max(0, end - 3), end)));
+  }
+  if (groups.length > PERSIAN_SCALES.length) return `${formatMoneyInput(digits)} تومان`;
+
+  const words: string[] = [];
+  groups.forEach((group, index) => {
+    if (!group) return;
+    const groupWords = threeDigitsToPersianWords(group);
+    words.unshift(`${groupWords}${PERSIAN_SCALES[index] ? ` ${PERSIAN_SCALES[index]}` : ''}`);
+  });
+  return `${words.join(' و ')} تومان`;
+}
+
 // Format price compactly (میلیارد / میلیون)
 export function formatMoneyShort(value?: number | null): string {
   if (value == null) return '-';

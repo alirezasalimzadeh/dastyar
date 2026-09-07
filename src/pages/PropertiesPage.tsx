@@ -25,7 +25,7 @@ import {
   ROBAT_KARIM_STREETS,
   COLLEAGUE_TAG,
 } from '@/lib/constants';
-import { Badge, EmptyState, Spinner, Modal, PageHeader, Pagination, ConfirmDialog, SortSelect } from '@/components/ui';
+import { Badge, EmptyState, Spinner, Modal, MoneyInput, PageHeader, Pagination, ConfirmDialog, SortSelect } from '@/components/ui';
 import { useActiveCounties, useCountyNeighborhoods } from '@/lib/geo';
 import type { Property, Owner, Colleague } from '@/lib/types';
 import { ownerToColleague, useColleagues } from '@/lib/colleagues';
@@ -1421,28 +1421,28 @@ function PropertyForm({ propertyId, onBack, onSaved }: { propertyId?: string; on
             {form.transaction_type === 'buy' || form.transaction_type === 'sell' ? (
               <div>
                 <label className="label">قیمت فروش (تومان)</label>
-                <input className="input" value={form.sale_price} onChange={(e) => setForm({ ...form, sale_price: e.target.value })} placeholder="2000000000" dir="ltr" />
+                <MoneyInput value={form.sale_price} onChange={(value) => setForm({ ...form, sale_price: value })} placeholder="2000000000" />
               </div>
             ) : form.transaction_type === 'rent' ? (
               <>
                 <div>
                   <label className="label">رهن (تومان)</label>
-                  <input className="input" value={form.deposit_price} onChange={(e) => setForm({ ...form, deposit_price: e.target.value })} placeholder="100000000" dir="ltr" />
+                  <MoneyInput value={form.deposit_price} onChange={(value) => setForm({ ...form, deposit_price: value })} placeholder="100000000" />
                 </div>
                 <div>
                   <label className="label">اجاره ماهانه (تومان)</label>
-                  <input className="input" value={form.monthly_rent} onChange={(e) => setForm({ ...form, monthly_rent: e.target.value })} placeholder="3000000" dir="ltr" />
+                  <MoneyInput value={form.monthly_rent} onChange={(value) => setForm({ ...form, monthly_rent: value })} placeholder="3000000" />
                 </div>
               </>
             ) : (
               <div>
                 <label className="label">قیمت مشارکت (تومان)</label>
-                <input className="input" value={form.sale_price} onChange={(e) => setForm({ ...form, sale_price: e.target.value })} placeholder="مبلغ مشارکت" dir="ltr" />
+                <MoneyInput value={form.sale_price} onChange={(value) => setForm({ ...form, sale_price: value })} placeholder="2000000000" />
               </div>
             )}
             <div>
               <label className="label">پورسانت (تومان)</label>
-              <input className="input" value={form.commission} onChange={(e) => setForm({ ...form, commission: e.target.value })} placeholder="50000000" dir="ltr" />
+              <MoneyInput value={form.commission} onChange={(value) => setForm({ ...form, commission: value })} placeholder="50000000" />
             </div>
             <div>
               <label className="flex items-center gap-2 cursor-pointer">

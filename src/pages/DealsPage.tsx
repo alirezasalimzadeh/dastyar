@@ -3,7 +3,7 @@ import { Handshake, Plus, ArrowLeft, Trash2, TrendingUp } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth';
 import { DEAL_STATUSES, TRANSACTION_TYPES, getDealStatusInfo, getTransactionLabel, formatPrice, formatDate, toEnglishDigits } from '@/lib/constants';
-import { Badge, EmptyState, Spinner, Modal, PageHeader, ConfirmDialog } from '@/components/ui';
+import { Badge, EmptyState, Spinner, Modal, MoneyInput, PageHeader, ConfirmDialog } from '@/components/ui';
 
 export function DealsPage({ initialId }: { initialId?: string }) {
   const { user } = useAuth();
@@ -129,9 +129,9 @@ function DealModal({ onClose, onSaved }: { onClose: () => void; onSaved: () => v
           <input className="input mb-2" placeholder="جستجوی فایل..." value={propSearch} onChange={(e) => setPropSearch(e.target.value)} />
           {properties.length > 0 && <div className="border border-slate-200 rounded-lg max-h-32 overflow-y-auto divide-y divide-slate-100">{properties.map((p) => <button key={p.id} onClick={() => { setPropertyId(p.id); setPropSearch(p.title); setProperties([]); }} className="w-full px-3 py-2 text-right hover:bg-slate-50 text-sm">{p.title}</button>)}</div>}
         </div>
-        <div className="grid grid-cols-2 gap-3">
-          <div><label className="label">ارزش معامله (تومان)</label><input className="input" value={dealValue} onChange={(e) => setDealValue(e.target.value)} dir="ltr" /></div>
-          <div><label className="label">پورسانت (تومان)</label><input className="input" value={commission} onChange={(e) => setCommission(e.target.value)} dir="ltr" /></div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div><label className="label">ارزش معامله (تومان)</label><MoneyInput value={dealValue} onChange={setDealValue} placeholder="2000000000" /></div>
+          <div><label className="label">پورسانت (تومان)</label><MoneyInput value={commission} onChange={setCommission} placeholder="50000000" /></div>
         </div>
         <div><label className="label">وضعیت</label><select className="input" value={status} onChange={(e) => setStatus(e.target.value)}>{DEAL_STATUSES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}</select></div>
         <div><label className="label">یادداشت</label><textarea className="input min-h-[60px]" value={notes} onChange={(e) => setNotes(e.target.value)} /></div>

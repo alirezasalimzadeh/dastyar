@@ -25,7 +25,7 @@ import {
   ROBAT_KARIM_COUNTY_NAME,
   ROBAT_KARIM_NEIGHBORHOODS,
 } from '@/lib/constants';
-import { Badge, EmptyState, Spinner, Modal, PageHeader, Pagination, ConfirmDialog, CopyButton, SortSelect } from '@/components/ui';
+import { Badge, EmptyState, Spinner, Modal, MoneyInput, PageHeader, Pagination, ConfirmDialog, CopyButton, SortSelect } from '@/components/ui';
 import { useActiveCounties, useCountyNeighborhoods } from '@/lib/geo';
 import type { Customer } from '@/lib/types';
 import { getFieldSections, getFieldLabel, type FieldDef } from '@/lib/propertyFields';
@@ -899,6 +899,15 @@ function DynamicField({ field, value, onChange }: { field: FieldDef; value: stri
           <option value="">انتخاب کنید</option>
           {field.options?.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
         </select>
+      </div>
+    );
+  }
+
+  if (field.label.includes('تومان')) {
+    return (
+      <div>
+        <label className="label">{field.label}</label>
+        <MoneyInput value={value as string} onChange={onChange} placeholder={field.placeholder} />
       </div>
     );
   }
