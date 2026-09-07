@@ -1546,17 +1546,19 @@ function PropertyForm({ propertyId, onBack, onSaved }: { propertyId?: string; on
                 <p className="md:col-span-3 -mt-1 text-xs text-slate-500">با وارد کردن هر دو مقدار، مقدار سوم به‌صورت خودکار محاسبه می‌شود.</p>
               </div>
             )}
-            <div>
-              <label className="label">پورسانت (تومان)</label>
-              <MoneyInput value={form.commission} onChange={(value) => setForm({ ...form, commission: value })} placeholder="50000000" wordsTone="amber" />
-              {form.transaction_type !== 'rent' && numericValue(form.sale_price) > 0 && (
-                <div className="mt-2 grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
-                  <div className="rounded-lg bg-slate-50 px-3 py-2 text-slate-600">سهم طرف اول (۱٪): <strong>{formatPrice(Math.round(numericValue(form.sale_price) * 0.01))} تومان</strong></div>
-                  <div className="rounded-lg bg-slate-50 px-3 py-2 text-slate-600">سهم طرف دوم (۱٪): <strong>{formatPrice(Math.round(numericValue(form.sale_price) * 0.01))} تومان</strong></div>
-                  <div className="rounded-lg bg-amber-50 px-3 py-2 text-amber-700">مجموع (۲٪): <strong>{formatPrice(Math.round(numericValue(form.sale_price) * 0.02))} تومان</strong></div>
+            {form.transaction_type !== 'rent' && numericValue(form.sale_price) > 0 && (
+              <div>
+                <label className="label">پورسانت</label>
+                <div className="flex flex-wrap gap-2 text-xs">
+                  <span className="inline-flex items-center rounded-full bg-slate-100 px-3 py-1.5 font-medium text-slate-700">
+                    سهم هر طرف (۱٪): {formatPrice(Math.round(numericValue(form.sale_price) * 0.01))} تومان
+                  </span>
+                  <span className="inline-flex items-center rounded-full bg-amber-100 px-3 py-1.5 font-bold text-amber-800">
+                    مجموع (۲٪): {formatPrice(Math.round(numericValue(form.sale_price) * 0.02))} تومان
+                  </span>
                 </div>
-              )}
-            </div>
+              </div>
+            )}
             <div>
               <label className="flex items-center gap-2 cursor-pointer">
                 <input type="checkbox" checked={form.negotiable} onChange={(e) => setForm({ ...form, negotiable: e.target.checked })} className="w-4 h-4 rounded" />

@@ -137,15 +137,21 @@ function DealModal({ onClose, onSaved }: { onClose: () => void; onSaved: () => v
           <input className="input mb-2" placeholder="جستجوی فایل..." value={propSearch} onChange={(e) => setPropSearch(e.target.value)} />
           {properties.length > 0 && <div className="border border-slate-200 rounded-lg max-h-32 overflow-y-auto divide-y divide-slate-100">{properties.map((p) => <button key={p.id} onClick={() => { setPropertyId(p.id); setPropSearch(p.title); setProperties([]); }} className="w-full px-3 py-2 text-right hover:bg-slate-50 text-sm">{p.title}</button>)}</div>}
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <div><label className="label">ارزش معامله (تومان)</label><MoneyInput value={dealValue} onChange={changeDealValue} placeholder="2000000000" /></div>
-          <div><label className="label">پورسانت کل (تومان)</label><MoneyInput value={commission} onChange={setCommission} placeholder="40000000" wordsTone="amber" /></div>
+        <div>
+          <label className="label">ارزش معامله (تومان)</label>
+          <MoneyInput value={dealValue} onChange={changeDealValue} placeholder="2000000000" />
         </div>
         {dealAmount > 0 && (
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
-            <div className="rounded-lg bg-slate-50 px-3 py-2 text-slate-600">طرف اول (۱٪): <strong>{formatPrice(oneSideCommission)} تومان</strong></div>
-            <div className="rounded-lg bg-slate-50 px-3 py-2 text-slate-600">طرف دوم (۱٪): <strong>{formatPrice(oneSideCommission)} تومان</strong></div>
-            <div className="rounded-lg bg-amber-50 px-3 py-2 text-amber-700">مجموع (۲٪): <strong>{formatPrice(standardCommission)} تومان</strong></div>
+          <div>
+            <label className="label">پورسانت</label>
+            <div className="flex flex-wrap gap-2 text-xs">
+              <span className="inline-flex items-center rounded-full bg-slate-100 px-3 py-1.5 font-medium text-slate-700">
+                سهم هر طرف (۱٪): {formatPrice(oneSideCommission)} تومان
+              </span>
+              <span className="inline-flex items-center rounded-full bg-amber-100 px-3 py-1.5 font-bold text-amber-800">
+                مجموع (۲٪): {formatPrice(standardCommission)} تومان
+              </span>
+            </div>
           </div>
         )}
         <div><label className="label">وضعیت</label><select className="input" value={status} onChange={(e) => setStatus(e.target.value)}>{DEAL_STATUSES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}</select></div>
