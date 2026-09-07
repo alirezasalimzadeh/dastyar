@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
-import { Plus, Search, Building2, Phone, ArrowLeft, Trash2, X } from 'lucide-react';
+import { Plus, Search, Building2, Phone, ArrowLeft, Trash2, X, Pencil } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth';
 import { normalizePhone, validatePhone, formatDate, timeAgo, toEnglishDigits, toPersianDigits, COLLEAGUE_TAG } from '@/lib/constants';
@@ -53,6 +53,7 @@ export function OwnersPage({ initialId }: { initialId?: string }) {
   const visibleOwners = useMemo(() => {
     const q = toEnglishDigits(search.trim()).toLowerCase();
     let rows = owners.map((o) => {
+      const propsArr = o.properties ?? [];
       const activeCount = propsArr.filter((pr) => pr.status === 'active').length;
       const lastCall = (o.calls ?? []).reduce<string | null>(
         (acc, c) => (c.call_date && (!acc || c.call_date > acc) ? c.call_date : acc),
@@ -155,6 +156,7 @@ function OwnerDetail({ ownerId, onBack }: { ownerId: string; onBack: () => void 
   const [calls, setCalls] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showEdit, setShowEdit] = useState(false);
 
   const loadDetail = useCallback(async () => {
     setLoading(true);
@@ -190,7 +192,8 @@ function OwnerDetail({ ownerId, onBack }: { ownerId: string; onBack: () => void 
         </div>
         <div className="flex gap-2 mt-4 flex-wrap">
           <a href={`tel:${normalizePhone(owner.phone)}`} className="btn-primary"><Phone size={16} /> تماس</a>
-          <button onClick={() => setShowDeleteConfirm(true)} className="btn-danger"><Trash2 size={16} /></button>
+          <button onClick={() => setShowEdit(true)} className="btn-secondary"><Pencil size={16} /> ویرایش مالک</button>
+          <button onClick={() => setShowDeleteConfirm(true)} className="btn-danger" aria-label="حذف مالک"><Trash2 size={16} /></button>
         </div>
         {owner.notes && <p className="text-sm text-slate-600 bg-slate-50 p-3 rounded-lg mt-4">{owner.notes}</p>}
         {owner.tags?.length > 0 && <div className="flex flex-wrap gap-1.5 mt-3">{owner.tags.map((t, i) => <Badge key={i} color="blue">{t}</Badge>)}</div>}
@@ -227,18 +230,27 @@ function OwnerDetail({ ownerId, onBack }: { ownerId: string; onBack: () => void 
         ) : <EmptyState icon={<Phone size={36} />} title="تماسی ثبت نشده" />}
       </div>
 
+      {showEdit && (
+        <OwnerForm
+          owner={owner}
+          onClose={() => setShowEdit(false)}
+          onSaved={() => { setShowEdit(false); loadDetail(); }}
+        />
+      )}
       <ConfirmDialog open={showDeleteConfirm} onClose={() => setShowDeleteConfirm(false)} onConfirm={handleDelete} title="حذف مالک" message="آیا از حذف این مالک مطمئن هستید؟" confirmLabel="حذف" danger />
     </div>
   );
 }
 
-function OwnerForm({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
+function OwnerForm({ owner, onClose, onSaved }: { owner?: Owner; onClose: () => void; onSaved: () => void }) {
   const { user } = useAuth();
-  const [name, setName] = useState('');
-  const [phone, setPhone] = useState('');
-  const [secondaryPhone, setSecondaryPhone] = useState('');
-  const [notes, setNotes] = useState('');
-  const [tags, setTags] = useState('');
+  const isEditing = Boolean(owner);
+  const [name, setName] = useState(owner?.name ?? '');
+  const [phone, setPhone] = useState(owner?.phone ?? '');
+  const [secondaryPhone, setSecondaryPhone] = useState(owner?.secondary_phone ?? '');
+  const [notes, setNotes] = useState(owner?.notes ?? '');
+  const [tags, setTags] = useState(owner?.tags?.join('، ') ?? '');
+  const [status, setStatus] = useState<Owner['status']>(owner?.status ?? 'active');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
@@ -247,26 +259,37 @@ function OwnerForm({ onClose, onSaved }: { onClose: () => void; onSaved: () => v
     if (!phone.trim()) { setError('تلفن الزامی است'); return; }
     if (!validatePhone(phone)) { setError('فرمت تلفن صحیح نیست'); return; }
     setSaving(true);
-    const { data, error: insertError } = await supabase.from('owners').insert({
-      name, phone: normalizePhone(phone),
+    setError('');
+    const payload = {
+      name: name.trim(),
+      phone: normalizePhone(phone),
       secondary_phone: secondaryPhone ? normalizePhone(secondaryPhone) : null,
-      notes: notes || null,
-      tags: tags ? tags.split('،').map((t) => t.trim()) : [],
-      assigned_consultant_id: user?.id,
-      status: 'active',
-    }).select().single();
-    if (!insertError && data) {
-      await supabase.from('activities').insert({
-        user_id: user?.id, entity_type: 'owner', entity_id: data.id,
-        action: 'owner_created', description: `مالک جدید ${name} ثبت شد`,
-      });
+      notes: notes.trim() || null,
+      tags: tags ? tags.split('،').map((tag) => tag.trim()).filter(Boolean) : [],
+      status,
+      ...(!isEditing ? { assigned_consultant_id: user?.id } : {}),
+    };
+    const { data, error: saveError } = isEditing && owner
+      ? await supabase.from('owners').update(payload).eq('id', owner.id).select().single()
+      : await supabase.from('owners').insert(payload).select().single();
+    if (saveError || !data) {
+      setError(saveError?.message ?? 'ذخیره مالک انجام نشد.');
+      setSaving(false);
+      return;
     }
+    await supabase.from('activities').insert({
+      user_id: user?.id,
+      entity_type: 'owner',
+      entity_id: data.id,
+      action: isEditing ? 'owner_updated' : 'owner_created',
+      description: isEditing ? `مالک ${name} ویرایش شد` : `مالک جدید ${name} ثبت شد`,
+    });
     setSaving(false);
     onSaved();
   };
 
   return (
-    <Modal open={true} onClose={onClose} title="مالک جدید">
+    <Modal open={true} onClose={onClose} title={isEditing ? 'ویرایش مالک' : 'مالک جدید'}>
       <div className="space-y-4">
         {error && <div className="text-sm text-red-500 bg-red-50 px-3 py-2 rounded-lg">{error}</div>}
         <div><label className="label">نام *</label><input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="نام و نام خانوادگی" /></div>
@@ -274,7 +297,17 @@ function OwnerForm({ onClose, onSaved }: { onClose: () => void; onSaved: () => v
         <div><label className="label">تلفن ثانویه</label><input className="input" value={secondaryPhone} onChange={(e) => setSecondaryPhone(e.target.value)} placeholder="02112345678" dir="ltr" /></div>
         <div><label className="label">تگ‌ها (با ویرگول جدا کنید)</label><input className="input" value={tags} onChange={(e) => setTags(e.target.value)} placeholder="سرمایه‌گذار، فوری" /></div>
         <div><label className="label">یادداشت</label><textarea className="input min-h-[60px]" value={notes} onChange={(e) => setNotes(e.target.value)} /></div>
-        <button onClick={handleSave} disabled={saving} className="btn-primary w-full">{saving ? 'در حال ذخیره...' : 'ذخیره'}</button>
+        {isEditing && (
+          <div>
+            <label className="label">وضعیت</label>
+            <select className="input" value={status} onChange={(e) => setStatus(e.target.value as Owner['status'])}>
+              <option value="active">فعال</option>
+              <option value="inactive">غیرفعال</option>
+              <option value="blacklisted">لیست سیاه</option>
+            </select>
+          </div>
+        )}
+        <button onClick={handleSave} disabled={saving} className="btn-primary w-full">{saving ? 'در حال ذخیره...' : isEditing ? 'ذخیره تغییرات' : 'ذخیره'}</button>
       </div>
     </Modal>
   );

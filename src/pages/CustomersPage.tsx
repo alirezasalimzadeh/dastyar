@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
-import { Plus, Search, Flame, Users, Phone, X, Filter, ArrowLeft, Trash2, Tag, Clock, Target, MapPin } from 'lucide-react';
+import { Plus, Search, Flame, Users, Phone, X, Filter, ArrowLeft, Trash2, Tag, Clock, Target, MapPin, Pencil } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth';
 import {
@@ -48,7 +48,7 @@ const CUSTOMER_SORTS = [
 
 export function CustomersPage({ initialId, initialFilter }: { initialId?: string; initialFilter?: string }) {
   const { user } = useAuth();
-  const [view, setView] = useState<'list' | 'detail' | 'create'>('list');
+  const [view, setView] = useState<'list' | 'detail' | 'create' | 'edit'>('list');
   const [customers, setCustomers] = useState<CustomerRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -129,8 +129,24 @@ export function CustomersPage({ initialId, initialFilter }: { initialId?: string
     return <CustomerForm onBack={() => setView('list')} onSaved={() => { setView('list'); loadCustomers(); }} />;
   }
 
+  if (view === 'edit' && selectedId) {
+    return (
+      <CustomerForm
+        customerId={selectedId}
+        onBack={() => setView('detail')}
+        onSaved={() => { setView('detail'); loadCustomers(); }}
+      />
+    );
+  }
+
   if (view === 'detail' && selectedId) {
-    return <CustomerDetail customerId={selectedId} onBack={() => { setView('list'); setSelectedId(null); }} />;
+    return (
+      <CustomerDetail
+        customerId={selectedId}
+        onBack={() => { setView('list'); setSelectedId(null); }}
+        onEdit={() => setView('edit')}
+      />
+    );
   }
 
   const totalPages = Math.ceil(visibleCustomers.length / PAGE_SIZE);
@@ -313,7 +329,7 @@ export function CustomersPage({ initialId, initialFilter }: { initialId?: string
 }
 
 // Customer Detail Page
-function CustomerDetail({ customerId, onBack }: { customerId: string; onBack: () => void }) {
+function CustomerDetail({ customerId, onBack, onEdit }: { customerId: string; onBack: () => void; onEdit: () => void }) {
   const [customer, setCustomer] = useState<Customer | null>(null);
   const [calls, setCalls] = useState<any[]>([]);
   const [followups, setFollowups] = useState<any[]>([]);
@@ -406,7 +422,10 @@ function CustomerDetail({ customerId, onBack }: { customerId: string; onBack: ()
           <button onClick={() => setShowFollowupModal(true)} className="btn-secondary">
             پیگیری
           </button>
-          <button onClick={() => setShowDeleteConfirm(true)} className="btn-danger">
+          <button onClick={onEdit} className="btn-secondary">
+            <Pencil size={16} /> ویرایش مشتری
+          </button>
+          <button onClick={() => setShowDeleteConfirm(true)} className="btn-danger" aria-label="حذف مشتری">
             <Trash2 size={16} />
           </button>
         </div>
@@ -940,11 +959,16 @@ function StepSummary({ items }: { items: { label: string; value: string }[] }) {
   );
 }
 
-// Customer Creation Form
-function CustomerForm({ onBack, onSaved }: { onBack: () => void; onSaved: () => void }) {
+// Customer create/edit form
+function CustomerForm({ customerId, onBack, onSaved }: { customerId?: string; onBack: () => void; onSaved: () => void }) {
   const { user } = useAuth();
+  const isEditing = Boolean(customerId);
   const [step, setStep] = useState(0);
   const [saving, setSaving] = useState(false);
+  const [formLoading, setFormLoading] = useState(Boolean(customerId));
+  const [saveError, setSaveError] = useState('');
+  const [editingStatus, setEditingStatus] = useState<Customer['status']>('active');
+  const [editingConsultantId, setEditingConsultantId] = useState<string | null>(null);
   const [form, setForm] = useState({
     name: '',
     mobile: '',
@@ -962,6 +986,53 @@ function CustomerForm({ onBack, onSaved }: { onBack: () => void; onSaved: () => 
   const [address, setAddress] = useState('');
   const [typePrefs, setTypePrefs] = useState<Record<string, Record<string, string | boolean>>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    if (!customerId) return;
+    let cancelled = false;
+    const loadCustomerForEdit = async () => {
+      setFormLoading(true);
+      const { data, error } = await supabase.from('customers').select('*').eq('id', customerId).maybeSingle();
+      if (cancelled) return;
+      if (error || !data) {
+        setSaveError(error?.message ?? 'اطلاعات مشتری برای ویرایش پیدا نشد.');
+        setFormLoading(false);
+        return;
+      }
+      const preferences = (data.property_preferences ?? {}) as Record<string, unknown>;
+      const savedLocation = preferences.location as { county_id?: string; neighborhood_id?: string } | undefined;
+      const savedTypePrefs: Record<string, Record<string, string | boolean>> = {};
+      for (const [key, value] of Object.entries(preferences)) {
+        if (key !== 'location' && key !== 'address' && value && typeof value === 'object' && !Array.isArray(value)) {
+          savedTypePrefs[key] = value as Record<string, string | boolean>;
+        }
+      }
+      setForm({
+        name: data.name ?? [data.first_name, data.last_name].filter(Boolean).join(' '),
+        mobile: data.mobile ?? '',
+        secondary_phone: data.secondary_phone ?? '',
+        transaction_intention: data.transaction_intention ?? '',
+        transaction_role: data.transaction_role ?? '',
+        preferred_category: data.preferred_category ?? '',
+        preferred_property_types: Array.isArray(data.preferred_property_types) ? data.preferred_property_types : [],
+        urgency: data.urgency ?? 'normal',
+        temperature: data.temperature ?? 'warm',
+        lead_source: data.lead_source ?? '',
+        notes: data.notes ?? '',
+      });
+      setLocation({
+        county_id: savedLocation?.county_id ?? '',
+        neighborhood_id: savedLocation?.neighborhood_id ?? '',
+      });
+      setAddress((preferences.address as string) ?? data.address ?? '');
+      setTypePrefs(savedTypePrefs);
+      setEditingStatus((data.status as Customer['status']) ?? 'active');
+      setEditingConsultantId(data.assigned_consultant_id ?? null);
+      setFormLoading(false);
+    };
+    loadCustomerForEdit();
+    return () => { cancelled = true; };
+  }, [customerId]);
 
   const steps = [
     { title: 'اطلاعات تماس' },
@@ -997,6 +1068,7 @@ function CustomerForm({ onBack, onSaved }: { onBack: () => void; onSaved: () => 
   const handleSave = async () => {
     if (!validateStep()) return;
     setSaving(true);
+    setSaveError('');
 
     const propertyPreferences: Record<string, unknown> = {};
     if (location.county_id || location.neighborhood_id) {
@@ -1005,10 +1077,11 @@ function CustomerForm({ onBack, onSaved }: { onBack: () => void; onSaved: () => 
     if (address.trim()) {
       propertyPreferences.address = address.trim();
     }
-    for (const [type, prefs] of Object.entries(typePrefs)) {
+    for (const type of form.preferred_property_types) {
+      const prefs = typePrefs[type] ?? {};
       const cleaned: Record<string, string | boolean> = {};
-      for (const [k, v] of Object.entries(prefs)) {
-        if (v !== '' && v !== false) cleaned[k] = v;
+      for (const [key, value] of Object.entries(prefs)) {
+        if (value !== '' && value !== false) cleaned[key] = value;
       }
       if (Object.keys(cleaned).length > 0) propertyPreferences[type] = cleaned;
     }
@@ -1026,20 +1099,25 @@ function CustomerForm({ onBack, onSaved }: { onBack: () => void; onSaved: () => 
       temperature: form.temperature,
       lead_source: form.lead_source || null,
       notes: form.notes || null,
-      assigned_consultant_id: user?.id,
-      status: 'active',
+      assigned_consultant_id: editingConsultantId || user?.id,
+      status: editingStatus,
     };
-    const { data, error } = await supabase.from('customers').insert(payload).select().single();
+    const { data, error } = isEditing && customerId
+      ? await supabase.from('customers').update(payload).eq('id', customerId).select().single()
+      : await supabase.from('customers').insert(payload).select().single();
 
-    if (!error && data) {
-      await supabase.from('activities').insert({
-        user_id: user?.id,
-        entity_type: 'customer',
-        entity_id: data.id,
-        action: 'customer_created',
-        description: `مشتری جدید ${form.name} ثبت شد`,
-      });
+    if (error || !data) {
+      setSaveError(error?.message ?? 'ذخیره مشتری انجام نشد.');
+      setSaving(false);
+      return;
     }
+    await supabase.from('activities').insert({
+      user_id: user?.id,
+      entity_type: 'customer',
+      entity_id: data.id,
+      action: isEditing ? 'customer_updated' : 'customer_created',
+      description: isEditing ? `مشتری ${form.name} ویرایش شد` : `مشتری جدید ${form.name} ثبت شد`,
+    });
     setSaving(false);
     onSaved();
   };
@@ -1055,13 +1133,15 @@ function CustomerForm({ onBack, onSaved }: { onBack: () => void; onSaved: () => 
 
   const roleLabels: Record<string, string> = { buyer: 'متقاضی', owner: 'مالک هستم', applicant: 'متقاضی هستم', builder: 'سازنده هستم', seller: 'مالک' };
 
+  if (formLoading) return <div className="flex justify-center py-16"><Spinner size={32} /></div>;
+
   return (
     <div className="animate-fade-in max-w-2xl mx-auto">
       <button onClick={onBack} className="flex items-center gap-1 text-sm text-slate-500 hover:text-slate-700 mb-4">
         <ArrowLeft size={16} /> بازگشت
       </button>
 
-      <PageHeader title="مشتری جدید" subtitle={`مرحله ${step + 1} از ${steps.length}: ${steps[step].title}`} />
+      <PageHeader title={isEditing ? 'ویرایش مشتری' : 'مشتری جدید'} subtitle={`مرحله ${step + 1} از ${steps.length}: ${steps[step].title}`} />
 
       {/* Progress Bar */}
       <div className="flex gap-1 mb-6">
@@ -1263,8 +1343,18 @@ function CustomerForm({ onBack, onSaved }: { onBack: () => void; onSaved: () => 
               <label className="label">یادداشت</label>
               <textarea className="input min-h-[80px]" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} placeholder="توضیحات اضافی..." />
             </div>
+            {isEditing && (
+              <div>
+                <label className="label">وضعیت مشتری</label>
+                <select className="input" value={editingStatus} onChange={(e) => setEditingStatus(e.target.value as Customer['status'])}>
+                  {CUSTOMER_STATUSES.map((status) => <option key={status.value} value={status.value}>{status.label}</option>)}
+                </select>
+              </div>
+            )}
           </>
         )}
+
+        {saveError && <div className="text-sm text-red-500 bg-red-50 px-3 py-2 rounded-lg">{saveError}</div>}
 
         {/* Navigation Buttons */}
         <div className="flex gap-2 pt-2">
@@ -1279,7 +1369,7 @@ function CustomerForm({ onBack, onSaved }: { onBack: () => void; onSaved: () => 
             </button>
           ) : (
             <button onClick={handleSave} disabled={saving} className="btn-primary flex-1">
-              {saving ? 'در حال ذخیره...' : 'ثبت مشتری'}
+              {saving ? 'در حال ذخیره...' : isEditing ? 'ذخیره تغییرات' : 'ثبت مشتری'}
             </button>
           )}
         </div>
