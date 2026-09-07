@@ -15,6 +15,7 @@ import {
   getPropertyTypeLabel,
   getStatusInfo,
   normalizePhone,
+  validatePhone,
   toEnglishDigits,
   timeAgo,
   TEHRAN_PROVINCE_ID,
@@ -22,6 +23,7 @@ import {
   ROBAT_KARIM_COUNTY_NAME,
   ROBAT_KARIM_NEIGHBORHOODS,
   ROBAT_KARIM_STREETS,
+  COLLEAGUE_TAG,
 } from '@/lib/constants';
 import { Badge, EmptyState, Spinner, Modal, PageHeader, Pagination, ConfirmDialog, SortSelect } from '@/components/ui';
 import { useActiveCounties, useCountyNeighborhoods } from '@/lib/geo';
@@ -911,7 +913,8 @@ function PropertyForm({ propertyId, onBack, onSaved }: { propertyId?: string; on
   const [formLoading, setFormLoading] = useState(Boolean(propertyId));
   const [imageFiles, setImageFiles] = useState<File[]>([]);
   const [existingImages, setExistingImages] = useState<string[]>([]);
-  const [editingOwnerId, setEditingOwnerId] = useState<string | null>(null);
+  const [ownerOptions, setOwnerOptions] = useState<Pick<Owner, 'id' | 'name' | 'phone' | 'notes' | 'status'>[]>([]);
+  const [addingNewOwner, setAddingNewOwner] = useState(false);
   const [editingConsultantId, setEditingConsultantId] = useState<string | null>(null);
   const [editingStatus, setEditingStatus] = useState<Property['status']>('active');
   const [saveError, setSaveError] = useState('');
@@ -948,11 +951,25 @@ function PropertyForm({ propertyId, onBack, onSaved }: { propertyId?: string; on
     commission: '',
     contact_type: 'owner' as 'owner' | 'colleague',
     colleague_id: '',
+    owner_id: '',
     owner_name: '',
     owner_phone: '',
     owner_notes: '',
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      const { data } = await supabase.from('owners').select('id, name, phone, notes, status, tags').order('name');
+      if (!active) return;
+      const owners = ((data as (Pick<Owner, 'id' | 'name' | 'phone' | 'notes' | 'status'> & { tags?: string[] })[]) ?? [])
+        .filter((owner) => !owner.tags?.includes(COLLEAGUE_TAG));
+      setOwnerOptions(owners);
+      if (!propertyId && owners.length === 0) setAddingNewOwner(true);
+    })();
+    return () => { active = false; };
+  }, [propertyId]);
 
   useEffect(() => {
     if (!propertyId) return;
@@ -1005,12 +1022,13 @@ function PropertyForm({ propertyId, onBack, onSaved }: { propertyId?: string; on
         commission: text(data.commission),
         contact_type: isUuid(data.owner_relationship) ? 'colleague' : 'owner',
         colleague_id: isUuid(data.owner_relationship) ? data.owner_relationship : '',
+        owner_id: text(data.owner_id),
         owner_name: text(ownerInfo?.name),
         owner_phone: text(ownerInfo?.phone),
         owner_notes: text(ownerInfo?.notes ?? data.owner_notes),
       });
       setExistingImages(Array.isArray(data.images) ? data.images : []);
-      setEditingOwnerId(data.owner_id ?? null);
+      setAddingNewOwner(!data.owner_id && !isUuid(data.owner_relationship));
       setEditingConsultantId(data.assigned_consultant_id ?? null);
       setEditingStatus((data.status as Property['status']) ?? 'active');
       setFormLoading(false);
@@ -1047,8 +1065,10 @@ function PropertyForm({ propertyId, onBack, onSaved }: { propertyId?: string; on
     if (step === 2 && !form.county_id) errs.county_id = 'شهرستان الزامی است';
     if (step === 2 && !form.address.trim()) errs.address = 'آدرس کامل الزامی است';
     if (step === 3 && !form.title.trim()) errs.title = 'عنوان الزامی است';
-    if (step === 5 && form.contact_type === 'owner' && !form.owner_name.trim()) errs.owner_name = 'نام مالک الزامی است';
-    if (step === 5 && form.contact_type === 'owner' && !form.owner_phone.trim()) errs.owner_phone = 'تلفن مالک الزامی است';
+    if (step === 5 && form.contact_type === 'owner' && addingNewOwner && !form.owner_name.trim()) errs.owner_name = 'نام مالک الزامی است';
+    if (step === 5 && form.contact_type === 'owner' && addingNewOwner && !form.owner_phone.trim()) errs.owner_phone = 'تلفن مالک الزامی است';
+    else if (step === 5 && form.contact_type === 'owner' && addingNewOwner && !validatePhone(form.owner_phone)) errs.owner_phone = 'فرمت موبایل صحیح نیست (09123456789)';
+    if (step === 5 && form.contact_type === 'owner' && !addingNewOwner && !form.owner_id) errs.owner_id = 'انتخاب مالک الزامی است';
     if (step === 5 && form.contact_type === 'colleague' && !form.colleague_id) errs.colleague_id = 'انتخاب همکار الزامی است';
     setErrors(errs);
     return Object.keys(errs).length === 0;
@@ -1069,27 +1089,18 @@ function PropertyForm({ propertyId, onBack, onSaved }: { propertyId?: string; on
       ? await preparePropertyImages(imageFiles)
       : { images: [] as string[], failedImages: [] as { fileName: string; message: string }[] };
 
-    // Update the current owner while editing, or create/find one for a new property.
-    let ownerId: string | null = form.contact_type === 'owner' ? editingOwnerId : null;
-    if (form.contact_type === 'owner' && editingOwnerId) {
-      const { error: ownerUpdateError } = await supabase.from('owners').update({
-        name: form.owner_name,
-        phone: normalizePhone(form.owner_phone),
-        notes: form.owner_notes || null,
-      }).eq('id', editingOwnerId);
-      if (ownerUpdateError) {
-        setSaveError(`ویرایش اطلاعات مالک انجام نشد: ${ownerUpdateError.message}`);
-        setSaving(false);
-        return;
-      }
-    } else if (form.contact_type === 'owner' && form.owner_name && form.owner_phone) {
-      const { data: existingOwner } = await supabase.from('owners').select('id').eq('phone', normalizePhone(form.owner_phone)).maybeSingle();
+    // Select an existing owner, or create one inline when they are not in the list.
+    let ownerId: string | null = form.contact_type === 'owner' && !addingNewOwner ? form.owner_id || null : null;
+    if (form.contact_type === 'owner' && addingNewOwner && form.owner_name && form.owner_phone) {
+      const normalizedPhone = normalizePhone(form.owner_phone);
+      const { data: samePhoneRows } = await supabase.from('owners').select('id, tags').eq('phone', normalizedPhone);
+      const existingOwner = samePhoneRows?.find((row) => !(row.tags as string[] | null)?.includes(COLLEAGUE_TAG));
       if (existingOwner) {
         ownerId = existingOwner.id;
       } else {
         const { data: newOwner, error: ownerError } = await supabase.from('owners').insert({
-          name: form.owner_name,
-          phone: normalizePhone(form.owner_phone),
+          name: form.owner_name.trim(),
+          phone: normalizedPhone,
           notes: form.owner_notes || null,
           assigned_consultant_id: user?.id,
           status: 'active',
@@ -1469,22 +1480,80 @@ function PropertyForm({ propertyId, onBack, onSaved }: { propertyId?: string; on
             </div>
 
             {form.contact_type === 'owner' ? (
-              <>
-                <div>
-                  <label className="label">نام مالک *</label>
-                  <input className={`input ${errors.owner_name ? 'input-error' : ''}`} value={form.owner_name} onChange={(e) => setForm({ ...form, owner_name: e.target.value })} placeholder="نام و نام خانوادگی مالک" />
-                  {errors.owner_name && <p className="mt-1 text-xs text-red-500">{errors.owner_name}</p>}
-                </div>
-                <div>
-                  <label className="label">تلفن مالک *</label>
-                  <input className={`input ${errors.owner_phone ? 'input-error' : ''}`} value={form.owner_phone} onChange={(e) => setForm({ ...form, owner_phone: e.target.value })} placeholder="09123456789" dir="ltr" />
-                  {errors.owner_phone && <p className="mt-1 text-xs text-red-500">{errors.owner_phone}</p>}
-                </div>
-                <div>
-                  <label className="label">یادداشت مالک</label>
-                  <textarea className="input min-h-[60px]" value={form.owner_notes} onChange={(e) => setForm({ ...form, owner_notes: e.target.value })} placeholder="نکات مربوط به مالک..." />
-                </div>
-              </>
+              <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-4 space-y-3">
+                {!addingNewOwner ? (
+                  <>
+                    <div>
+                      <label className="label">انتخاب مالک *</label>
+                      <select
+                        className={`input ${errors.owner_id ? 'input-error' : ''}`}
+                        value={form.owner_id}
+                        onChange={(event) => {
+                          const selected = ownerOptions.find((owner) => owner.id === event.target.value);
+                          setForm({
+                            ...form,
+                            owner_id: event.target.value,
+                            owner_name: selected?.name ?? '',
+                            owner_phone: selected?.phone ?? '',
+                            owner_notes: selected?.notes ?? '',
+                          });
+                        }}
+                      >
+                        <option value="">مالک را انتخاب کنید</option>
+                        {ownerOptions.map((owner) => (
+                          <option key={owner.id} value={owner.id} disabled={owner.status !== 'active' && owner.id !== form.owner_id}>
+                            {owner.name} — {owner.phone}{owner.status !== 'active' ? ' (غیرفعال)' : ''}
+                          </option>
+                        ))}
+                      </select>
+                      {errors.owner_id && <p className="mt-1 text-xs text-red-500">{errors.owner_id}</p>}
+                    </div>
+                    {form.owner_id && (() => {
+                      const selected = ownerOptions.find((owner) => owner.id === form.owner_id);
+                      return selected ? (
+                        <div className="rounded-lg bg-white p-3 text-xs text-slate-600 border border-slate-100">
+                          <p className="font-bold text-slate-700">{selected.name}</p>
+                          <p className="mt-1" dir="ltr">{selected.phone}</p>
+                        </div>
+                      ) : null;
+                    })()}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAddingNewOwner(true);
+                        setForm({ ...form, owner_id: '', owner_name: '', owner_phone: '', owner_notes: '' });
+                        setErrors({});
+                      }}
+                      className="btn-secondary w-full"
+                    >
+                      <Plus size={16} /> مالک در لیست نیست؛ افزودن مالک جدید
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <div className="flex items-center justify-between">
+                      <p className="text-sm font-bold text-slate-700">افزودن مالک جدید</p>
+                      {ownerOptions.length > 0 && (
+                        <button type="button" onClick={() => { setAddingNewOwner(false); setForm({ ...form, owner_id: '', owner_name: '', owner_phone: '', owner_notes: '' }); setErrors({}); }} className="text-xs font-medium text-slate-500 hover:text-slate-700">انتخاب از لیست</button>
+                      )}
+                    </div>
+                    <div>
+                      <label className="label">نام مالک *</label>
+                      <input className={`input ${errors.owner_name ? 'input-error' : ''}`} value={form.owner_name} onChange={(e) => setForm({ ...form, owner_name: e.target.value })} placeholder="نام و نام خانوادگی مالک" />
+                      {errors.owner_name && <p className="mt-1 text-xs text-red-500">{errors.owner_name}</p>}
+                    </div>
+                    <div>
+                      <label className="label">تلفن مالک *</label>
+                      <input className={`input ${errors.owner_phone ? 'input-error' : ''}`} value={form.owner_phone} onChange={(e) => setForm({ ...form, owner_phone: e.target.value })} placeholder="09123456789" dir="ltr" />
+                      {errors.owner_phone && <p className="mt-1 text-xs text-red-500">{errors.owner_phone}</p>}
+                    </div>
+                    <div>
+                      <label className="label">یادداشت مالک</label>
+                      <textarea className="input min-h-[60px]" value={form.owner_notes} onChange={(e) => setForm({ ...form, owner_notes: e.target.value })} placeholder="نکات مربوط به مالک..." />
+                    </div>
+                  </>
+                )}
+              </div>
             ) : (
               <div className="rounded-xl border border-indigo-100 bg-indigo-50/50 p-4">
                 <label className="label">انتخاب همکار *</label>
