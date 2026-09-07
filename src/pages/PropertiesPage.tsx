@@ -884,10 +884,13 @@ function PropertyForm({ onBack, onSaved }: { onBack: () => void; onSaved: () => 
       images: [],
     };
     let { data, error } = await supabase.from('properties').insert(payload).select().single();
-    // اگر ستون street هنوز در دیتابیس ساخته نشده باشد، خیابان را در payment_conditions ذخیره کن
-    if (error?.code === 'PGRST204' && payload.street) {
+    // اگر ستون street هنوز در دیتابیس ساخته نشده باشد، فیلد را از درخواست حذف کن.
+    // در صورت وجود مقدار خیابان، آن را موقتاً در payment_conditions نگه می‌داریم.
+    const streetColumnMissing = error?.code === 'PGRST204' || error?.message?.includes("'street' column");
+    if (error && streetColumnMissing) {
       const { street, ...withoutStreet } = payload;
-      ({ data, error } = await supabase.from('properties').insert({ ...withoutStreet, payment_conditions: street }).select().single());
+      const fallbackPayload = street ? { ...withoutStreet, payment_conditions: street } : withoutStreet;
+      ({ data, error } = await supabase.from('properties').insert(fallbackPayload).select().single());
     }
 
     if (error || !data) {
