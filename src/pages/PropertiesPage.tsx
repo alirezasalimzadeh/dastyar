@@ -63,6 +63,13 @@ const getStreet = (p: { street?: string | null; payment_conditions?: string | nu
 const isUuid = (value: unknown): value is string =>
   typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 
+const databaseErrorMessage = (error: unknown, fallback: string) => {
+  if (error && typeof error === 'object' && 'message' in error && typeof error.message === 'string') {
+    return error.message;
+  }
+  return error instanceof Error ? error.message : fallback;
+};
+
 export function PropertiesPage({ initialId }: { initialId?: string }) {
   const { user } = useAuth();
   const colleagueOptions = useColleagues();
@@ -114,7 +121,7 @@ export function PropertiesPage({ initialId }: { initialId?: string }) {
     } catch (error) {
       setProperties([]);
       setTotal(0);
-      setLoadError(error instanceof Error ? error.message : 'دریافت فایل‌ها انجام نشد.');
+      setLoadError(databaseErrorMessage(error, 'دریافت فایل‌ها انجام نشد.'));
     } finally {
       setLoading(false);
     }
@@ -256,7 +263,7 @@ export function PropertiesPage({ initialId }: { initialId?: string }) {
 
       {loadError && !loading && (
         <div className="mb-4 flex items-center justify-between gap-3 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
-          <span>دریافت فایل‌ها انجام نشد. لطفاً دوباره تلاش کنید.</span>
+          <span><strong>دریافت فایل‌ها انجام نشد:</strong> {loadError}</span>
           <button type="button" onClick={loadProperties} className="shrink-0 font-bold">تلاش مجدد</button>
         </div>
       )}
@@ -935,7 +942,7 @@ function PropertyImagePicker({
 // Property create/edit form (Multi-step dynamic form)
 function PropertyForm({ propertyId, onBack, onSaved }: { propertyId?: string; onBack: () => void; onSaved: () => void }) {
   const { user } = useAuth();
-  const { counties } = useActiveCounties();
+  const { counties, loading: countiesLoading, error: countiesError } = useActiveCounties();
   const colleagues = useColleagues();
   const isEditing = Boolean(propertyId);
   const [step, setStep] = useState(0);
@@ -1326,9 +1333,13 @@ function PropertyForm({ propertyId, onBack, onSaved }: { propertyId?: string; on
                 value={form.county_id}
                 onChange={(e) => { setForm({ ...form, county_id: e.target.value, neighborhood_id: '', street: '' }); }}
               >
-                <option value="">انتخاب کنید...</option>
+                <option value="">{countiesLoading ? 'در حال دریافت شهرستان‌ها...' : 'انتخاب کنید...'}</option>
                 {counties.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
+              {countiesError && <p className="text-xs text-red-600 mt-1">خطای دریافت شهرستان‌ها: {countiesError}</p>}
+              {!countiesLoading && !countiesError && counties.length === 0 && (
+                <p className="text-xs text-amber-600 mt-1">هیچ شهرستانی در پایگاه داده یافت نشد.</p>
+              )}
               {errors.county_id && <p className="text-xs text-red-500 mt-1">{errors.county_id}</p>}
             </div>
             {isRobatKarim && (

@@ -99,6 +99,8 @@ export function ensureActiveGeo(): Promise<void> {
 // انجام می‌شود و شکست آن مانع نمایش گزینه‌های موجود نخواهد شد.
 export function useActiveCounties() {
   const [counties, setCounties] = useState<County[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
   useEffect(() => {
     let active = true;
@@ -106,16 +108,27 @@ export function useActiveCounties() {
       const provinceId = await getTehranProvinceId();
       let query = supabase.from('counties').select('*').in('name', ACTIVE_COUNTY_NAMES).order('name');
       if (provinceId) query = query.eq('province_id', provinceId);
-      const { data } = await query;
-      if (active && data) setCounties(data as County[]);
+      const result = await query;
+      if (!active) return;
+      if (result.error) {
+        setError(result.error.message || 'دریافت شهرستان‌ها انجام نشد.');
+      } else {
+        setCounties((result.data as County[]) ?? []);
+        setError('');
+      }
+      setLoading(false);
     };
 
-    void load();
-    void ensureActiveGeo().then(load);
+    void (async () => {
+      // Existing rows are shown first; adding any missing rows happens afterwards.
+      await load();
+      await ensureActiveGeo();
+      await load();
+    })();
     return () => { active = false; };
   }, []);
 
-  return { counties };
+  return { counties, loading, error };
 }
 
 // Cache for geographic data
