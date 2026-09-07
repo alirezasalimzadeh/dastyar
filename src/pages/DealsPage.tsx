@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { Handshake, Plus, ArrowLeft, Trash2, TrendingUp } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth';
-import { DEAL_STATUSES, TRANSACTION_TYPES, getDealStatusInfo, getTransactionLabel, formatPrice, formatDate, toEnglishDigits } from '@/lib/constants';
+import { DEAL_STATUSES, TRANSACTION_TYPES, getDealStatusInfo, getTransactionLabel, formatPrice, moneyToPersianWords, formatDate, toEnglishDigits } from '@/lib/constants';
 import { Badge, EmptyState, Spinner, Modal, MoneyInput, PageHeader, ConfirmDialog } from '@/components/ui';
 
 export function DealsPage({ initialId }: { initialId?: string }) {
@@ -152,6 +152,9 @@ function DealModal({ onClose, onSaved }: { onClose: () => void; onSaved: () => v
                 مجموع (۲٪): {formatPrice(standardCommission)} تومان
               </span>
             </div>
+            <p className="mt-2 rounded-md bg-amber-50 px-2.5 py-1 text-[11px] leading-5 text-amber-700">
+              {moneyToPersianWords(standardCommission)}
+            </p>
           </div>
         )}
         <div><label className="label">وضعیت</label><select className="input" value={status} onChange={(e) => setStatus(e.target.value)}>{DEAL_STATUSES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}</select></div>

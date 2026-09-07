@@ -9,6 +9,7 @@ import {
   PROPERTY_TYPES,
   PROPERTY_STATUSES,
   formatPrice,
+  moneyToPersianWords,
   formatDate,
   getTransactionLabel,
   getCategoryLabel,
@@ -1557,6 +1558,9 @@ function PropertyForm({ propertyId, onBack, onSaved }: { propertyId?: string; on
                     مجموع (۲٪): {formatPrice(Math.round(numericValue(form.sale_price) * 0.02))} تومان
                   </span>
                 </div>
+                <p className="mt-2 rounded-md bg-amber-50 px-2.5 py-1 text-[11px] leading-5 text-amber-700">
+                  {moneyToPersianWords(Math.round(numericValue(form.sale_price) * 0.02))}
+                </p>
               </div>
             )}
             <div>
