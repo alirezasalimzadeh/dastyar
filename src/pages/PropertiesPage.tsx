@@ -26,6 +26,7 @@ import {
 import { Badge, EmptyState, Spinner, Modal, PageHeader, Pagination, ConfirmDialog, SortSelect } from '@/components/ui';
 import { useActiveCounties, useCountyNeighborhoods } from '@/lib/geo';
 import type { Property, Owner } from '@/lib/types';
+import propertyPlaceholder from '@/assets/property-placeholder.jpg';
 import {
   MAX_PROPERTY_IMAGES,
   MAX_PROPERTY_IMAGE_SIZE,
@@ -254,16 +255,19 @@ export function PropertiesPage({ initialId }: { initialId?: string }) {
                   onClick={() => { setSelectedId(p.id); setView('detail'); }}
                   className="card p-4 cursor-pointer hover:shadow-md hover:border-slate-300 transition-all overflow-hidden"
                 >
-                  {p.images?.[0] && (
-                    <div className="relative -mx-4 -mt-4 mb-4 h-40 bg-slate-100 overflow-hidden">
-                      <img src={p.images[0]} alt={p.title} className="w-full h-full object-cover" loading="lazy" />
-                      {p.images.length > 1 && (
-                        <span className="absolute left-2 bottom-2 inline-flex items-center gap-1 rounded-md bg-black/65 px-2 py-1 text-[11px] font-medium text-white" dir="ltr">
-                          <Images size={13} /> {p.images.length}
-                        </span>
-                      )}
-                    </div>
-                  )}
+                  <div className="relative -mx-4 -mt-4 mb-4 h-40 bg-slate-100 overflow-hidden">
+                    <img
+                      src={p.images?.[0] || propertyPlaceholder}
+                      alt={p.images?.[0] ? p.title : 'تصویر پیش‌فرض ملک'}
+                      className="w-full h-full object-cover"
+                      loading="lazy"
+                    />
+                    {p.images?.length > 1 && (
+                      <span className="absolute left-2 bottom-2 inline-flex items-center gap-1 rounded-md bg-black/65 px-2 py-1 text-[11px] font-medium text-white" dir="ltr">
+                        <Images size={13} /> {p.images.length}
+                      </span>
+                    )}
+                  </div>
                   <div className="flex items-center justify-between gap-2 mb-2.5">
                     <div className="flex items-center gap-1.5 min-w-0">
                       <Badge color={p.transaction_type === 'rent' ? 'purple' : p.transaction_type === 'partnership' ? 'teal' : 'blue'}>
@@ -461,7 +465,7 @@ function PropertyDetail({ propertyId, onBack }: { propertyId: string; onBack: ()
         </div>
       </div>
 
-      {property.images?.length > 0 && (
+      {property.images?.length > 0 ? (
         <section className="card p-4" aria-label="آلبوم تصاویر فایل">
           <div className="flex items-center justify-between mb-3">
             <h3 className="flex items-center gap-2 text-sm font-bold text-slate-700">
@@ -482,6 +486,10 @@ function PropertyDetail({ propertyId, onBack }: { propertyId: string; onBack: ()
               </button>
             ))}
           </div>
+        </section>
+      ) : (
+        <section className="card overflow-hidden" aria-label="تصویر پیش‌فرض ملک">
+          <img src={propertyPlaceholder} alt="تصویر پیش‌فرض ملک" className="h-56 sm:h-72 w-full object-cover" />
         </section>
       )}
 
