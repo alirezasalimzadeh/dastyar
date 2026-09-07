@@ -457,17 +457,18 @@ function PropertyDetail({ propertyId, onBack, onEdit }: { propertyId: string; on
 
   return (
     <div className="animate-fade-in space-y-4">
-      <button onClick={onBack} className="flex items-center gap-1 text-sm text-slate-500 hover:text-slate-700">
+      <button onClick={onBack} className="detail-back">
         <ArrowLeft size={16} /> بازگشت
       </button>
 
-      <div className="card p-5">
-        <div className="flex items-start justify-between mb-3">
-          <div>
-            <div className="flex items-center gap-2 mb-1">
+      <div className="detail-hero detail-hero-indigo">
+        <div className="flex items-start justify-between gap-4 mb-4">
+          <div className="min-w-0">
+            <p className="mb-2 flex items-center gap-1.5 text-xs font-medium text-indigo-600"><Home size={14} /> جزئیات آگهی</p>
+            <div className="flex flex-wrap items-center gap-2 mb-1">
               {property.is_hot && <Flame size={18} className="text-red-500" />}
               {property.is_featured && <Star size={18} className="text-yellow-500" />}
-              <h2 className="text-lg font-bold text-slate-800">{property.title}</h2>
+              <h2 className="text-xl font-extrabold leading-8 text-slate-800">{property.title}</h2>
               {colleague && <Badge color="purple"><Handshake size={12} /> فایل همکار</Badge>}
             </div>
             <p className="text-xs text-slate-400">
@@ -491,7 +492,7 @@ function PropertyDetail({ propertyId, onBack, onEdit }: { propertyId: string; on
           </p>
         )}
 
-        <div className="flex gap-2 flex-wrap">
+        <div className="flex gap-2 flex-wrap border-t border-slate-200/70 pt-4 mt-4">
           {colleague ? (
             <a href={`tel:${normalizePhone(colleague.phone)}`} className="btn-primary">
               <Handshake size={16} /> تماس با همکار
@@ -587,7 +588,7 @@ function PropertyDetail({ propertyId, onBack, onEdit }: { propertyId: string; on
       )}
 
       {/* Tabs */}
-      <div className="flex gap-1 border-b border-slate-200 overflow-x-auto no-scrollbar">
+      <div className="detail-tabs no-scrollbar">
         {[
           { key: 'info', label: 'اطلاعات' },
           { key: 'matches', label: 'تطبیق‌ها' },
@@ -597,9 +598,7 @@ function PropertyDetail({ propertyId, onBack, onEdit }: { propertyId: string; on
           <button
             key={tab.key}
             onClick={() => setActiveTab(tab.key as any)}
-            className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
-              activeTab === tab.key ? 'border-slate-900 text-slate-900' : 'border-transparent text-slate-400 hover:text-slate-600'
-            }`}
+            className={`detail-tab ${activeTab === tab.key ? 'detail-tab-active' : 'detail-tab-inactive'}`}
           >
             {tab.label}
           </button>
@@ -607,9 +606,10 @@ function PropertyDetail({ propertyId, onBack, onEdit }: { propertyId: string; on
       </div>
 
       {activeTab === 'info' && (
-        <div className="card p-5 space-y-4">
-          {property.description && <p className="text-sm text-slate-600">{property.description}</p>}
-          <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="detail-section space-y-5">
+          <h3 className="detail-section-title"><Home size={17} className="text-indigo-500" /> مشخصات و امکانات</h3>
+          {property.description && <p className="rounded-xl bg-slate-50 p-4 text-sm leading-7 text-slate-600">{property.description}</p>}
+          <div className="detail-info-grid">
             {property.land_area != null && <InfoField label="متراژ زمین" value={`${property.land_area} متر`} />}
             {property.building_area != null && <InfoField label="متراژ بنا" value={`${property.building_area} متر`} />}
             {property.bedrooms != null && <InfoField label="تعداد خواب" value={String(property.bedrooms)} />}
@@ -794,9 +794,9 @@ function PropertyDetail({ propertyId, onBack, onEdit }: { propertyId: string; on
 
 function InfoField({ label, value }: { label: string; value: string }) {
   return (
-    <div>
-      <p className="text-xs text-slate-400 font-medium">{label}</p>
-      <p className="text-sm text-slate-700 mt-0.5">{value}</p>
+    <div className="rounded-lg border border-slate-100 bg-slate-50/70 px-3 py-2.5">
+      <p className="text-[11px] font-medium text-slate-400">{label}</p>
+      <p className="mt-1 text-sm font-semibold text-slate-700">{value}</p>
     </div>
   );
 }

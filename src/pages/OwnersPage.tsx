@@ -194,12 +194,13 @@ function OwnerDetail({ ownerId, onBack, onPropertyOpen }: { ownerId: string; onB
 
   return (
     <div className="animate-fade-in space-y-4">
-      <button onClick={onBack} className="flex items-center gap-1 text-sm text-slate-500 hover:text-slate-700"><ArrowLeft size={16} /> بازگشت</button>
-      <div className="card p-5">
+      <button onClick={onBack} className="detail-back"><ArrowLeft size={16} /> بازگشت</button>
+      <div className="detail-hero detail-hero-blue">
+        <p className="mb-3 flex items-center gap-1.5 text-xs font-medium text-blue-600"><Building2 size={14} /> پرونده مالک</p>
         <div className="flex items-start gap-4">
-          <div className="w-14 h-14 rounded-full bg-slate-200 flex items-center justify-center text-xl font-bold text-slate-600">{owner.name?.[0] ?? '؟'}</div>
+          <div className="detail-avatar bg-blue-100 text-blue-700">{owner.name?.[0] ?? '؟'}</div>
           <div className="flex-1">
-            <h2 className="text-lg font-bold text-slate-800">{owner.name}</h2>
+            <h2 className="text-xl font-extrabold text-slate-800">{owner.name}</h2>
             <p className="text-sm text-slate-500" dir="ltr">{owner.phone}</p>
             {owner.secondary_phone && <p className="text-xs text-slate-400" dir="ltr">{owner.secondary_phone}</p>}
           </div>
@@ -210,7 +211,7 @@ function OwnerDetail({ ownerId, onBack, onPropertyOpen }: { ownerId: string; onB
             این مالک توسط همکار «{referringColleague.name}» معرفی شده است.
           </div>
         )}
-        <div className="flex gap-2 mt-4 flex-wrap">
+        <div className="flex gap-2 mt-5 flex-wrap border-t border-slate-200/70 pt-4">
           <a href={`tel:${normalizePhone(owner.phone)}`} className="btn-primary"><Phone size={16} /> تماس</a>
           <button onClick={() => setShowEdit(true)} className="btn-secondary"><Pencil size={16} /> ویرایش مالک</button>
           <button onClick={() => setShowDeleteConfirm(true)} className="btn-danger" aria-label="حذف مالک"><Trash2 size={16} /></button>
@@ -219,8 +220,8 @@ function OwnerDetail({ ownerId, onBack, onPropertyOpen }: { ownerId: string; onB
         {visibleOwnerTags(owner.tags).length > 0 && <div className="flex flex-wrap gap-1.5 mt-3">{visibleOwnerTags(owner.tags).map((t, i) => <Badge key={i} color="blue">{t}</Badge>)}</div>}
       </div>
 
-      <div className="card overflow-hidden">
-        <h3 className="px-5 py-3 border-b border-slate-100 text-sm font-bold text-slate-700">املاک مالک ({properties.length})</h3>
+      <div className="detail-section !p-0 overflow-hidden">
+        <h3 className="detail-section-title !mb-0 px-5 py-4"><Building2 size={17} className="text-blue-500" /> املاک مالک <span className="mr-auto text-xs font-normal text-slate-400">{properties.length} ملک</span></h3>
         {properties.length > 0 ? (
           <div className="divide-y divide-slate-100">
             {properties.map((p) => (
@@ -244,8 +245,8 @@ function OwnerDetail({ ownerId, onBack, onPropertyOpen }: { ownerId: string; onB
         ) : <EmptyState title="ملکی ثبت نشده" />}
       </div>
 
-      <div className="card overflow-hidden">
-        <h3 className="px-5 py-3 border-b border-slate-100 text-sm font-bold text-slate-700">تماس‌ها ({calls.length})</h3>
+      <div className="detail-section !p-0 overflow-hidden">
+        <h3 className="detail-section-title !mb-0 px-5 py-4"><Phone size={17} className="text-blue-500" /> تماس‌ها <span className="mr-auto text-xs font-normal text-slate-400">{calls.length} تماس</span></h3>
         {calls.length > 0 ? (
           <div className="divide-y divide-slate-100">
             {calls.map((c) => (

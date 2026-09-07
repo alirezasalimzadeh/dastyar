@@ -152,14 +152,15 @@ function ColleagueDetail({ colleagueId, onBack, onPropertyOpen }: { colleagueId:
 
   return (
     <div className="animate-fade-in space-y-4">
-      <button onClick={onBack} className="flex items-center gap-1 text-sm text-slate-500 hover:text-slate-700"><ArrowLeft size={16} /> بازگشت</button>
+      <button onClick={onBack} className="detail-back"><ArrowLeft size={16} /> بازگشت</button>
 
-      <div className="card p-5">
+      <div className="detail-hero detail-hero-indigo">
+        <p className="mb-3 flex items-center gap-1.5 text-xs font-medium text-indigo-600"><UserPlus size={14} /> پروفایل همکار</p>
         <div className="flex items-start gap-4">
-          <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-indigo-100 text-xl font-bold text-indigo-700">{colleague.name[0] ?? '؟'}</div>
+          <div className="detail-avatar bg-indigo-100 text-indigo-700">{colleague.name[0] ?? '؟'}</div>
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
-              <h2 className="text-lg font-bold text-slate-800">{colleague.name}</h2>
+              <h2 className="text-xl font-extrabold text-slate-800">{colleague.name}</h2>
               <Badge color={colleague.status === 'active' ? 'green' : 'gray'}>{colleague.status === 'active' ? 'فعال' : 'غیرفعال'}</Badge>
             </div>
             {colleague.agency_name && <p className="mt-1 flex items-center gap-1 text-sm text-slate-500"><Building2 size={14} /> {colleague.agency_name}</p>}
@@ -167,7 +168,7 @@ function ColleagueDetail({ colleagueId, onBack, onPropertyOpen }: { colleagueId:
           </div>
         </div>
 
-        <div className="mt-4 flex flex-wrap gap-2">
+        <div className="mt-5 flex flex-wrap gap-2 border-t border-slate-200/70 pt-4">
           <a href={`tel:${normalizePhone(colleague.phone)}`} className="btn-primary"><Phone size={16} /> تماس با همکار</a>
           <button onClick={() => setShowEdit(true)} className="btn-secondary"><Pencil size={16} /> ویرایش همکار</button>
           <button onClick={() => setShowDelete(true)} className="btn-danger" aria-label="حذف همکار"><Trash2 size={16} /></button>
@@ -180,10 +181,11 @@ function ColleagueDetail({ colleagueId, onBack, onPropertyOpen }: { colleagueId:
         {colleague.notes && <p className="mt-4 rounded-lg bg-slate-50 p-3 text-sm text-slate-600">{colleague.notes}</p>}
       </div>
 
-      <div className="card overflow-hidden">
-        <div className="flex items-center justify-between border-b border-slate-100 px-5 py-3">
-          <h3 className="text-sm font-bold text-slate-700">فایل‌های این همکار</h3>
-          <span className="text-xs text-slate-400">{toPersianDigits(colleague.properties?.length ?? 0)} فایل</span>
+      <div className="detail-section !p-0 overflow-hidden">
+        <div className="detail-section-title !mb-0 px-5 py-4">
+          <FileText size={17} className="text-indigo-500" />
+          <h3>فایل‌های این همکار</h3>
+          <span className="mr-auto text-xs font-normal text-slate-400">{toPersianDigits(colleague.properties?.length ?? 0)} فایل</span>
         </div>
         {(colleague.properties?.length ?? 0) > 0 ? (
           <div className="divide-y divide-slate-100">

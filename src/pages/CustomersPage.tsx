@@ -387,15 +387,16 @@ function CustomerDetail({ customerId, onBack, onEdit }: { customerId: string; on
   return (
     <div className="animate-fade-in space-y-4">
       {/* Back Button */}
-      <button onClick={onBack} className="flex items-center gap-1 text-sm text-slate-500 hover:text-slate-700">
+      <button onClick={onBack} className="detail-back">
         <ArrowLeft size={16} />
         بازگشت
       </button>
 
       {/* Customer Header */}
-      <div className="card p-5">
+      <div className="detail-hero detail-hero-orange">
+        <p className="mb-3 flex items-center gap-1.5 text-xs font-medium text-orange-600"><Users size={14} /> پرونده مشتری</p>
         <div className="flex items-start gap-4">
-          <div className={`w-14 h-14 rounded-full flex items-center justify-center text-xl font-bold ${
+          <div className={`detail-avatar ${
             customer.temperature === 'hot' ? 'bg-red-100 text-red-600' :
             customer.temperature === 'warm' ? 'bg-orange-100 text-orange-600' :
             'bg-blue-100 text-blue-600'
@@ -403,8 +404,8 @@ function CustomerDetail({ customerId, onBack, onEdit }: { customerId: string; on
             {customer.name?.[0] ?? '؟'}
           </div>
           <div className="flex-1">
-            <div className="flex items-center gap-2 mb-1">
-              <h2 className="text-lg font-bold text-slate-800">{customer.name}</h2>
+            <div className="flex flex-wrap items-center gap-2 mb-1">
+              <h2 className="text-xl font-extrabold text-slate-800">{customer.name}</h2>
               <Badge color={temp.color}>{temp.icon} {temp.label}</Badge>
               <Badge color={status.color}>{status.label}</Badge>
             </div>
@@ -426,7 +427,7 @@ function CustomerDetail({ customerId, onBack, onEdit }: { customerId: string; on
         )}
 
         {/* Quick Actions */}
-        <div className="flex gap-2 mt-4 flex-wrap">
+        <div className="flex gap-2 mt-5 flex-wrap border-t border-slate-200/70 pt-4">
           <a href={`tel:${normalizePhone(customer.mobile)}`} className="btn-primary">
             <Phone size={16} /> تماس
           </a>
@@ -446,7 +447,7 @@ function CustomerDetail({ customerId, onBack, onEdit }: { customerId: string; on
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 border-b border-slate-200 overflow-x-auto no-scrollbar">
+      <div className="detail-tabs no-scrollbar">
         {[
           { key: 'info', label: 'اطلاعات' },
           { key: 'calls', label: 'تماس‌ها' },
@@ -457,9 +458,7 @@ function CustomerDetail({ customerId, onBack, onEdit }: { customerId: string; on
           <button
             key={tab.key}
             onClick={() => setActiveTab(tab.key as any)}
-            className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
-              activeTab === tab.key ? 'border-slate-900 text-slate-900' : 'border-transparent text-slate-400 hover:text-slate-600'
-            }`}
+            className={`detail-tab ${activeTab === tab.key ? 'detail-tab-active' : 'detail-tab-inactive'}`}
           >
             {tab.label}
           </button>
@@ -468,8 +467,9 @@ function CustomerDetail({ customerId, onBack, onEdit }: { customerId: string; on
 
       {/* Tab Content */}
       {activeTab === 'info' && (
-        <div className="card p-5 space-y-4">
-          <div className="grid grid-cols-2 gap-4">
+        <div className="detail-section space-y-5">
+          <h3 className="detail-section-title"><Target size={17} className="text-orange-500" /> نیازها و ترجیحات مشتری</h3>
+          <div className="detail-info-grid">
             <InfoField label="نوع معامله" value={customer.transaction_intention ? getTransactionLabel(customer.transaction_intention) : '-'} />
             <InfoField label="دسته‌بندی" value={customer.preferred_category ? getCategoryLabel(customer.preferred_category) : '-'} />
             <InfoField label="انواع ملک مورد نظر" value={customer.preferred_property_types?.length
@@ -604,9 +604,9 @@ function CustomerDetail({ customerId, onBack, onEdit }: { customerId: string; on
 
 function InfoField({ label, value }: { label: string; value: string }) {
   return (
-    <div>
-      <p className="text-xs text-slate-400 font-medium">{label}</p>
-      <p className="text-sm text-slate-700 mt-0.5">{value}</p>
+    <div className="rounded-lg border border-slate-100 bg-slate-50/70 px-3 py-2.5">
+      <p className="text-[11px] font-medium text-slate-400">{label}</p>
+      <p className="mt-1 text-sm font-semibold leading-6 text-slate-700">{value}</p>
     </div>
   );
 }
