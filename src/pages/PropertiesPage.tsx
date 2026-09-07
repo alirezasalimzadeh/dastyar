@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
-import { Plus, Search, Home, Phone, X, Filter, ArrowLeft, Trash2, Flame, Star, MapPin, Target, User, ImagePlus, Images, ChevronLeft, ChevronRight, Pencil } from 'lucide-react';
+import { Plus, Search, Home, Phone, X, Filter, ArrowLeft, Trash2, Flame, Star, MapPin, Target, User, ImagePlus, Images, ChevronLeft, ChevronRight, Pencil, Maximize2 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth';
 import {
@@ -413,6 +413,8 @@ function PropertyDetail({ propertyId, onBack, onEdit }: { propertyId: string; on
 
   useEffect(() => {
     if (selectedImageIndex === null) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') setSelectedImageIndex(null);
       if (!property?.images?.length) return;
@@ -420,7 +422,10 @@ function PropertyDetail({ propertyId, onBack, onEdit }: { propertyId: string; on
       if (event.key === 'ArrowRight') setSelectedImageIndex((current) => current === null ? null : (current - 1 + property.images.length) % property.images.length);
     };
     window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener('keydown', onKeyDown);
+    };
   }, [selectedImageIndex, property?.images]);
 
   const handleDelete = async () => {
@@ -485,30 +490,78 @@ function PropertyDetail({ propertyId, onBack, onEdit }: { propertyId: string; on
       </div>
 
       {property.images?.length > 0 ? (
-        <section className="card p-4" aria-label="آلبوم تصاویر فایل">
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="flex items-center gap-2 text-sm font-bold text-slate-700">
-              <Images size={18} /> آلبوم تصاویر
-            </h3>
-            <span className="text-xs text-slate-400">{property.images.length} عکس</span>
+        <section className="card p-3 sm:p-4 overflow-hidden" aria-label="آلبوم تصاویر فایل">
+          <div className="flex items-center justify-between mb-3 px-1">
+            <div>
+              <h3 className="flex items-center gap-2 text-sm font-bold text-slate-800">
+                <Images size={18} /> تصاویر ملک
+              </h3>
+              <p className="mt-0.5 text-[11px] text-slate-400">برای مشاهده بزرگ‌تر روی تصویر بزنید</p>
+            </div>
+            <button type="button" onClick={() => setSelectedImageIndex(0)} className="btn-secondary !px-3 !py-1.5 text-xs">
+              <Maximize2 size={14} /> مشاهده همه
+              <span className="rounded bg-white px-1.5 py-0.5 text-[10px] text-slate-500">{property.images.length}</span>
+            </button>
           </div>
-          <div className={`grid gap-2 ${property.images.length === 1 ? 'grid-cols-1' : 'grid-cols-2 sm:grid-cols-3'}`}>
-            {property.images.map((image, index) => (
-              <button
-                key={image}
-                type="button"
-                onClick={() => setSelectedImageIndex(index)}
-                className={`relative overflow-hidden rounded-lg bg-slate-100 group ${property.images.length === 1 ? 'h-72' : 'aspect-[4/3]'}`}
-                aria-label={`نمایش عکس ${index + 1}`}
-              >
-                <img src={image} alt={`${property.title} - عکس ${index + 1}`} className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105" loading="lazy" />
-              </button>
-            ))}
+
+          {/* Mobile gallery: large cover plus a swipeable thumbnail rail */}
+          <div className="sm:hidden">
+            <button type="button" onClick={() => setSelectedImageIndex(0)} className="group relative block aspect-[4/3] w-full overflow-hidden rounded-xl bg-slate-100">
+              <img src={property.images[0]} alt={`${property.title} - تصویر اصلی`} className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105" />
+              <span className="absolute bottom-3 left-3 rounded-full bg-black/60 px-2.5 py-1 text-[11px] text-white" dir="ltr">1 / {property.images.length}</span>
+            </button>
+            {property.images.length > 1 && (
+              <div className="mt-2 flex gap-2 overflow-x-auto pb-1 no-scrollbar" dir="rtl">
+                {property.images.slice(1).map((image, index) => (
+                  <button key={`${image.slice(0, 60)}-${index}`} type="button" onClick={() => setSelectedImageIndex(index + 1)} className="h-20 w-24 shrink-0 overflow-hidden rounded-lg bg-slate-100">
+                    <img src={image} alt={`${property.title} - عکس ${index + 2}`} className="h-full w-full object-cover" loading="lazy" />
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Desktop gallery: a compact real-estate style mosaic */}
+          <div className="hidden sm:grid h-[360px] grid-cols-4 grid-rows-2 gap-2 overflow-hidden rounded-xl">
+            {property.images.slice(0, 5).map((image, index, previewImages) => {
+              const count = previewImages.length;
+              const tileClass = count === 1
+                ? 'col-span-4 row-span-2'
+                : count === 2
+                  ? 'col-span-2 row-span-2'
+                  : index === 0
+                    ? 'col-span-2 row-span-2'
+                    : count === 3
+                      ? 'col-span-2'
+                      : count === 4 && index === 3
+                        ? 'col-span-2'
+                        : '';
+              const remaining = property.images.length - 5;
+              const isLastPreview = index === 4 && remaining > 0;
+              return (
+                <button
+                  key={`${image.slice(0, 60)}-${index}`}
+                  type="button"
+                  onClick={() => setSelectedImageIndex(index)}
+                  className={`group relative overflow-hidden bg-slate-100 ${tileClass}`}
+                  aria-label={`نمایش عکس ${index + 1}`}
+                >
+                  <img src={image} alt={`${property.title} - عکس ${index + 1}`} className="h-full w-full object-cover transition duration-300 group-hover:scale-105 group-hover:brightness-90" loading={index === 0 ? 'eager' : 'lazy'} />
+                  {index === 0 && <span className="absolute bottom-3 right-3 rounded-md bg-black/55 px-2 py-1 text-[11px] font-medium text-white">تصویر اصلی</span>}
+                  {isLastPreview && (
+                    <span className="absolute inset-0 flex items-center justify-center bg-black/55 text-lg font-bold text-white" dir="ltr">+{remaining}</span>
+                  )}
+                </button>
+              );
+            })}
           </div>
         </section>
       ) : (
         <section className="card overflow-hidden" aria-label="تصویر پیش‌فرض ملک">
-          <img src={propertyPlaceholder} alt="تصویر پیش‌فرض ملک" className="h-56 sm:h-72 w-full object-cover" />
+          <div className="relative">
+            <img src={propertyPlaceholder} alt="تصویر پیش‌فرض ملک" className="h-64 sm:h-[360px] w-full object-cover" />
+            <span className="absolute bottom-3 right-3 rounded-md bg-black/55 px-2.5 py-1 text-xs text-white">تصویر پیش‌فرض</span>
+          </div>
         </section>
       )}
 
@@ -640,21 +693,57 @@ function PropertyDetail({ propertyId, onBack, onEdit }: { propertyId: string; on
       )}
 
       {selectedImageIndex !== null && property.images?.[selectedImageIndex] && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/90 p-3 sm:p-8" role="dialog" aria-modal="true" aria-label="نمایش تصویر">
-          <button type="button" onClick={() => setSelectedImageIndex(null)} className="absolute top-4 left-4 z-10 rounded-full bg-white/15 p-2 text-white hover:bg-white/25" aria-label="بستن">
-            <X size={24} />
-          </button>
-          <img src={property.images[selectedImageIndex]} alt={`${property.title} - عکس ${selectedImageIndex + 1}`} className="max-h-full max-w-full rounded-lg object-contain" />
+        <div
+          className="fixed inset-0 z-[60] flex flex-col bg-slate-950/95 backdrop-blur-sm"
+          role="dialog"
+          aria-modal="true"
+          aria-label="نمایش گالری تصاویر"
+          onClick={() => setSelectedImageIndex(null)}
+        >
+          <div className="flex h-16 shrink-0 items-center justify-between border-b border-white/10 px-4 sm:px-6" onClick={(event) => event.stopPropagation()}>
+            <div className="min-w-0">
+              <p className="truncate text-sm font-medium text-white">{property.title}</p>
+              <p className="text-[11px] text-white/50" dir="ltr">{selectedImageIndex + 1} / {property.images.length}</p>
+            </div>
+            <button type="button" onClick={() => setSelectedImageIndex(null)} className="rounded-full bg-white/10 p-2 text-white transition hover:bg-white/20" aria-label="بستن گالری">
+              <X size={22} />
+            </button>
+          </div>
+
+          <div className="relative flex min-h-0 flex-1 items-center justify-center px-12 py-3 sm:px-20" onClick={(event) => event.stopPropagation()}>
+            <img
+              src={property.images[selectedImageIndex]}
+              alt={`${property.title} - عکس ${selectedImageIndex + 1}`}
+              className="max-h-full max-w-full select-none rounded-lg object-contain shadow-2xl"
+            />
+            {property.images.length > 1 && (
+              <>
+                <button type="button" onClick={() => setSelectedImageIndex((selectedImageIndex - 1 + property.images.length) % property.images.length)} className="absolute right-2 sm:right-5 rounded-full bg-white/10 p-2 text-white transition hover:bg-white/20 active:scale-95" aria-label="عکس قبلی">
+                  <ChevronRight size={30} />
+                </button>
+                <button type="button" onClick={() => setSelectedImageIndex((selectedImageIndex + 1) % property.images.length)} className="absolute left-2 sm:left-5 rounded-full bg-white/10 p-2 text-white transition hover:bg-white/20 active:scale-95" aria-label="عکس بعدی">
+                  <ChevronLeft size={30} />
+                </button>
+              </>
+            )}
+          </div>
+
           {property.images.length > 1 && (
-            <>
-              <button type="button" onClick={() => setSelectedImageIndex((selectedImageIndex - 1 + property.images.length) % property.images.length)} className="absolute right-3 sm:right-6 rounded-full bg-white/15 p-2 text-white hover:bg-white/25" aria-label="عکس قبلی">
-                <ChevronRight size={28} />
-              </button>
-              <button type="button" onClick={() => setSelectedImageIndex((selectedImageIndex + 1) % property.images.length)} className="absolute left-3 sm:left-6 rounded-full bg-white/15 p-2 text-white hover:bg-white/25" aria-label="عکس بعدی">
-                <ChevronLeft size={28} />
-              </button>
-              <span className="absolute bottom-4 rounded-full bg-black/50 px-3 py-1 text-xs text-white" dir="ltr">{selectedImageIndex + 1} / {property.images.length}</span>
-            </>
+            <div className="shrink-0 border-t border-white/10 px-3 py-3 sm:px-6" onClick={(event) => event.stopPropagation()}>
+              <div className="mx-auto flex max-w-3xl gap-2 overflow-x-auto no-scrollbar" dir="rtl">
+                {property.images.map((image, index) => (
+                  <button
+                    key={`${image.slice(0, 60)}-${index}`}
+                    type="button"
+                    onClick={() => setSelectedImageIndex(index)}
+                    className={`h-14 w-20 sm:h-16 sm:w-24 shrink-0 overflow-hidden rounded-md border-2 transition ${selectedImageIndex === index ? 'border-white opacity-100' : 'border-transparent opacity-45 hover:opacity-80'}`}
+                    aria-label={`رفتن به عکس ${index + 1}`}
+                  >
+                    <img src={image} alt="" className="h-full w-full object-cover" />
+                  </button>
+                ))}
+              </div>
+            </div>
           )}
         </div>
       )}
