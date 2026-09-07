@@ -901,10 +901,27 @@ function PropertyForm({ onBack, onSaved }: { onBack: () => void; onSaved: () => 
 
     // Images are optional. When selected, upload them only after the property ID exists.
     if (imageFiles.length > 0 && user?.id) {
-      const { urls, failedFiles } = await uploadPropertyImages(imageFiles, data.id, user.id);
-      if (urls.length > 0) await supabase.from('properties').update({ images: urls }).eq('id', data.id);
-      if (failedFiles.length > 0) {
-        window.alert(`${failedFiles.length} عکس بارگذاری نشد؛ فایل با عکس‌های بارگذاری‌شده ذخیره شد.`);
+      const { urls, objectPaths, failedUploads } = await uploadPropertyImages(imageFiles, data.id, user.id);
+      let imageSaveError = '';
+
+      if (urls.length > 0) {
+        const { error: updateImagesError } = await supabase.from('properties').update({ images: urls }).eq('id', data.id);
+        if (updateImagesError) {
+          imageSaveError = `آدرس تصاویر در فایل ذخیره نشد: ${updateImagesError.message}`;
+          await supabase.storage.from(PROPERTY_IMAGES_BUCKET).remove(objectPaths);
+        }
+      }
+
+      if (failedUploads.length > 0 || imageSaveError) {
+        const storageMessages = [...new Set(failedUploads.map((failure) => failure.message))].join('، ');
+        const bucketHint = /bucket.*not found|not found.*bucket/i.test(storageMessages)
+          ? '\nفضای ذخیره‌سازی تصاویر در Supabase ساخته نشده است؛ migration مربوط به property-images را اجرا کنید.'
+          : '';
+        const uploadedCount = imageSaveError ? 0 : urls.length;
+        window.alert(
+          `${imageFiles.length - uploadedCount} عکس بارگذاری یا ذخیره نشد.${uploadedCount > 0 ? ` ${uploadedCount} عکس با موفقیت ذخیره شد.` : ''}`
+          + `\nخطای Supabase: ${imageSaveError || storageMessages || 'خطای نامشخص'}${bucketHint}`,
+        );
       }
     }
 
