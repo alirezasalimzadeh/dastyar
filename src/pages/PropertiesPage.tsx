@@ -1,5 +1,5 @@
-import { useEffect, useState, useCallback, useMemo } from 'react';
-import { Plus, Search, Home, Phone, X, Filter, ArrowLeft, Trash2, Flame, Star, MapPin, Target, User } from 'lucide-react';
+import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
+import { Plus, Search, Home, Phone, X, Filter, ArrowLeft, Trash2, Flame, Star, MapPin, Target, User, ImagePlus, Images, ChevronLeft, ChevronRight } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth';
 import {
@@ -26,6 +26,14 @@ import {
 import { Badge, EmptyState, Spinner, Modal, PageHeader, Pagination, ConfirmDialog, SortSelect } from '@/components/ui';
 import { useActiveCounties, useCountyNeighborhoods } from '@/lib/geo';
 import type { Property, Owner } from '@/lib/types';
+import {
+  MAX_PROPERTY_IMAGES,
+  MAX_PROPERTY_IMAGE_SIZE,
+  PROPERTY_IMAGE_TYPES,
+  PROPERTY_IMAGES_BUCKET,
+  propertyImageObjectPaths,
+  uploadPropertyImages,
+} from '@/lib/propertyImages';
 
 const PAGE_SIZE = 20;
 
@@ -246,8 +254,18 @@ export function PropertiesPage({ initialId }: { initialId?: string }) {
                 <div
                   key={p.id}
                   onClick={() => { setSelectedId(p.id); setView('detail'); }}
-                  className="card p-4 cursor-pointer hover:shadow-md hover:border-slate-300 transition-all"
+                  className="card p-4 cursor-pointer hover:shadow-md hover:border-slate-300 transition-all overflow-hidden"
                 >
+                  {p.images?.[0] && (
+                    <div className="relative -mx-4 -mt-4 mb-4 h-40 bg-slate-100 overflow-hidden">
+                      <img src={p.images[0]} alt={p.title} className="w-full h-full object-cover" loading="lazy" />
+                      {p.images.length > 1 && (
+                        <span className="absolute left-2 bottom-2 inline-flex items-center gap-1 rounded-md bg-black/65 px-2 py-1 text-[11px] font-medium text-white" dir="ltr">
+                          <Images size={13} /> {p.images.length}
+                        </span>
+                      )}
+                    </div>
+                  )}
                   <div className="flex items-center justify-between gap-2 mb-2.5">
                     <div className="flex items-center gap-1.5 min-w-0">
                       <Badge color={p.transaction_type === 'rent' ? 'purple' : p.transaction_type === 'partnership' ? 'teal' : 'blue'}>
@@ -350,6 +368,7 @@ function PropertyDetail({ propertyId, onBack }: { propertyId: string; onBack: ()
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'info' | 'matches' | 'calls' | 'followups'>('info');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [selectedImageIndex, setSelectedImageIndex] = useState<number | null>(null);
 
   const loadDetail = useCallback(async () => {
     setLoading(true);
@@ -374,7 +393,21 @@ function PropertyDetail({ propertyId, onBack }: { propertyId: string; onBack: ()
     loadDetail();
   }, [loadDetail]);
 
+  useEffect(() => {
+    if (selectedImageIndex === null) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setSelectedImageIndex(null);
+      if (!property?.images?.length) return;
+      if (event.key === 'ArrowLeft') setSelectedImageIndex((current) => current === null ? null : (current + 1) % property.images.length);
+      if (event.key === 'ArrowRight') setSelectedImageIndex((current) => current === null ? null : (current - 1 + property.images.length) % property.images.length);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [selectedImageIndex, property?.images]);
+
   const handleDelete = async () => {
+    const paths = propertyImageObjectPaths(property?.images ?? []);
+    if (paths.length > 0) await supabase.storage.from(PROPERTY_IMAGES_BUCKET).remove(paths);
     await supabase.from('properties').delete().eq('id', propertyId);
     onBack();
   };
@@ -431,6 +464,30 @@ function PropertyDetail({ propertyId, onBack }: { propertyId: string; onBack: ()
           </button>
         </div>
       </div>
+
+      {property.images?.length > 0 && (
+        <section className="card p-4" aria-label="آلبوم تصاویر فایل">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="flex items-center gap-2 text-sm font-bold text-slate-700">
+              <Images size={18} /> آلبوم تصاویر
+            </h3>
+            <span className="text-xs text-slate-400">{property.images.length} عکس</span>
+          </div>
+          <div className={`grid gap-2 ${property.images.length === 1 ? 'grid-cols-1' : 'grid-cols-2 sm:grid-cols-3'}`}>
+            {property.images.map((image, index) => (
+              <button
+                key={image}
+                type="button"
+                onClick={() => setSelectedImageIndex(index)}
+                className={`relative overflow-hidden rounded-lg bg-slate-100 group ${property.images.length === 1 ? 'h-72' : 'aspect-[4/3]'}`}
+                aria-label={`نمایش عکس ${index + 1}`}
+              >
+                <img src={image} alt={`${property.title} - عکس ${index + 1}`} className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105" loading="lazy" />
+              </button>
+            ))}
+          </div>
+        </section>
+      )}
 
       {/* Tabs */}
       <div className="flex gap-1 border-b border-slate-200 overflow-x-auto no-scrollbar">
@@ -559,6 +616,26 @@ function PropertyDetail({ propertyId, onBack }: { propertyId: string; onBack: ()
         </div>
       )}
 
+      {selectedImageIndex !== null && property.images?.[selectedImageIndex] && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/90 p-3 sm:p-8" role="dialog" aria-modal="true" aria-label="نمایش تصویر">
+          <button type="button" onClick={() => setSelectedImageIndex(null)} className="absolute top-4 left-4 z-10 rounded-full bg-white/15 p-2 text-white hover:bg-white/25" aria-label="بستن">
+            <X size={24} />
+          </button>
+          <img src={property.images[selectedImageIndex]} alt={`${property.title} - عکس ${selectedImageIndex + 1}`} className="max-h-full max-w-full rounded-lg object-contain" />
+          {property.images.length > 1 && (
+            <>
+              <button type="button" onClick={() => setSelectedImageIndex((selectedImageIndex - 1 + property.images.length) % property.images.length)} className="absolute right-3 sm:right-6 rounded-full bg-white/15 p-2 text-white hover:bg-white/25" aria-label="عکس قبلی">
+                <ChevronRight size={28} />
+              </button>
+              <button type="button" onClick={() => setSelectedImageIndex((selectedImageIndex + 1) % property.images.length)} className="absolute left-3 sm:left-6 rounded-full bg-white/15 p-2 text-white hover:bg-white/25" aria-label="عکس بعدی">
+                <ChevronLeft size={28} />
+              </button>
+              <span className="absolute bottom-4 rounded-full bg-black/50 px-3 py-1 text-xs text-white" dir="ltr">{selectedImageIndex + 1} / {property.images.length}</span>
+            </>
+          )}
+        </div>
+      )}
+
       <ConfirmDialog
         open={showDeleteConfirm}
         onClose={() => setShowDeleteConfirm(false)}
@@ -599,12 +676,74 @@ function StepSummary({ items }: { items: { label: string; value: string }[] }) {
   );
 }
 
+function PropertyImagePicker({ files, onChange }: { files: File[]; onChange: (files: File[]) => void }) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [message, setMessage] = useState('');
+  const previews = useMemo(() => files.map((file) => ({ file, url: URL.createObjectURL(file) })), [files]);
+
+  useEffect(() => () => previews.forEach((preview) => URL.revokeObjectURL(preview.url)), [previews]);
+
+  const addFiles = (incoming: FileList | null) => {
+    if (!incoming) return;
+    const candidates = Array.from(incoming);
+    const invalidType = candidates.some((file) => !PROPERTY_IMAGE_TYPES.includes(file.type));
+    const tooLarge = candidates.some((file) => file.size > MAX_PROPERTY_IMAGE_SIZE);
+    const unique = candidates.filter((candidate) => !files.some((file) =>
+      file.name === candidate.name && file.size === candidate.size && file.lastModified === candidate.lastModified,
+    ));
+    const available = MAX_PROPERTY_IMAGES - files.length;
+    onChange([...files, ...unique.filter((file) => PROPERTY_IMAGE_TYPES.includes(file.type) && file.size <= MAX_PROPERTY_IMAGE_SIZE).slice(0, available)]);
+
+    if (invalidType) setMessage('فقط فایل‌های JPG، PNG و WebP قابل انتخاب هستند.');
+    else if (tooLarge) setMessage('حجم هر عکس باید حداکثر ۸ مگابایت باشد.');
+    else if (unique.length > available) setMessage(`حداکثر ${MAX_PROPERTY_IMAGES} عکس می‌توانید اضافه کنید.`);
+    else setMessage('');
+    if (inputRef.current) inputRef.current.value = '';
+  };
+
+  return (
+    <div className="space-y-3">
+      <div>
+        <label className="label">آلبوم تصاویر <span className="font-normal text-slate-400">(اختیاری)</span></label>
+        <p className="text-xs text-slate-400">تا ۱۰ عکس، هر عکس حداکثر ۸ مگابایت</p>
+      </div>
+      <input ref={inputRef} type="file" accept="image/jpeg,image/png,image/webp" multiple className="hidden" onChange={(event) => addFiles(event.target.files)} />
+      <button
+        type="button"
+        onClick={() => inputRef.current?.click()}
+        disabled={files.length >= MAX_PROPERTY_IMAGES}
+        className="w-full rounded-xl border-2 border-dashed border-slate-300 px-4 py-7 text-slate-500 transition-colors hover:border-slate-400 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+      >
+        <ImagePlus size={28} className="mx-auto mb-2" />
+        <span className="block text-sm font-medium">انتخاب عکس‌ها</span>
+        <span className="mt-1 block text-xs">انتخاب عکس الزامی نیست</span>
+      </button>
+      {message && <p className="text-xs text-amber-600">{message}</p>}
+      {previews.length > 0 && (
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+          {previews.map(({ file, url }, index) => (
+            <div key={`${file.name}-${file.lastModified}`} className="relative aspect-square overflow-hidden rounded-lg bg-slate-100">
+              <img src={url} alt={`پیش‌نمایش عکس ${index + 1}`} className="h-full w-full object-cover" />
+              <button type="button" onClick={() => onChange(files.filter((_, fileIndex) => fileIndex !== index))} className="absolute left-1.5 top-1.5 rounded-full bg-black/65 p-1 text-white hover:bg-black/80" aria-label={`حذف عکس ${index + 1}`}>
+                <X size={15} />
+              </button>
+              {index === 0 && <span className="absolute right-1.5 bottom-1.5 rounded bg-black/60 px-1.5 py-0.5 text-[10px] text-white">تصویر اصلی</span>}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // Property Creation Form (Multi-step dynamic form)
 function PropertyForm({ onBack, onSaved }: { onBack: () => void; onSaved: () => void }) {
   const { user } = useAuth();
   const { counties } = useActiveCounties();
   const [step, setStep] = useState(0);
   const [saving, setSaving] = useState(false);
+  const [imageFiles, setImageFiles] = useState<File[]>([]);
+  const [saveError, setSaveError] = useState('');
   const [form, setForm] = useState({
     title: '',
     description: '',
@@ -657,6 +796,7 @@ function PropertyForm({ onBack, onSaved }: { onBack: () => void; onSaved: () => 
     { title: 'اطلاعات ملک', fields: ['title'] },
     { title: 'اطلاعات مالی', fields: [] },
     { title: 'مالک', fields: ['owner_name'] },
+    { title: 'تصاویر (اختیاری)', fields: [] },
   ];
 
   const validateStep = () => {
@@ -682,6 +822,7 @@ function PropertyForm({ onBack, onSaved }: { onBack: () => void; onSaved: () => 
   const handleSave = async () => {
     if (!validateStep()) return;
     setSaving(true);
+    setSaveError('');
 
     // First create or find owner
     let ownerId: string | null = null;
@@ -740,6 +881,7 @@ function PropertyForm({ onBack, onSaved }: { onBack: () => void; onSaved: () => 
       negotiable: form.negotiable,
       commission: form.commission ? Number(toEnglishDigits(form.commission)) : null,
       owner_notes: form.owner_notes || null,
+      images: [],
     };
     let { data, error } = await supabase.from('properties').insert(payload).select().single();
     // اگر ستون street هنوز در دیتابیس ساخته نشده باشد، خیابان را در payment_conditions ذخیره کن
@@ -748,19 +890,32 @@ function PropertyForm({ onBack, onSaved }: { onBack: () => void; onSaved: () => 
       ({ data, error } = await supabase.from('properties').insert({ ...withoutStreet, payment_conditions: street }).select().single());
     }
 
-    if (!error && data) {
-      // Calculate price per meter
-      if (data.sale_price && data.land_area) {
-        await supabase.from('properties').update({ price_per_meter: Math.round(data.sale_price / data.land_area) }).eq('id', data.id);
-      }
-      await supabase.from('activities').insert({
-        user_id: user?.id,
-        entity_type: 'property',
-        entity_id: data.id,
-        action: 'property_created',
-        description: `فایل جدید ${form.title} ثبت شد`,
-      });
+    if (error || !data) {
+      setSaveError(error?.message ?? 'ثبت فایل انجام نشد. لطفاً دوباره تلاش کنید.');
+      setSaving(false);
+      return;
     }
+
+    // Images are optional. When selected, upload them only after the property ID exists.
+    if (imageFiles.length > 0 && user?.id) {
+      const { urls, failedFiles } = await uploadPropertyImages(imageFiles, data.id, user.id);
+      if (urls.length > 0) await supabase.from('properties').update({ images: urls }).eq('id', data.id);
+      if (failedFiles.length > 0) {
+        window.alert(`${failedFiles.length} عکس بارگذاری نشد؛ فایل با عکس‌های بارگذاری‌شده ذخیره شد.`);
+      }
+    }
+
+    // Calculate price per meter
+    if (data.sale_price && data.land_area) {
+      await supabase.from('properties').update({ price_per_meter: Math.round(data.sale_price / data.land_area) }).eq('id', data.id);
+    }
+    await supabase.from('activities').insert({
+      user_id: user?.id,
+      entity_type: 'property',
+      entity_id: data.id,
+      action: 'property_created',
+      description: `فایل جدید ${form.title} ثبت شد`,
+    });
     setSaving(false);
     onSaved();
   };
@@ -1042,8 +1197,20 @@ function PropertyForm({ onBack, onSaved }: { onBack: () => void; onSaved: () => 
           </>
         )}
 
+        {step === 6 && (
+          <>
+            <StepSummary items={[
+              ...(form.title ? [{ label: 'عنوان', value: form.title }] : []),
+              ...(form.owner_name ? [{ label: 'مالک', value: form.owner_name }] : []),
+            ]} />
+            <PropertyImagePicker files={imageFiles} onChange={setImageFiles} />
+          </>
+        )}
+
+        {saveError && <p className="rounded-lg bg-red-50 p-3 text-xs text-red-600">{saveError}</p>}
+
         <div className="flex gap-2 pt-2">
-          {step > 0 && <button onClick={() => setStep(step - 1)} className="btn-secondary flex-1">مرحله قبل</button>}
+          {step > 0 && <button onClick={() => setStep(step - 1)} disabled={saving} className="btn-secondary flex-1">مرحله قبل</button>}
           {step < steps.length - 1 ? (
             <button onClick={handleNext} className="btn-primary flex-1">مرحله بعد</button>
           ) : (
