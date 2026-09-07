@@ -40,11 +40,12 @@ export function OwnersPage({ initialId }: { initialId?: string }) {
 
   const loadOwners = useCallback(async () => {
     setLoading(true);
-    const { data, count } = await supabase
+    const { data } = await supabase
       .from('owners')
-      .select('*, properties(status), calls(call_date)', { count: 'exact' });
-    setOwners((data as OwnerRow[]) ?? []);
-    setTotal(count ?? 0);
+      .select('*, properties(status), calls(call_date)');
+    const ownerRows = ((data as OwnerRow[]) ?? []).filter((owner) => !owner.tags?.includes(COLLEAGUE_TAG));
+    setOwners(ownerRows);
+    setTotal(ownerRows.length);
     setLoading(false);
   }, []);
 

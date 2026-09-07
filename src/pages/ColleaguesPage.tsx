@@ -1,75 +1,67 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Plus, Search, UserPlus, Pencil, Trash2, Phone } from 'lucide-react';
+import { ArrowLeft, Building2, FileText, Pencil, Phone, Plus, Search, Trash2, UserPlus } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth';
-import { normalizePhone, validatePhone, toEnglishDigits, toPersianDigits, COLLEAGUE_TAG } from '@/lib/constants';
-import { Badge, EmptyState, Spinner, Modal, PageHeader, ConfirmDialog, CopyButton } from '@/components/ui';
-import type { Owner } from '@/lib/types';
+import { normalizePhone, validatePhone, toEnglishDigits, toPersianDigits } from '@/lib/constants';
+import { Badge, ConfirmDialog, CopyButton, EmptyState, Modal, PageHeader, Spinner } from '@/components/ui';
+import type { Colleague } from '@/lib/types';
 
-type ColleagueRow = Owner & { properties?: { id: string }[] | null };
+type ColleagueRow = Colleague & { properties?: { id: string; status: string; title: string }[] | null };
 
 export function ColleaguesPage() {
-  const { user } = useAuth();
   const [colleagues, setColleagues] = useState<ColleagueRow[]>([]);
-  const [properties, setProperties] = useState<{ id: string; owner_relationship: string | null }[]>([]);
-  const [customers, setCustomers] = useState<{ id: string; property_preferences: Record<string, unknown> | null }[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
-  const [editing, setEditing] = useState<Owner | null>(null);
-  const [deleting, setDeleting] = useState<ColleagueRow | null>(null);
+  const [editing, setEditing] = useState<Colleague | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
-    const [colRes, propRes, custRes] = await Promise.all([
-      supabase.from('owners').select('*, properties(id)').contains('tags', [COLLEAGUE_TAG]).order('created_at', { ascending: false }),
-      supabase.from('properties').select('id, owner_relationship'),
-      supabase.from('customers').select('id, property_preferences'),
-    ]);
-    setColleagues((colRes.data as ColleagueRow[]) ?? []);
-    setProperties((propRes.data as { id: string; owner_relationship: string | null }[]) ?? []);
-    setCustomers((custRes.data as { id: string; property_preferences: Record<string, unknown> | null }[]) ?? []);
+    const { data } = await supabase
+      .from('colleagues')
+      .select('*, properties(id, status, title)')
+      .order('created_at', { ascending: false });
+    setColleagues((data as ColleagueRow[]) ?? []);
     setLoading(false);
   }, []);
 
   useEffect(() => { load(); }, [load]);
 
   const visible = useMemo(() => {
-    const q = toEnglishDigits(search.trim()).toLowerCase();
-    let rows = colleagues;
-    if (q) {
-      rows = rows.filter((c) =>
-        (c.name ?? '').toLowerCase().includes(q) ||
-        toEnglishDigits(c.phone ?? '').includes(q),
-      );
-    }
-    return rows;
+    const query = toEnglishDigits(search.trim()).toLowerCase();
+    if (!query) return colleagues;
+    return colleagues.filter((colleague) =>
+      colleague.name.toLowerCase().includes(query)
+      || toEnglishDigits(colleague.phone).includes(query)
+      || (colleague.agency_name ?? '').toLowerCase().includes(query),
+    );
   }, [colleagues, search]);
 
-  const propCountOf = (id: string) => properties.filter((p) => p.owner_relationship === id).length;
-  const custCountOf = (id: string) =>
-    customers.filter((c) => (c.property_preferences as Record<string, unknown> | null)?.colleague_id === id).length;
-
-  const handleDelete = async () => {
-    if (!deleting) return;
-    await supabase.from('owners').delete().eq('id', deleting.id);
-    setDeleting(null);
-    load();
-  };
+  if (selectedId) {
+    return (
+      <ColleagueDetail
+        colleagueId={selectedId}
+        onBack={() => { setSelectedId(null); load(); }}
+      />
+    );
+  }
 
   return (
     <div className="animate-fade-in">
-      <PageHeader title="همکاران" subtitle={`${colleagues.length} همکار`} actions={
-        <button onClick={() => { setEditing(null); setShowForm(true); }} className="btn-primary">
-          <Plus size={18} /><span className="hidden sm:inline">همکار جدید</span>
-        </button>
-      } />
+      <PageHeader
+        title="همکاران"
+        subtitle={`${toPersianDigits(colleagues.length)} همکار ثبت‌شده`}
+        actions={(
+          <button onClick={() => { setEditing(null); setShowForm(true); }} className="btn-primary">
+            <Plus size={18} /><span className="hidden sm:inline">همکار جدید</span>
+          </button>
+        )}
+      />
 
-      <div className="flex gap-2 mb-4">
-        <div className="relative flex-1">
-          <Search size={18} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" />
-          <input type="text" value={search} onChange={(e) => setSearch(e.target.value)} className="input pr-10" placeholder="جستجو با نام یا تلفن..." />
-        </div>
+      <div className="relative mb-4">
+        <Search size={18} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" />
+        <input value={search} onChange={(event) => setSearch(event.target.value)} className="input pr-10" placeholder="جستجو با نام، موبایل یا آژانس..." />
       </div>
 
       {loading ? (
@@ -78,116 +70,203 @@ export function ColleaguesPage() {
         <EmptyState
           icon={<UserPlus size={48} />}
           title="همکاری ثبت نشده"
-          description="همکارانتان را ثبت کنید تا بتوانید فایل‌ها و متقاضی‌ها را به آن‌ها نسبت دهید"
-          action={<button onClick={() => { setEditing(null); setShowForm(true); }} className="btn-primary"><Plus size={18} /> همکار جدید</button>}
+          description="همکاران خود را ثبت کنید تا فایل‌های اشتراکی را به آن‌ها نسبت دهید."
+          action={<button onClick={() => setShowForm(true)} className="btn-primary"><Plus size={18} /> همکار جدید</button>}
         />
       ) : (
-        <div className="card overflow-hidden">
-          <div className="divide-y divide-slate-100">
-            {visible.map((c) => (
-              <div key={c.id} className="px-4 py-3 hover:bg-slate-50 transition-colors">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-slate-200 flex items-center justify-center text-sm font-bold text-slate-600 flex-shrink-0">
-                    {c.name?.[0] ?? '؟'}
-                  </div>
-                  <div className="flex-1 min-w-0 space-y-0.5">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+          {visible.map((colleague) => {
+            const activeFiles = (colleague.properties ?? []).filter((property) => property.status === 'active').length;
+            return (
+              <button key={colleague.id} onClick={() => setSelectedId(colleague.id)} className="card p-4 text-right transition hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md">
+                <div className="flex items-start gap-3">
+                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-indigo-100 font-bold text-indigo-700">{colleague.name[0] ?? '؟'}</div>
+                  <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
-                      <p className="text-sm font-medium text-slate-800 truncate">{c.name}</p>
-                      {c.status === 'inactive' && <Badge color="gray">غیرفعال</Badge>}
+                      <h3 className="truncate text-sm font-bold text-slate-800">{colleague.name}</h3>
+                      <Badge color={colleague.status === 'active' ? 'green' : 'gray'}>{colleague.status === 'active' ? 'فعال' : 'غیرفعال'}</Badge>
                     </div>
-                    <div className="flex items-center gap-0.5 text-xs text-slate-400">
-                      <span dir="ltr">{c.phone}</span>
-                      <CopyButton text={c.phone} />
-                    </div>
-                    <div className="flex items-center gap-1.5 text-[11px] text-slate-500">
-                      <span>{toPersianDigits(propCountOf(c.id))} فایل</span>
-                      <span className="text-slate-300">•</span>
-                      <span>{toPersianDigits(custCountOf(c.id))} متقاضی</span>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-1 flex-shrink-0">
-                    <button onClick={() => { setEditing(c); setShowForm(true); }} className="p-2 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors" title="ویرایش">
-                      <Pencil size={16} />
-                    </button>
-                    <button onClick={() => setDeleting(c)} className="p-2 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition-colors" title="حذف">
-                      <Trash2 size={16} />
-                    </button>
+                    <p className="mt-1 text-xs text-slate-500" dir="ltr">{colleague.phone}</p>
+                    <p className="mt-1 truncate text-xs text-slate-400">{colleague.agency_name || colleague.specialization || 'بدون اطلاعات تکمیلی'}</p>
                   </div>
                 </div>
-              </div>
-            ))}
-          </div>
+                <div className="mt-4 flex items-center justify-between border-t border-slate-100 pt-3 text-xs text-slate-500">
+                  <span className="flex items-center gap-1"><FileText size={14} /> {toPersianDigits(colleague.properties?.length ?? 0)} فایل مشترک</span>
+                  <span>{toPersianDigits(activeFiles)} فایل فعال</span>
+                </div>
+              </button>
+            );
+          })}
         </div>
       )}
 
       {showForm && (
         <ColleagueForm
           initial={editing}
-          onClose={() => setShowForm(false)}
-          onSaved={() => { setShowForm(false); load(); }}
+          onClose={() => { setShowForm(false); setEditing(null); }}
+          onSaved={() => { setShowForm(false); setEditing(null); load(); }}
         />
       )}
+    </div>
+  );
+}
 
+function ColleagueDetail({ colleagueId, onBack }: { colleagueId: string; onBack: () => void }) {
+  const [colleague, setColleague] = useState<ColleagueRow | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [showEdit, setShowEdit] = useState(false);
+  const [showDelete, setShowDelete] = useState(false);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    const { data } = await supabase
+      .from('colleagues')
+      .select('*, properties(id, status, title)')
+      .eq('id', colleagueId)
+      .maybeSingle();
+    setColleague(data as ColleagueRow | null);
+    setLoading(false);
+  }, [colleagueId]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const handleDelete = async () => {
+    if (!colleague) return;
+    if ((colleague.properties?.length ?? 0) > 0) {
+      await supabase.from('colleagues').update({ status: 'inactive' }).eq('id', colleague.id);
+    } else {
+      await supabase.from('colleagues').delete().eq('id', colleague.id);
+    }
+    onBack();
+  };
+
+  if (loading || !colleague) return <div className="flex justify-center py-16"><Spinner size={32} /></div>;
+
+  return (
+    <div className="animate-fade-in space-y-4">
+      <button onClick={onBack} className="flex items-center gap-1 text-sm text-slate-500 hover:text-slate-700"><ArrowLeft size={16} /> بازگشت</button>
+
+      <div className="card p-5">
+        <div className="flex items-start gap-4">
+          <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-indigo-100 text-xl font-bold text-indigo-700">{colleague.name[0] ?? '؟'}</div>
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <h2 className="text-lg font-bold text-slate-800">{colleague.name}</h2>
+              <Badge color={colleague.status === 'active' ? 'green' : 'gray'}>{colleague.status === 'active' ? 'فعال' : 'غیرفعال'}</Badge>
+            </div>
+            {colleague.agency_name && <p className="mt-1 flex items-center gap-1 text-sm text-slate-500"><Building2 size={14} /> {colleague.agency_name}</p>}
+            {colleague.specialization && <p className="mt-1 text-xs text-slate-400">حوزه فعالیت: {colleague.specialization}</p>}
+          </div>
+        </div>
+
+        <div className="mt-4 flex flex-wrap gap-2">
+          <a href={`tel:${normalizePhone(colleague.phone)}`} className="btn-primary"><Phone size={16} /> تماس با همکار</a>
+          <button onClick={() => setShowEdit(true)} className="btn-secondary"><Pencil size={16} /> ویرایش همکار</button>
+          <button onClick={() => setShowDelete(true)} className="btn-danger" aria-label="حذف همکار"><Trash2 size={16} /></button>
+        </div>
+
+        <div className="mt-4 grid grid-cols-1 gap-3 border-t border-slate-100 pt-4 sm:grid-cols-2">
+          <div><p className="text-xs text-slate-400">موبایل</p><div className="flex items-center gap-1 text-sm text-slate-700"><span dir="ltr">{colleague.phone}</span><CopyButton text={colleague.phone} /></div></div>
+          {colleague.secondary_phone && <div><p className="text-xs text-slate-400">تلفن ثانویه</p><div className="flex items-center gap-1 text-sm text-slate-700"><span dir="ltr">{colleague.secondary_phone}</span><CopyButton text={colleague.secondary_phone} /></div></div>}
+        </div>
+        {colleague.notes && <p className="mt-4 rounded-lg bg-slate-50 p-3 text-sm text-slate-600">{colleague.notes}</p>}
+      </div>
+
+      <div className="card overflow-hidden">
+        <div className="flex items-center justify-between border-b border-slate-100 px-5 py-3">
+          <h3 className="text-sm font-bold text-slate-700">فایل‌های این همکار</h3>
+          <span className="text-xs text-slate-400">{toPersianDigits(colleague.properties?.length ?? 0)} فایل</span>
+        </div>
+        {(colleague.properties?.length ?? 0) > 0 ? (
+          <div className="divide-y divide-slate-100">
+            {colleague.properties?.map((property) => (
+              <div key={property.id} className="flex items-center justify-between px-5 py-3">
+                <span className="text-sm font-medium text-slate-700">{property.title}</span>
+                <Badge color={property.status === 'active' ? 'green' : 'gray'}>{property.status === 'active' ? 'فعال' : 'غیرفعال'}</Badge>
+              </div>
+            ))}
+          </div>
+        ) : <EmptyState icon={<FileText size={36} />} title="هنوز فایلی از این همکار ثبت نشده" />}
+      </div>
+
+      {showEdit && <ColleagueForm initial={colleague} onClose={() => setShowEdit(false)} onSaved={() => { setShowEdit(false); load(); }} />}
       <ConfirmDialog
-        open={!!deleting}
-        onClose={() => setDeleting(null)}
+        open={showDelete}
+        onClose={() => setShowDelete(false)}
         onConfirm={handleDelete}
-        title="حذف همکار"
-        message={`آیا از حذف ${deleting?.name ?? ''} مطمئن هستید؟ فایل‌ها و متقاضی‌های قبلی او باقی می‌مانند اما بدون همکار نمایش داده می‌شوند.`}
-        confirmLabel="حذف"
+        title={(colleague.properties?.length ?? 0) > 0 ? 'غیرفعال‌کردن همکار' : 'حذف همکار'}
+        message={(colleague.properties?.length ?? 0) > 0
+          ? 'برای حفظ سابقه فایل‌های مشترک، این همکار حذف نمی‌شود و فقط غیرفعال خواهد شد.'
+          : 'آیا از حذف این همکار مطمئن هستید؟'}
+        confirmLabel={(colleague.properties?.length ?? 0) > 0 ? 'غیرفعال کن' : 'حذف'}
         danger
       />
     </div>
   );
 }
 
-function ColleagueForm({ initial, onClose, onSaved }: { initial: Owner | null; onClose: () => void; onSaved: () => void }) {
+function ColleagueForm({ initial, onClose, onSaved }: { initial: Colleague | null; onClose: () => void; onSaved: () => void }) {
   const { user } = useAuth();
+  const isEditing = Boolean(initial);
   const [name, setName] = useState(initial?.name ?? '');
   const [phone, setPhone] = useState(initial?.phone ?? '');
   const [secondaryPhone, setSecondaryPhone] = useState(initial?.secondary_phone ?? '');
+  const [agencyName, setAgencyName] = useState(initial?.agency_name ?? '');
+  const [specialization, setSpecialization] = useState(initial?.specialization ?? '');
   const [notes, setNotes] = useState(initial?.notes ?? '');
-  const [status, setStatus] = useState(initial?.status ?? 'active');
+  const [status, setStatus] = useState<Colleague['status']>(initial?.status ?? 'active');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
   const handleSave = async () => {
-    if (!name.trim()) { setError('نام الزامی است'); return; }
-    if (!phone.trim()) { setError('تلفن الزامی است'); return; }
-    if (!validatePhone(phone)) { setError('فرمت تلفن صحیح نیست'); return; }
+    if (!name.trim()) { setError('نام همکار الزامی است'); return; }
+    if (!phone.trim()) { setError('موبایل همکار الزامی است'); return; }
+    if (!validatePhone(phone)) { setError('فرمت موبایل صحیح نیست (09123456789)'); return; }
     setSaving(true);
+    setError('');
     const payload = {
       name: name.trim(),
       phone: normalizePhone(phone),
       secondary_phone: secondaryPhone ? normalizePhone(secondaryPhone) : null,
-      notes: notes || null,
+      agency_name: agencyName.trim() || null,
+      specialization: specialization.trim() || null,
+      notes: notes.trim() || null,
       status,
-      tags: [COLLEAGUE_TAG],
+      ...(!isEditing ? { assigned_consultant_id: user?.id } : {}),
     };
-    const { error: saveError } = initial
-      ? await supabase.from('owners').update(payload).eq('id', initial.id)
-      : await supabase.from('owners').insert({ ...payload, assigned_consultant_id: user?.id });
+    const { data, error: saveError } = initial
+      ? await supabase.from('colleagues').update(payload).eq('id', initial.id).select().single()
+      : await supabase.from('colleagues').insert(payload).select().single();
+    if (saveError || !data) {
+      setError(saveError?.message ?? 'ذخیره همکار انجام نشد.');
+      setSaving(false);
+      return;
+    }
+    await supabase.from('activities').insert({
+      user_id: user?.id,
+      entity_type: 'colleague',
+      entity_id: data.id,
+      action: isEditing ? 'colleague_updated' : 'colleague_created',
+      description: isEditing ? `همکار ${name} ویرایش شد` : `همکار جدید ${name} ثبت شد`,
+    });
     setSaving(false);
-    if (saveError) { setError('ذخیره ناموفق بود'); return; }
     onSaved();
   };
 
   return (
-    <Modal open={true} onClose={onClose} title={initial ? 'ویرایش همکار' : 'همکار جدید'}>
+    <Modal open={true} onClose={onClose} title={isEditing ? 'ویرایش همکار' : 'همکار جدید'}>
       <div className="space-y-4">
-        {error && <div className="text-sm text-red-500 bg-red-50 px-3 py-2 rounded-lg">{error}</div>}
-        <div><label className="label">نام و نام خانوادگی *</label><input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="نام همکار" /></div>
-        <div><label className="label">موبایل *</label><input className="input" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="09123456789" dir="ltr" /></div>
-        <div><label className="label">تلفن ثانویه</label><input className="input" value={secondaryPhone} onChange={(e) => setSecondaryPhone(e.target.value)} placeholder="02112345678" dir="ltr" /></div>
-        <div>
-          <label className="label">وضعیت</label>
-          <select className="input" value={status} onChange={(e) => setStatus(e.target.value as Owner['status'])}>
-            <option value="active">فعال</option>
-            <option value="inactive">غیرفعال</option>
-          </select>
-        </div>
-        <div><label className="label">یادداشت</label><textarea className="input min-h-[60px]" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="تخصص، آژانس، نکات همکاری..." /></div>
-        <button onClick={handleSave} disabled={saving} className="btn-primary w-full">{saving ? 'در حال ذخیره...' : 'ذخیره'}</button>
+        {error && <div className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-500">{error}</div>}
+        <div><label className="label">نام و نام خانوادگی *</label><input className="input" value={name} onChange={(event) => setName(event.target.value)} placeholder="نام همکار" /></div>
+        <div><label className="label">موبایل *</label><input className="input" value={phone} onChange={(event) => setPhone(event.target.value)} placeholder="09123456789" dir="ltr" /></div>
+        <div><label className="label">تلفن ثانویه</label><input className="input" value={secondaryPhone} onChange={(event) => setSecondaryPhone(event.target.value)} placeholder="02112345678" dir="ltr" /></div>
+        <div><label className="label">نام آژانس یا دفتر</label><input className="input" value={agencyName} onChange={(event) => setAgencyName(event.target.value)} placeholder="مثلاً املاک مرکزی" /></div>
+        <div><label className="label">حوزه فعالیت</label><input className="input" value={specialization} onChange={(event) => setSpecialization(event.target.value)} placeholder="مثلاً آپارتمان مسکونی غرب تهران" /></div>
+        <div><label className="label">یادداشت</label><textarea className="input min-h-[70px]" value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="شرایط همکاری، نحوه تسویه و نکات مهم..." /></div>
+        {isEditing && (
+          <div><label className="label">وضعیت</label><select className="input" value={status} onChange={(event) => setStatus(event.target.value as Colleague['status'])}><option value="active">فعال</option><option value="inactive">غیرفعال</option></select></div>
+        )}
+        <button onClick={handleSave} disabled={saving} className="btn-primary w-full">{saving ? 'در حال ذخیره...' : isEditing ? 'ذخیره تغییرات' : 'ثبت همکار'}</button>
       </div>
     </Modal>
   );

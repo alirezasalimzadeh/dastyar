@@ -117,6 +117,20 @@ export interface Owner {
   updated_at: string;
 }
 
+export interface Colleague {
+  id: string;
+  name: string;
+  phone: string;
+  secondary_phone: string;
+  agency_name: string;
+  specialization: string;
+  notes: string;
+  status: 'active' | 'inactive';
+  assigned_consultant_id: string;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface Customer {
   id: string;
   name: string;
@@ -169,6 +183,8 @@ export interface Property {
   is_featured: boolean;
   is_active: boolean;
   owner_id: string;
+  contact_type: 'owner' | 'colleague';
+  colleague_id: string;
   assigned_consultant_id: string;
   province_id: string;
   county_id: string;
