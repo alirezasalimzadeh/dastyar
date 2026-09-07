@@ -22,7 +22,7 @@ const OWNER_SORTS = [
   { value: 'active_props', label: 'بیشترین فایل فعال' },
 ];
 
-export function OwnersPage({ initialId }: { initialId?: string }) {
+export function OwnersPage({ initialId, onNavigate }: { initialId?: string; onNavigate?: (page: string, params?: Record<string, unknown>) => void }) {
   const { user } = useAuth();
   const [view, setView] = useState<'list' | 'detail' | 'create'>('list');
   const [owners, setOwners] = useState<OwnerRow[]>([]);
@@ -83,7 +83,13 @@ export function OwnersPage({ initialId }: { initialId?: string }) {
   }, [owners, search, sortKey]);
 
   if (view === 'detail' && selectedId) {
-    return <OwnerDetail ownerId={selectedId} onBack={() => { setView('list'); setSelectedId(null); }} />;
+    return (
+      <OwnerDetail
+        ownerId={selectedId}
+        onBack={() => { setView('list'); setSelectedId(null); }}
+        onPropertyOpen={(propertyId) => onNavigate?.('properties', { id: propertyId })}
+      />
+    );
   }
 
   const totalPages = Math.ceil(visibleOwners.length / PAGE_SIZE);
@@ -151,7 +157,7 @@ export function OwnersPage({ initialId }: { initialId?: string }) {
   );
 }
 
-function OwnerDetail({ ownerId, onBack }: { ownerId: string; onBack: () => void }) {
+function OwnerDetail({ ownerId, onBack, onPropertyOpen }: { ownerId: string; onBack: () => void; onPropertyOpen: (propertyId: string) => void }) {
   const [owner, setOwner] = useState<Owner | null>(null);
   const [properties, setProperties] = useState<any[]>([]);
   const [calls, setCalls] = useState<any[]>([]);
@@ -205,10 +211,21 @@ function OwnerDetail({ ownerId, onBack }: { ownerId: string; onBack: () => void 
         {properties.length > 0 ? (
           <div className="divide-y divide-slate-100">
             {properties.map((p) => (
-              <div key={p.id} className="px-5 py-3 flex items-center justify-between">
-                <p className="text-sm font-medium text-slate-700">{p.title}</p>
-                <Badge color="gray">{p.status}</Badge>
-              </div>
+              <button
+                key={p.id}
+                type="button"
+                onClick={() => onPropertyOpen(p.id)}
+                className="w-full px-5 py-3 flex items-center justify-between gap-3 text-right hover:bg-slate-50 transition-colors group"
+              >
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium text-slate-700 truncate group-hover:text-slate-900">{p.title}</p>
+                  <p className="text-[11px] text-slate-400 mt-0.5">مشاهده جزئیات ملک</p>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <Badge color={p.status === 'active' ? 'green' : 'gray'}>{p.status === 'active' ? 'فعال' : p.status}</Badge>
+                  <ArrowLeft size={16} className="text-slate-300 group-hover:text-slate-600 transition-colors" />
+                </div>
+              </button>
             ))}
           </div>
         ) : <EmptyState title="ملکی ثبت نشده" />}

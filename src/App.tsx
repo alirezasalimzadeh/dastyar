@@ -37,9 +37,9 @@ function AppContent() {
       case 'customers':
         return <CustomersPage initialId={params.id as string | undefined} initialFilter={params.filter as string | undefined} />;
       case 'owners':
-        return <OwnersPage initialId={params.id as string | undefined} />;
+        return <OwnersPage initialId={params.id as string | undefined} onNavigate={navigate} />;
       case 'colleagues':
-        return <ColleaguesPage />;
+        return <ColleaguesPage onNavigate={navigate} />;
       case 'properties':
         return <PropertiesPage initialId={params.id as string | undefined} />;
       case 'matches':

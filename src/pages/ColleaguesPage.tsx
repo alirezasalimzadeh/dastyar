@@ -9,7 +9,7 @@ import type { Colleague, Owner } from '@/lib/types';
 
 type ColleagueRow = Colleague & { properties?: { id: string; status: string; title: string }[] | null };
 
-export function ColleaguesPage() {
+export function ColleaguesPage({ onNavigate }: { onNavigate?: (page: string, params?: Record<string, unknown>) => void }) {
   const [colleagues, setColleagues] = useState<ColleagueRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -48,6 +48,7 @@ export function ColleaguesPage() {
       <ColleagueDetail
         colleagueId={selectedId}
         onBack={() => { setSelectedId(null); load(); }}
+        onPropertyOpen={(propertyId) => onNavigate?.('properties', { id: propertyId })}
       />
     );
   }
@@ -116,7 +117,7 @@ export function ColleaguesPage() {
   );
 }
 
-function ColleagueDetail({ colleagueId, onBack }: { colleagueId: string; onBack: () => void }) {
+function ColleagueDetail({ colleagueId, onBack, onPropertyOpen }: { colleagueId: string; onBack: () => void; onPropertyOpen: (propertyId: string) => void }) {
   const [colleague, setColleague] = useState<ColleagueRow | null>(null);
   const [loading, setLoading] = useState(true);
   const [showEdit, setShowEdit] = useState(false);
@@ -187,10 +188,21 @@ function ColleagueDetail({ colleagueId, onBack }: { colleagueId: string; onBack:
         {(colleague.properties?.length ?? 0) > 0 ? (
           <div className="divide-y divide-slate-100">
             {colleague.properties?.map((property) => (
-              <div key={property.id} className="flex items-center justify-between px-5 py-3">
-                <span className="text-sm font-medium text-slate-700">{property.title}</span>
-                <Badge color={property.status === 'active' ? 'green' : 'gray'}>{property.status === 'active' ? 'فعال' : 'غیرفعال'}</Badge>
-              </div>
+              <button
+                key={property.id}
+                type="button"
+                onClick={() => onPropertyOpen(property.id)}
+                className="flex w-full items-center justify-between gap-3 px-5 py-3 text-right transition-colors hover:bg-slate-50 group"
+              >
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium text-slate-700 group-hover:text-slate-900">{property.title}</p>
+                  <p className="mt-0.5 text-[11px] text-slate-400">مشاهده جزئیات ملک</p>
+                </div>
+                <div className="flex shrink-0 items-center gap-2">
+                  <Badge color={property.status === 'active' ? 'green' : 'gray'}>{property.status === 'active' ? 'فعال' : 'غیرفعال'}</Badge>
+                  <ArrowLeft size={16} className="text-slate-300 transition-colors group-hover:text-slate-600" />
+                </div>
+              </button>
             ))}
           </div>
         ) : <EmptyState icon={<FileText size={36} />} title="هنوز فایلی از این همکار ثبت نشده" />}
