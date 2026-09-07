@@ -1,0 +1,1056 @@
+import { useEffect, useState, useCallback, useMemo } from 'react';
+import { Plus, Search, Home, Phone, X, Filter, ArrowLeft, Trash2, Flame, Star, MapPin, Target, User } from 'lucide-react';
+import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/lib/auth';
+import {
+  TRANSACTION_TYPES,
+  TRANSACTION_ROLES,
+  CATEGORIES,
+  PROPERTY_TYPES,
+  PROPERTY_STATUSES,
+  formatPrice,
+  formatDate,
+  getTransactionLabel,
+  getCategoryLabel,
+  getPropertyTypeLabel,
+  getStatusInfo,
+  normalizePhone,
+  toEnglishDigits,
+  timeAgo,
+  TEHRAN_PROVINCE_ID,
+  ACTIVE_COUNTY_NAMES,
+  ROBAT_KARIM_COUNTY_NAME,
+  ROBAT_KARIM_NEIGHBORHOODS,
+  ROBAT_KARIM_STREETS,
+} from '@/lib/constants';
+import { Badge, EmptyState, Spinner, Modal, PageHeader, Pagination, ConfirmDialog, SortSelect } from '@/components/ui';
+import { useActiveCounties, useCountyNeighborhoods } from '@/lib/geo';
+import type { Property, Owner } from '@/lib/types';
+
+const PAGE_SIZE = 20;
+
+type PropertyListItem = Property & {
+  owners?: { name: string; phone: string } | null;
+  provinces?: { name: string } | null;
+  counties?: { name: string } | null;
+  cities?: { name: string } | null;
+  neighborhoods?: { name: string } | null;
+};
+
+const PROPERTY_SORTS = [
+  { value: 'newest', label: 'جدیدترین' },
+  { value: 'oldest', label: 'قدیمی‌ترین' },
+  { value: 'price_desc', label: 'گران‌ترین' },
+  { value: 'price_asc', label: 'ارزان‌ترین' },
+  { value: 'area_desc', label: 'بیشترین متراژ' },
+  { value: 'price_per_meter', label: 'قیمت هر متر' },
+  { value: 'title', label: 'عنوان (الفبا)' },
+];
+
+// تا وقتی ستون street در دیتابیس ساخته نشده، خیابان در payment_conditions ذخیره می‌شود
+const getStreet = (p: { street?: string | null; payment_conditions?: string | null }) =>
+  p.street ?? p.payment_conditions ?? '';
+
+export function PropertiesPage({ initialId }: { initialId?: string }) {
+  const { user } = useAuth();
+  const [view, setView] = useState<'list' | 'detail' | 'create'>('list');
+  const [properties, setProperties] = useState<PropertyListItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
+  const [sortKey, setSortKey] = useState('newest');
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [showFilters, setShowFilters] = useState(false);
+  const [filters, setFilters] = useState({
+    transaction_type: '',
+    category: '',
+    status: '',
+    is_hot: '',
+  });
+
+  useEffect(() => {
+    if (initialId) {
+      setSelectedId(initialId);
+      setView('detail');
+    }
+  }, [initialId]);
+
+  const loadProperties = useCallback(async () => {
+    setLoading(true);
+    const { data, count } = await supabase
+      .from('properties')
+      .select('*, owners(name, phone), provinces(name), counties(name), cities(name), neighborhoods(name)', { count: 'exact' });
+    setProperties((data as PropertyListItem[]) ?? []);
+    setTotal(count ?? 0);
+    setLoading(false);
+  }, []);
+
+  useEffect(() => {
+    loadProperties();
+  }, [loadProperties]);
+
+  const visibleProperties = useMemo(() => {
+    const q = toEnglishDigits(search.trim()).toLowerCase();
+    let rows = properties;
+    if (q) {
+      rows = rows.filter((p) =>
+        (p.title ?? '').toLowerCase().includes(q) ||
+        (p.address ?? '').toLowerCase().includes(q),
+      );
+    }
+    if (filters.transaction_type) rows = rows.filter((p) => p.transaction_type === filters.transaction_type);
+    if (filters.category) rows = rows.filter((p) => p.category === filters.category);
+    if (filters.status) rows = rows.filter((p) => p.status === filters.status);
+    if (filters.is_hot) rows = rows.filter((p) => (filters.is_hot === 'true') === !!p.is_hot);
+
+    const priceOf = (p: PropertyListItem) => p.sale_price ?? p.participation_price ?? p.deposit_price ?? p.monthly_rent ?? -1;
+    const areaOf = (p: PropertyListItem) => p.building_area ?? p.land_area ?? -1;
+    switch (sortKey) {
+      case 'oldest': rows = [...rows].sort((a, b) => (a.created_at ?? '').localeCompare(b.created_at ?? '')); break;
+      case 'price_desc': rows = [...rows].sort((a, b) => priceOf(b) - priceOf(a)); break;
+      case 'price_asc': rows = [...rows].sort((a, b) => priceOf(a) - priceOf(b)); break;
+      case 'area_desc': rows = [...rows].sort((a, b) => areaOf(b) - areaOf(a)); break;
+      case 'price_per_meter': rows = [...rows].sort((a, b) => (b.price_per_meter ?? -1) - (a.price_per_meter ?? -1)); break;
+      case 'title': rows = [...rows].sort((a, b) => (a.title ?? '').localeCompare(b.title ?? '', 'fa')); break;
+      default: rows = [...rows].sort((a, b) => (b.created_at ?? '').localeCompare(a.created_at ?? ''));
+    }
+    return rows;
+  }, [properties, search, filters, sortKey]);
+
+  if (view === 'create') {
+    return <PropertyForm onBack={() => setView('list')} onSaved={() => { setView('list'); loadProperties(); }} />;
+  }
+
+  if (view === 'detail' && selectedId) {
+    return <PropertyDetail propertyId={selectedId} onBack={() => { setView('list'); setSelectedId(null); }} />;
+  }
+
+  const totalPages = Math.ceil(visibleProperties.length / PAGE_SIZE);
+  const pageItems = visibleProperties.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+
+  return (
+    <div className="animate-fade-in">
+      <PageHeader
+        title="فایل‌ها"
+        subtitle={`${total} فایل`}
+        actions={
+          <button onClick={() => setView('create')} className="btn-primary">
+            <Plus size={18} />
+            <span className="hidden sm:inline">فایل جدید</span>
+          </button>
+        }
+      />
+
+      <div className="flex gap-2 mb-4">
+        <div className="relative flex-1">
+          <Search size={18} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" />
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+            className="input pr-10"
+            placeholder="جستجو با عنوان یا آدرس..."
+          />
+        </div>
+        <button
+          onClick={() => setShowFilters(!showFilters)}
+          className={`btn-secondary ${Object.values(filters).some(Boolean) ? 'bg-slate-200' : ''}`}
+        >
+          <Filter size={18} />
+        </button>
+      </div>
+
+      <SortSelect value={sortKey} options={PROPERTY_SORTS} onChange={(v) => { setSortKey(v); setPage(1); }} />
+
+      {showFilters && (
+        <div className="card p-4 mb-4 animate-slide-up">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            <div>
+              <label className="label">نوع معامله</label>
+              <select className="input" value={filters.transaction_type} onChange={(e) => { setFilters({ ...filters, transaction_type: e.target.value }); setPage(1); }}>
+                <option value="">همه</option>
+                {TRANSACTION_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="label">دسته‌بندی</label>
+              <select className="input" value={filters.category} onChange={(e) => { setFilters({ ...filters, category: e.target.value }); setPage(1); }}>
+                <option value="">همه</option>
+                {CATEGORIES.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="label">وضعیت</label>
+              <select className="input" value={filters.status} onChange={(e) => { setFilters({ ...filters, status: e.target.value }); setPage(1); }}>
+                <option value="">همه</option>
+                {PROPERTY_STATUSES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="label">داغ</label>
+              <select className="input" value={filters.is_hot} onChange={(e) => { setFilters({ ...filters, is_hot: e.target.value }); setPage(1); }}>
+                <option value="">همه</option>
+                <option value="true">داغ</option>
+                <option value="false">عادی</option>
+              </select>
+            </div>
+          </div>
+          {Object.values(filters).some(Boolean) && (
+            <button onClick={() => { setFilters({ transaction_type: '', category: '', status: '', is_hot: '' }); setPage(1); }} className="text-xs text-red-500 font-medium mt-3">
+              پاک کردن فیلترها
+            </button>
+          )}
+        </div>
+      )}
+
+      {loading ? (
+        <div className="flex justify-center py-16"><Spinner size={32} /></div>
+      ) : visibleProperties.length === 0 ? (
+        <EmptyState
+          icon={<Home size={48} />}
+          title="فایلی یافت نشد"
+          description="فایل جدیدی ثبت کنید یا فیلترها را تغییر دهید"
+          action={<button onClick={() => setView('create')} className="btn-primary"><Plus size={18} /> فایل جدید</button>}
+        />
+      ) : (
+        <>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {pageItems.map((p) => {
+              const status = getStatusInfo(PROPERTY_STATUSES, p.status);
+              const locationParts = [p.neighborhoods?.name, p.counties?.name].filter(Boolean) as string[];
+              const locationLine = locationParts.length > 0 ? locationParts.join('، ') : p.address || 'بدون موقعیت';
+              const roleLabel = p.transaction_role
+                ? TRANSACTION_ROLES[p.transaction_type]?.find((r) => r.value === p.transaction_role)?.label ?? p.transaction_role
+                : '';
+
+              const specs: string[] = [];
+              if (p.building_area != null) specs.push(`${formatPrice(p.building_area)} متر بنا`);
+              if (p.land_area != null) specs.push(`${formatPrice(p.land_area)} متر زمین`);
+              if (p.bedrooms != null) specs.push(`${formatPrice(p.bedrooms)} خواب`);
+              if (p.rooms != null) specs.push(`${formatPrice(p.rooms)} اتاق`);
+              if (p.floor != null) specs.push(p.total_floors != null ? `طبقه ${formatPrice(p.floor)} از ${formatPrice(p.total_floors)}` : `طبقه ${formatPrice(p.floor)}`);
+              if (p.building_age != null) specs.push(`${formatPrice(p.building_age)} ساله`);
+              if (p.parking) specs.push('پارکینگ');
+              if (p.elevator) specs.push('آسانسور');
+              if (p.storage) specs.push('انباری');
+              if (p.balcony) specs.push('بالکن');
+              if (p.yard) specs.push('حیاط');
+              if (p.garden) specs.push('باغ');
+              if (p.pool) specs.push('استخر');
+              if (p.security) specs.push('امنیت');
+
+              const hasRentPrice = p.deposit_price != null || p.monthly_rent != null;
+
+              return (
+                <div
+                  key={p.id}
+                  onClick={() => { setSelectedId(p.id); setView('detail'); }}
+                  className="card p-4 cursor-pointer hover:shadow-md hover:border-slate-300 transition-all"
+                >
+                  <div className="flex items-center justify-between gap-2 mb-2.5">
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <Badge color={p.transaction_type === 'rent' ? 'purple' : p.transaction_type === 'partnership' ? 'teal' : 'blue'}>
+                        {getTransactionLabel(p.transaction_type)}
+                      </Badge>
+                      {p.is_hot && <Flame size={15} className="text-red-500 shrink-0" />}
+                      {p.is_featured && <Star size={15} className="text-yellow-500 shrink-0" />}
+                      {p.negotiable && <span className="badge bg-emerald-50 text-emerald-600">قابل مذاکره</span>}
+                    </div>
+                    <Badge color={status.color}>{status.label}</Badge>
+                  </div>
+
+                  <h3 className="text-sm font-bold text-slate-800 mb-1 truncate">{p.title}</h3>
+                  <p className="text-xs text-slate-400 mb-2 truncate">
+                    {getCategoryLabel(p.category)} • {getPropertyTypeLabel(p.category, p.property_type)}
+                    {roleLabel ? ` • ${roleLabel}` : ''}
+                  </p>
+
+                  <p className="text-xs text-slate-500 flex items-center gap-1 mb-0.5">
+                    <MapPin size={12} className="shrink-0 text-slate-400" />
+                    <span className="truncate font-medium">{locationLine}</span>
+                  </p>
+                  {locationParts.length > 0 && (p.street || p.address) && (
+                    <p className="text-[11px] text-slate-400 truncate mb-2 pr-4">
+                      {[getStreet(p), p.address].filter(Boolean).join('، ')}
+                    </p>
+                  )}
+                  <div className="h-2" />
+
+                  {specs.length > 0 && (
+                    <div className="flex flex-wrap gap-1 mb-3">
+                      {specs.map((s) => (
+                        <span key={s} className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 text-[11px] font-medium">
+                          {s}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+
+                  <div className="rounded-lg bg-slate-50 border border-slate-100 px-3 py-2.5 mb-2.5">
+                    {p.sale_price != null ? (
+                      <>
+                        <p className="text-[11px] text-slate-400 mb-0.5">قیمت فروش</p>
+                        <p className="text-sm font-extrabold text-slate-800">
+                          {formatPrice(p.sale_price)} <span className="text-[10px] font-medium text-slate-400">تومان</span>
+                        </p>
+                        {p.price_per_meter != null && (
+                          <p className="text-[11px] text-slate-400 mt-0.5">هر متر: {formatPrice(p.price_per_meter)} تومان</p>
+                        )}
+                      </>
+                    ) : hasRentPrice ? (
+                      <div className="flex items-start gap-5">
+                        {p.deposit_price != null && (
+                          <div>
+                            <p className="text-[11px] text-slate-400 mb-0.5">رهن</p>
+                            <p className="text-sm font-extrabold text-slate-800">
+                              {formatPrice(p.deposit_price)} <span className="text-[10px] font-medium text-slate-400">تومان</span>
+                            </p>
+                          </div>
+                        )}
+                        {p.monthly_rent != null && (
+                          <div>
+                            <p className="text-[11px] text-slate-400 mb-0.5">اجاره ماهانه</p>
+                            <p className="text-sm font-extrabold text-slate-800">
+                              {p.monthly_rent === 0 ? 'بدون اجاره' : `${formatPrice(p.monthly_rent)} تومان`}
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <p className="text-sm font-bold text-slate-500">{p.negotiable ? 'قیمت توافقی' : 'قیمت ثبت نشده'}</p>
+                    )}
+                  </div>
+
+                  <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-100 text-xs">
+                    <span className="flex items-center gap-1 text-slate-500 font-medium min-w-0">
+                      <User size={12} className="shrink-0 text-slate-400" />
+                      <span className="truncate">{p.owners?.name || 'بدون مالک'}</span>
+                    </span>
+                    <span className="text-slate-400 shrink-0">{timeAgo(p.created_at)}</span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          <Pagination page={page} totalPages={totalPages} onPageChange={setPage} />
+        </>
+      )}
+    </div>
+  );
+}
+
+// Property Detail
+function PropertyDetail({ propertyId, onBack }: { propertyId: string; onBack: () => void }) {
+  const [property, setProperty] = useState<(PropertyListItem) | null>(null);
+  const [owner, setOwner] = useState<Owner | null>(null);
+  const [calls, setCalls] = useState<any[]>([]);
+  const [followups, setFollowups] = useState<any[]>([]);
+  const [matches, setMatches] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState<'info' | 'matches' | 'calls' | 'followups'>('info');
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+
+  const loadDetail = useCallback(async () => {
+    setLoading(true);
+    const [propRes, callsRes, fuRes, matchRes] = await Promise.all([
+      supabase.from('properties').select('*, owners(name, phone), counties(name), neighborhoods(name)').eq('id', propertyId).maybeSingle(),
+      supabase.from('calls').select('*').eq('property_id', propertyId).order('call_date', { ascending: false }).limit(10),
+      supabase.from('follow_ups').select('*').eq('property_id', propertyId).order('due_date', { ascending: false }).limit(10),
+      supabase.from('property_matches').select('*, customers(id, first_name, last_name, mobile, temperature)').eq('property_id', propertyId).order('score', { ascending: false }).limit(5),
+    ]);
+    setProperty(propRes.data as PropertyListItem);
+    if (propRes.data?.owner_id) {
+      const { data: ownerData } = await supabase.from('owners').select('*').eq('id', propRes.data.owner_id).maybeSingle();
+      setOwner(ownerData as Owner);
+    }
+    setCalls(callsRes.data ?? []);
+    setFollowups(fuRes.data ?? []);
+    setMatches(matchRes.data ?? []);
+    setLoading(false);
+  }, [propertyId]);
+
+  useEffect(() => {
+    loadDetail();
+  }, [loadDetail]);
+
+  const handleDelete = async () => {
+    await supabase.from('properties').delete().eq('id', propertyId);
+    onBack();
+  };
+
+  if (loading || !property) {
+    return <div className="flex justify-center py-16"><Spinner size={32} /></div>;
+  }
+
+  const status = getStatusInfo(PROPERTY_STATUSES, property.status);
+
+  return (
+    <div className="animate-fade-in space-y-4">
+      <button onClick={onBack} className="flex items-center gap-1 text-sm text-slate-500 hover:text-slate-700">
+        <ArrowLeft size={16} /> بازگشت
+      </button>
+
+      <div className="card p-5">
+        <div className="flex items-start justify-between mb-3">
+          <div>
+            <div className="flex items-center gap-2 mb-1">
+              {property.is_hot && <Flame size={18} className="text-red-500" />}
+              {property.is_featured && <Star size={18} className="text-yellow-500" />}
+              <h2 className="text-lg font-bold text-slate-800">{property.title}</h2>
+            </div>
+            <p className="text-xs text-slate-400">
+              {getTransactionLabel(property.transaction_type)} • {getCategoryLabel(property.category)} • {getPropertyTypeLabel(property.category, property.property_type)}
+            </p>
+          </div>
+          <Badge color={status.color}>{status.label}</Badge>
+        </div>
+
+        {property.neighborhoods?.name && (
+          <p className="text-sm text-slate-500 flex items-center gap-1 mb-1">
+            <MapPin size={14} /> {property.neighborhoods.name}
+          </p>
+        )}
+        {getStreet(property) && (
+          <p className="text-sm text-slate-500 flex items-center gap-1 mb-1 pr-5">خیابان {getStreet(property)}</p>
+        )}
+        {property.address && (
+          <p className="text-sm text-slate-500 flex items-center gap-1 mb-3">
+            <MapPin size={14} className={property.neighborhoods?.name ? 'invisible' : ''} /> {property.address}
+          </p>
+        )}
+
+        <div className="flex gap-2 flex-wrap">
+          {owner && (
+            <a href={`tel:${normalizePhone(owner.phone)}`} className="btn-primary">
+              <Phone size={16} /> تماس با مالک
+            </a>
+          )}
+          <button onClick={() => setShowDeleteConfirm(true)} className="btn-danger">
+            <Trash2 size={16} />
+          </button>
+        </div>
+      </div>
+
+      {/* Tabs */}
+      <div className="flex gap-1 border-b border-slate-200 overflow-x-auto no-scrollbar">
+        {[
+          { key: 'info', label: 'اطلاعات' },
+          { key: 'matches', label: 'تطبیق‌ها' },
+          { key: 'calls', label: 'تماس‌ها' },
+          { key: 'followups', label: 'پیگیری‌ها' },
+        ].map((tab) => (
+          <button
+            key={tab.key}
+            onClick={() => setActiveTab(tab.key as any)}
+            className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
+              activeTab === tab.key ? 'border-slate-900 text-slate-900' : 'border-transparent text-slate-400 hover:text-slate-600'
+            }`}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      {activeTab === 'info' && (
+        <div className="card p-5 space-y-4">
+          {property.description && <p className="text-sm text-slate-600">{property.description}</p>}
+          <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
+            {property.land_area != null && <InfoField label="متراژ زمین" value={`${property.land_area} متر`} />}
+            {property.building_area != null && <InfoField label="متراژ بنا" value={`${property.building_area} متر`} />}
+            {property.bedrooms != null && <InfoField label="تعداد خواب" value={String(property.bedrooms)} />}
+            {property.rooms != null && <InfoField label="تعداد اتاق" value={String(property.rooms)} />}
+            {property.floor != null && <InfoField label="طبقه" value={String(property.floor)} />}
+            {property.total_floors != null && <InfoField label="طبقات" value={String(property.total_floors)} />}
+            {property.building_age != null && <InfoField label="سن بنا" value={`${property.building_age} سال`} />}
+            {property.parking && <InfoField label="پارکینگ" value="دارد" />}
+            {property.elevator && <InfoField label="آسانسور" value="دارد" />}
+            {property.storage && <InfoField label="انباری" value="دارد" />}
+            {property.balcony && <InfoField label="بالکن" value="دارد" />}
+            {property.yard && <InfoField label="حیاط" value="دارد" />}
+            {property.garden && <InfoField label="باغ" value="دارد" />}
+            {property.pool && <InfoField label="استخر" value="دارد" />}
+            {property.security && <InfoField label="امنیت" value="دارد" />}
+            {property.heating && <InfoField label="گرمایش" value={property.heating} />}
+            {property.cooling && <InfoField label="سرمایش" value={property.cooling} />}
+          </div>
+          <div className="border-t border-slate-100 pt-4">
+            <h4 className="text-sm font-bold text-slate-700 mb-3">اطلاعات مالی</h4>
+            <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
+              {property.sale_price != null && <InfoField label="قیمت فروش" value={`${formatPrice(property.sale_price)} ت`} />}
+              {property.deposit_price != null && <InfoField label="رهن" value={`${formatPrice(property.deposit_price)} ت`} />}
+              {property.monthly_rent != null && <InfoField label="اجاره" value={`${formatPrice(property.monthly_rent)} ت`} />}
+              {property.price_per_meter != null && <InfoField label="قیمت هر متر" value={`${formatPrice(property.price_per_meter)} ت`} />}
+              {property.commission != null && <InfoField label="پورسانت" value={`${formatPrice(property.commission)} ت`} />}
+              <InfoField label="قابل مذاکره" value={property.negotiable ? 'بله' : 'خیر'} />
+            </div>
+          </div>
+          {owner && (
+            <div className="border-t border-slate-100 pt-4">
+              <h4 className="text-sm font-bold text-slate-700 mb-3">مالک</h4>
+              <div className="grid grid-cols-2 gap-4">
+                <InfoField label="نام" value={owner.name} />
+                <InfoField label="تلفن" value={owner.phone} />
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {activeTab === 'matches' && (
+        <div className="space-y-3">
+          {matches.length > 0 ? (
+            matches.map((m) => (
+              <div key={m.id} className="card p-4 flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-slate-800">{m.customers?.first_name} {m.customers?.last_name}</p>
+                  <p className="text-xs text-slate-400" dir="ltr">{m.customers?.mobile}</p>
+                </div>
+                <div className="w-12 h-12 rounded-full flex items-center justify-center text-sm font-bold text-white" style={{ backgroundColor: m.score >= 80 ? '#16a34a' : m.score >= 60 ? '#f97316' : '#64748b' }}>
+                  {m.score}%
+                </div>
+              </div>
+            ))
+          ) : (
+            <EmptyState icon={<Target size={36} />} title="تطبیقی یافت نشده" />
+          )}
+        </div>
+      )}
+
+      {activeTab === 'calls' && (
+        <div className="card overflow-hidden">
+          {calls.length > 0 ? (
+            <div className="divide-y divide-slate-100">
+              {calls.map((call) => (
+                <div key={call.id} className="px-5 py-3">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-sm font-medium text-slate-700">{call.result ?? 'تماس'}</span>
+                    <span className="text-xs text-slate-400">{formatDate(call.call_date)}</span>
+                  </div>
+                  {call.notes && <p className="text-xs text-slate-500">{call.notes}</p>}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <EmptyState icon={<Phone size={36} />} title="تماسی ثبت نشده" />
+          )}
+        </div>
+      )}
+
+      {activeTab === 'followups' && (
+        <div className="card overflow-hidden">
+          {followups.length > 0 ? (
+            <div className="divide-y divide-slate-100">
+              {followups.map((fu) => (
+                <div key={fu.id} className="px-5 py-3 flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-slate-700">{fu.reason ?? 'پیگیری'}</p>
+                    <p className="text-xs text-slate-400">{formatDate(fu.due_date)} {fu.due_time}</p>
+                  </div>
+                  <Badge color={fu.status === 'completed' ? 'green' : fu.status === 'pending' ? 'yellow' : 'red'}>
+                    {fu.status === 'completed' ? 'انجام شده' : fu.status === 'pending' ? 'در انتظار' : fu.status}
+                  </Badge>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <EmptyState title="پیگیری‌ای ثبت نشده" />
+          )}
+        </div>
+      )}
+
+      <ConfirmDialog
+        open={showDeleteConfirm}
+        onClose={() => setShowDeleteConfirm(false)}
+        onConfirm={handleDelete}
+        title="حذف فایل"
+        message="آیا از حذف این فایل مطمئن هستید؟"
+        confirmLabel="حذف"
+        danger
+      />
+    </div>
+  );
+}
+
+function InfoField({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <p className="text-xs text-slate-400 font-medium">{label}</p>
+      <p className="text-sm text-slate-700 mt-0.5">{value}</p>
+    </div>
+  );
+}
+
+// Step Summary - shows what the user has selected in previous steps
+function StepSummary({ items }: { items: { label: string; value: string }[] }) {
+  if (items.length === 0) return null;
+  return (
+    <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 mb-2">
+      <p className="text-xs font-medium text-slate-400 mb-2">اطلاعات وارد شده:</p>
+      <div className="flex flex-wrap gap-2">
+        {items.map((item, i) => (
+          <div key={i} className="bg-white rounded-md px-2.5 py-1 text-xs border border-slate-200">
+            <span className="text-slate-400">{item.label}: </span>
+            <span className="text-slate-700 font-medium">{item.value}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// Property Creation Form (Multi-step dynamic form)
+function PropertyForm({ onBack, onSaved }: { onBack: () => void; onSaved: () => void }) {
+  const { user } = useAuth();
+  const { counties } = useActiveCounties();
+  const [step, setStep] = useState(0);
+  const [saving, setSaving] = useState(false);
+  const [form, setForm] = useState({
+    title: '',
+    description: '',
+    transaction_type: '',
+    transaction_role: '',
+    category: '',
+    property_type: '',
+    county_id: '',
+    neighborhood_id: '',
+    street: '',
+    address: '',
+    land_area: '',
+    building_area: '',
+    bedrooms: '',
+    rooms: '',
+    floor: '',
+    total_floors: '',
+    building_age: '',
+    parking: false,
+    storage: false,
+    elevator: false,
+    balcony: false,
+    yard: false,
+    garden: false,
+    pool: false,
+    security: false,
+    sale_price: '',
+    deposit_price: '',
+    monthly_rent: '',
+    negotiable: false,
+    commission: '',
+    owner_name: '',
+    owner_phone: '',
+    owner_notes: '',
+  });
+  const [errors, setErrors] = useState<Record<string, string>>({});
+
+  const selectedCounty = counties.find((c) => c.id === form.county_id);
+  const isRobatKarim = selectedCounty?.name === ROBAT_KARIM_COUNTY_NAME;
+  const { neighborhoods } = useCountyNeighborhoods(
+    isRobatKarim ? form.county_id : null,
+    isRobatKarim ? ROBAT_KARIM_NEIGHBORHOODS : [],
+  );
+  const showStreet = isRobatKarim && form.neighborhood_id === neighborhoods.find((n) => n.name === ROBAT_KARIM_COUNTY_NAME)?.id;
+
+  const steps = [
+    { title: 'نوع معامله', fields: ['transaction_type'] },
+    { title: 'دسته‌بندی و نوع ملک', fields: ['category', 'property_type'] },
+    { title: 'موقعیت', fields: ['province_id', 'city_id'] },
+    { title: 'اطلاعات ملک', fields: ['title'] },
+    { title: 'اطلاعات مالی', fields: [] },
+    { title: 'مالک', fields: ['owner_name'] },
+  ];
+
+  const validateStep = () => {
+    const errs: Record<string, string> = {};
+    if (step === 0 && !form.transaction_type) errs.transaction_type = 'نوع معامله الزامی است';
+    if (step === 1) {
+      if (!form.category) errs.category = 'دسته‌بندی الزامی است';
+      if (!form.property_type) errs.property_type = 'نوع ملک الزامی است';
+    }
+    if (step === 2 && !form.county_id) errs.county_id = 'شهرستان الزامی است';
+    if (step === 2 && !form.address.trim()) errs.address = 'آدرس کامل الزامی است';
+    if (step === 3 && !form.title.trim()) errs.title = 'عنوان الزامی است';
+    if (step === 5 && !form.owner_name.trim()) errs.owner_name = 'نام مالک الزامی است';
+    if (step === 5 && !form.owner_phone.trim()) errs.owner_phone = 'تلفن مالک الزامی است';
+    setErrors(errs);
+    return Object.keys(errs).length === 0;
+  };
+
+  const handleNext = () => {
+    if (validateStep()) setStep(Math.min(step + 1, steps.length - 1));
+  };
+
+  const handleSave = async () => {
+    if (!validateStep()) return;
+    setSaving(true);
+
+    // First create or find owner
+    let ownerId: string | null = null;
+    if (form.owner_name && form.owner_phone) {
+      const { data: existingOwner } = await supabase.from('owners').select('id').eq('phone', normalizePhone(form.owner_phone)).maybeSingle();
+      if (existingOwner) {
+        ownerId = existingOwner.id;
+      } else {
+        const { data: newOwner, error: ownerError } = await supabase.from('owners').insert({
+          name: form.owner_name,
+          phone: normalizePhone(form.owner_phone),
+          notes: form.owner_notes || null,
+          assigned_consultant_id: user?.id,
+          status: 'active',
+        }).select().single();
+        if (!ownerError && newOwner) ownerId = newOwner.id;
+      }
+    }
+
+    const payload = {
+      title: form.title,
+      description: form.description || null,
+      transaction_type: form.transaction_type,
+      transaction_role: form.transaction_role || null,
+      category: form.category,
+      property_type: form.property_type,
+      status: 'active',
+      is_active: true,
+      owner_id: ownerId,
+      assigned_consultant_id: user?.id,
+      province_id: TEHRAN_PROVINCE_ID,
+      county_id: form.county_id || null,
+      district_id: null,
+      city_id: null,
+      neighborhood_id: form.neighborhood_id || null,
+      street: showStreet ? form.street || null : null,
+      address: form.address || null,
+      land_area: form.land_area ? Number(toEnglishDigits(form.land_area)) : null,
+      building_area: form.building_area ? Number(toEnglishDigits(form.building_area)) : null,
+      bedrooms: form.bedrooms ? Number(toEnglishDigits(form.bedrooms)) : null,
+      rooms: form.rooms ? Number(toEnglishDigits(form.rooms)) : null,
+      floor: form.floor ? Number(toEnglishDigits(form.floor)) : null,
+      total_floors: form.total_floors ? Number(toEnglishDigits(form.total_floors)) : null,
+      building_age: form.building_age ? Number(toEnglishDigits(form.building_age)) : null,
+      parking: form.parking,
+      storage: form.storage,
+      elevator: form.elevator,
+      balcony: form.balcony,
+      yard: form.yard,
+      garden: form.garden,
+      pool: form.pool,
+      security: form.security,
+      sale_price: form.sale_price ? Number(toEnglishDigits(form.sale_price)) : null,
+      deposit_price: form.deposit_price ? Number(toEnglishDigits(form.deposit_price)) : null,
+      monthly_rent: form.monthly_rent ? Number(toEnglishDigits(form.monthly_rent)) : null,
+      negotiable: form.negotiable,
+      commission: form.commission ? Number(toEnglishDigits(form.commission)) : null,
+      owner_notes: form.owner_notes || null,
+    };
+    let { data, error } = await supabase.from('properties').insert(payload).select().single();
+    // اگر ستون street هنوز در دیتابیس ساخته نشده باشد، خیابان را در payment_conditions ذخیره کن
+    if (error?.code === 'PGRST204' && payload.street) {
+      const { street, ...withoutStreet } = payload;
+      ({ data, error } = await supabase.from('properties').insert({ ...withoutStreet, payment_conditions: street }).select().single());
+    }
+
+    if (!error && data) {
+      // Calculate price per meter
+      if (data.sale_price && data.land_area) {
+        await supabase.from('properties').update({ price_per_meter: Math.round(data.sale_price / data.land_area) }).eq('id', data.id);
+      }
+      await supabase.from('activities').insert({
+        user_id: user?.id,
+        entity_type: 'property',
+        entity_id: data.id,
+        action: 'property_created',
+        description: `فایل جدید ${form.title} ثبت شد`,
+      });
+    }
+    setSaving(false);
+    onSaved();
+  };
+
+  return (
+    <div className="animate-fade-in max-w-2xl mx-auto">
+      <button onClick={onBack} className="flex items-center gap-1 text-sm text-slate-500 hover:text-slate-700 mb-4">
+        <ArrowLeft size={16} /> بازگشت
+      </button>
+
+      <PageHeader title="فایل جدید" subtitle={`مرحله ${step + 1} از ${steps.length}: ${steps[step].title}`} />
+
+      <div className="flex gap-1 mb-6">
+        {steps.map((_, i) => (
+          <div key={i} className={`h-1.5 flex-1 rounded-full transition-colors ${i <= step ? 'bg-slate-900' : 'bg-slate-200'}`} />
+        ))}
+      </div>
+
+      <div className="card p-5 space-y-4">
+        {step === 0 && (
+          <>
+            <div>
+              <label className="label">نوع معامله *</label>
+              <div className="grid grid-cols-2 gap-2">
+                {TRANSACTION_TYPES.map((t) => (
+                  <button key={t.value} onClick={() => setForm({ ...form, transaction_type: t.value, transaction_role: '' })}
+                    className={`p-3 rounded-lg border-2 text-sm font-medium transition-all ${form.transaction_type === t.value ? 'border-slate-900 bg-slate-50' : 'border-slate-200 hover:border-slate-300'}`}>
+                    {t.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            {form.transaction_type && (
+              <div>
+                <label className="label">نقش در معامله</label>
+                <div className="grid grid-cols-2 gap-2">
+                  {(TRANSACTION_ROLES[form.transaction_type] ?? []).map((r) => (
+                    <button key={r.value} onClick={() => setForm({ ...form, transaction_role: r.value })}
+                      className={`p-3 rounded-lg border-2 text-sm font-medium transition-all ${form.transaction_role === r.value ? 'border-slate-900 bg-slate-50' : 'border-slate-200 hover:border-slate-300'}`}>
+                      {r.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </>
+        )}
+
+        {step === 1 && (
+          <>
+            <StepSummary items={[
+              ...(form.transaction_type ? [{ label: 'نوع معامله', value: getTransactionLabel(form.transaction_type) }] : []),
+              ...(form.transaction_role ? [{ label: 'نقش', value: TRANSACTION_ROLES[form.transaction_type]?.find((r) => r.value === form.transaction_role)?.label ?? form.transaction_role }] : []),
+            ]} />
+            <div>
+              <label className="label">دسته‌بندی *</label>
+              <div className="grid grid-cols-2 gap-2">
+                {CATEGORIES.map((c) => (
+                  <button key={c.value} onClick={() => setForm({ ...form, category: c.value, property_type: '' })}
+                    className={`p-3 rounded-lg border-2 text-sm font-medium transition-all ${form.category === c.value ? 'border-slate-900 bg-slate-50' : 'border-slate-200 hover:border-slate-300'}`}>
+                    {c.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            {form.category && (
+              <div>
+                <label className="label">نوع ملک *</label>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                  {(PROPERTY_TYPES[form.category] ?? []).map((p) => (
+                    <button key={p.value} onClick={() => setForm({ ...form, property_type: p.value })}
+                      className={`p-2.5 rounded-lg border-2 text-sm font-medium transition-all ${form.property_type === p.value ? 'border-slate-900 bg-slate-50' : 'border-slate-200 hover:border-slate-300'}`}>
+                      {p.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </>
+        )}
+
+        {step === 2 && (
+          <>
+            <StepSummary items={[
+              ...(form.transaction_type ? [{ label: 'نوع معامله', value: getTransactionLabel(form.transaction_type) }] : []),
+              ...(form.transaction_role ? [{ label: 'نقش', value: TRANSACTION_ROLES[form.transaction_type]?.find((r) => r.value === form.transaction_role)?.label ?? form.transaction_role }] : []),
+              ...(form.category ? [{ label: 'دسته‌بندی', value: getCategoryLabel(form.category) }] : []),
+              ...(form.property_type ? [{ label: 'نوع ملک', value: getPropertyTypeLabel(form.category, form.property_type) }] : []),
+              ...(selectedCounty ? [{ label: 'شهرستان', value: selectedCounty.name }] : []),
+            ]} />
+            <div>
+              <label className="label">شهرستان *</label>
+              <select
+                className={`input ${errors.county_id ? 'input-error' : ''}`}
+                value={form.county_id}
+                onChange={(e) => { setForm({ ...form, county_id: e.target.value, neighborhood_id: '', street: '' }); }}
+              >
+                <option value="">انتخاب کنید...</option>
+                {counties.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </select>
+              {errors.county_id && <p className="text-xs text-red-500 mt-1">{errors.county_id}</p>}
+            </div>
+            {isRobatKarim && (
+              <div>
+                <label className="label">محله</label>
+                <select
+                  className="input"
+                  value={form.neighborhood_id}
+                  onChange={(e) => { setForm({ ...form, neighborhood_id: e.target.value, street: '' }); }}
+                >
+                  <option value="">انتخاب کنید...</option>
+                  {neighborhoods.map((n) => <option key={n.id} value={n.id}>{n.name}</option>)}
+                </select>
+              </div>
+            )}
+            {showStreet && (
+              <div>
+                <label className="label">خیابان</label>
+                <select className="input" value={form.street} onChange={(e) => setForm({ ...form, street: e.target.value })}>
+                  <option value="">انتخاب کنید...</option>
+                  {ROBAT_KARIM_STREETS.map((s) => <option key={s} value={s}>{s}</option>)}
+                </select>
+              </div>
+            )}
+            <div>
+              <label className="label">آدرس کامل *</label>
+              <textarea
+                className={`input min-h-[70px] ${errors.address ? 'input-error' : ''}`}
+                value={form.address}
+                onChange={(e) => setForm({ ...form, address: e.target.value })}
+                placeholder="پلاک، طبقه، واحد و توضیحات مسیر..."
+              />
+              {errors.address && <p className="text-xs text-red-500 mt-1">{errors.address}</p>}
+            </div>
+          </>
+        )}
+
+        {step === 3 && (
+          <>
+            <StepSummary items={[
+              ...(form.transaction_type ? [{ label: 'نوع معامله', value: getTransactionLabel(form.transaction_type) }] : []),
+              ...(form.transaction_role ? [{ label: 'نقش', value: TRANSACTION_ROLES[form.transaction_type]?.find((r) => r.value === form.transaction_role)?.label ?? form.transaction_role }] : []),
+              ...(form.category ? [{ label: 'دسته‌بندی', value: getCategoryLabel(form.category) }] : []),
+              ...(form.property_type ? [{ label: 'نوع ملک', value: getPropertyTypeLabel(form.category, form.property_type) }] : []),
+              ...(form.address ? [{ label: 'آدرس', value: form.address }] : []),
+            ]} />
+            <div>
+              <label className="label">عنوان فایل *</label>
+              <input className={`input ${errors.title ? 'input-error' : ''}`} value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="مثلا: آپارتمان 80 متری سه خواب سعادت‌آباد" />
+            </div>
+            <div>
+              <label className="label">توضیحات</label>
+              <textarea className="input min-h-[80px]" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="توضیحات فایل..." />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="label">متراژ زمین</label>
+                <input className="input" value={form.land_area} onChange={(e) => setForm({ ...form, land_area: e.target.value })} placeholder="120" dir="ltr" />
+              </div>
+              <div>
+                <label className="label">متراژ بنا</label>
+                <input className="input" value={form.building_area} onChange={(e) => setForm({ ...form, building_area: e.target.value })} placeholder="90" dir="ltr" />
+              </div>
+              <div>
+                <label className="label">تعداد خواب</label>
+                <input className="input" value={form.bedrooms} onChange={(e) => setForm({ ...form, bedrooms: e.target.value })} placeholder="2" dir="ltr" />
+              </div>
+              <div>
+                <label className="label">تعداد اتاق</label>
+                <input className="input" value={form.rooms} onChange={(e) => setForm({ ...form, rooms: e.target.value })} placeholder="3" dir="ltr" />
+              </div>
+              <div>
+                <label className="label">طبقه</label>
+                <input className="input" value={form.floor} onChange={(e) => setForm({ ...form, floor: e.target.value })} placeholder="2" dir="ltr" />
+              </div>
+              <div>
+                <label className="label">طبقات</label>
+                <input className="input" value={form.total_floors} onChange={(e) => setForm({ ...form, total_floors: e.target.value })} placeholder="6" dir="ltr" />
+              </div>
+              <div>
+                <label className="label">سن بنا</label>
+                <input className="input" value={form.building_age} onChange={(e) => setForm({ ...form, building_age: e.target.value })} placeholder="5" dir="ltr" />
+              </div>
+            </div>
+            <div>
+              <label className="label">امکانات</label>
+              <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+                {[
+                  { key: 'parking', label: 'پارکینگ' },
+                  { key: 'storage', label: 'انباری' },
+                  { key: 'elevator', label: 'آسانسور' },
+                  { key: 'balcony', label: 'بالکن' },
+                  { key: 'yard', label: 'حیاط' },
+                  { key: 'garden', label: 'باغ' },
+                  { key: 'pool', label: 'استخر' },
+                  { key: 'security', label: 'امنیت' },
+                ].map((f) => (
+                  <button key={f.key} onClick={() => setForm({ ...form, [f.key]: !form[f.key as keyof typeof form] } as any)}
+                    className={`p-2 rounded-lg border-2 text-xs font-medium transition-all ${(form as any)[f.key] ? 'border-slate-900 bg-slate-50' : 'border-slate-200 hover:border-slate-300'}`}>
+                    {f.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </>
+        )}
+
+        {step === 4 && (
+          <>
+            <StepSummary items={[
+              ...(form.transaction_type ? [{ label: 'نوع معامله', value: getTransactionLabel(form.transaction_type) }] : []),
+              ...(form.transaction_role ? [{ label: 'نقش', value: TRANSACTION_ROLES[form.transaction_type]?.find((r) => r.value === form.transaction_role)?.label ?? form.transaction_role }] : []),
+              ...(form.category ? [{ label: 'دسته‌بندی', value: getCategoryLabel(form.category) }] : []),
+              ...(form.property_type ? [{ label: 'نوع ملک', value: getPropertyTypeLabel(form.category, form.property_type) }] : []),
+              ...(form.title ? [{ label: 'عنوان', value: form.title }] : []),
+              ...(form.land_area ? [{ label: 'متراژ زمین', value: form.land_area }] : []),
+              ...(form.building_area ? [{ label: 'متراژ بنا', value: form.building_area }] : []),
+              ...(form.bedrooms ? [{ label: 'خواب', value: form.bedrooms }] : []),
+            ]} />
+            {form.transaction_type === 'buy' || form.transaction_type === 'sell' ? (
+              <div>
+                <label className="label">قیمت فروش (تومان)</label>
+                <input className="input" value={form.sale_price} onChange={(e) => setForm({ ...form, sale_price: e.target.value })} placeholder="2000000000" dir="ltr" />
+              </div>
+            ) : form.transaction_type === 'rent' ? (
+              <>
+                <div>
+                  <label className="label">رهن (تومان)</label>
+                  <input className="input" value={form.deposit_price} onChange={(e) => setForm({ ...form, deposit_price: e.target.value })} placeholder="100000000" dir="ltr" />
+                </div>
+                <div>
+                  <label className="label">اجاره ماهانه (تومان)</label>
+                  <input className="input" value={form.monthly_rent} onChange={(e) => setForm({ ...form, monthly_rent: e.target.value })} placeholder="3000000" dir="ltr" />
+                </div>
+              </>
+            ) : (
+              <div>
+                <label className="label">قیمت مشارکت (تومان)</label>
+                <input className="input" value={form.sale_price} onChange={(e) => setForm({ ...form, sale_price: e.target.value })} placeholder="مبلغ مشارکت" dir="ltr" />
+              </div>
+            )}
+            <div>
+              <label className="label">پورسانت (تومان)</label>
+              <input className="input" value={form.commission} onChange={(e) => setForm({ ...form, commission: e.target.value })} placeholder="50000000" dir="ltr" />
+            </div>
+            <div>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input type="checkbox" checked={form.negotiable} onChange={(e) => setForm({ ...form, negotiable: e.target.checked })} className="w-4 h-4 rounded" />
+                <span className="text-sm text-slate-700">قابل مذاکره</span>
+              </label>
+            </div>
+          </>
+        )}
+
+        {step === 5 && (
+          <>
+            <StepSummary items={[
+              ...(form.transaction_type ? [{ label: 'نوع معامله', value: getTransactionLabel(form.transaction_type) }] : []),
+              ...(form.transaction_role ? [{ label: 'نقش', value: TRANSACTION_ROLES[form.transaction_type]?.find((r) => r.value === form.transaction_role)?.label ?? form.transaction_role }] : []),
+              ...(form.category ? [{ label: 'دسته‌بندی', value: getCategoryLabel(form.category) }] : []),
+              ...(form.property_type ? [{ label: 'نوع ملک', value: getPropertyTypeLabel(form.category, form.property_type) }] : []),
+              ...(form.title ? [{ label: 'عنوان', value: form.title }] : []),
+              ...(form.sale_price ? [{ label: 'قیمت', value: form.sale_price }] : []),
+              ...(form.deposit_price ? [{ label: 'رهن', value: form.deposit_price }] : []),
+              ...(form.monthly_rent ? [{ label: 'اجاره', value: form.monthly_rent }] : []),
+            ]} />
+            <div>
+              <label className="label">نام مالک *</label>
+              <input className={`input ${errors.owner_name ? 'input-error' : ''}`} value={form.owner_name} onChange={(e) => setForm({ ...form, owner_name: e.target.value })} placeholder="نام و نام خانوادگی مالک" />
+            </div>
+            <div>
+              <label className="label">تلفن مالک *</label>
+              <input className={`input ${errors.owner_phone ? 'input-error' : ''}`} value={form.owner_phone} onChange={(e) => setForm({ ...form, owner_phone: e.target.value })} placeholder="09123456789" dir="ltr" />
+            </div>
+            <div>
+              <label className="label">یادداشت مالک</label>
+              <textarea className="input min-h-[60px]" value={form.owner_notes} onChange={(e) => setForm({ ...form, owner_notes: e.target.value })} placeholder="نکات مربوط به مالک..." />
+            </div>
+          </>
+        )}
+
+        <div className="flex gap-2 pt-2">
+          {step > 0 && <button onClick={() => setStep(step - 1)} className="btn-secondary flex-1">مرحله قبل</button>}
+          {step < steps.length - 1 ? (
+            <button onClick={handleNext} className="btn-primary flex-1">مرحله بعد</button>
+          ) : (
+            <button onClick={handleSave} disabled={saving} className="btn-primary flex-1">{saving ? 'در حال ذخیره...' : 'ثبت فایل'}</button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
