@@ -5,6 +5,20 @@ import type { Colleague, Owner } from '@/lib/types';
 
 const AGENCY_PREFIX = 'آژانس:';
 const SPECIALIZATION_PREFIX = 'حوزه:';
+const COLLEAGUE_REF_PREFIX = 'همکار-معرف:';
+
+export function getColleagueRef(tags: string[] | null | undefined) {
+  return tags?.find((tag) => tag.startsWith(COLLEAGUE_REF_PREFIX))?.slice(COLLEAGUE_REF_PREFIX.length) ?? '';
+}
+
+export function withColleagueRef(tags: string[], colleagueId: string) {
+  const cleanTags = tags.filter((tag) => !tag.startsWith(COLLEAGUE_REF_PREFIX));
+  return colleagueId ? [...cleanTags, `${COLLEAGUE_REF_PREFIX}${colleagueId}`] : cleanTags;
+}
+
+export function visibleOwnerTags(tags: string[] | null | undefined) {
+  return (tags ?? []).filter((tag) => !tag.startsWith(COLLEAGUE_REF_PREFIX));
+}
 
 export function ownerToColleague(owner: Owner): Colleague {
   return {

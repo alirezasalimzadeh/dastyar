@@ -29,6 +29,7 @@ import { Badge, EmptyState, Spinner, Modal, PageHeader, Pagination, ConfirmDialo
 import { useActiveCounties, useCountyNeighborhoods } from '@/lib/geo';
 import type { Customer } from '@/lib/types';
 import { getFieldSections, getFieldLabel, type FieldDef } from '@/lib/propertyFields';
+import { useColleagues } from '@/lib/colleagues';
 
 const PAGE_SIZE = 20;
 
@@ -48,6 +49,7 @@ const CUSTOMER_SORTS = [
 
 export function CustomersPage({ initialId, initialFilter }: { initialId?: string; initialFilter?: string }) {
   const { user } = useAuth();
+  const colleagues = useColleagues();
   const [view, setView] = useState<'list' | 'detail' | 'create' | 'edit'>('list');
   const [customers, setCustomers] = useState<CustomerRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -264,6 +266,8 @@ export function CustomersPage({ initialId, initialFilter }: { initialId?: string
               {pageItems.map((c) => {
                 const temp = getTemperatureInfo(c.temperature);
                 const status = getStatusInfo(CUSTOMER_STATUSES, c.status);
+                const colleagueId = (c.property_preferences as Record<string, unknown> | null)?.colleague_id as string | undefined;
+                const referringColleague = colleagues.find((colleague) => colleague.id === colleagueId);
                 const urgencyInfo = URGENCY_LEVELS.find(u => u.value === c.urgency);
                 const typeLabels = c.preferred_property_types?.length
                   ? c.preferred_property_types.slice(0, 2).map((pt) => PROPERTY_TYPES[c.preferred_category!]?.find((p) => p.value === pt)?.label ?? pt).join('، ')
@@ -293,6 +297,7 @@ export function CustomersPage({ initialId, initialFilter }: { initialId?: string
                         <div className="flex items-center gap-2">
                           <p className="text-sm font-medium text-slate-800 truncate">{c.name}</p>
                           {c.temperature === 'hot' && <Flame size={14} className="text-red-500 flex-shrink-0" />}
+                          {referringColleague && <span className="text-xs text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded">همکار: {referringColleague.name}</span>}
                           {urgencyInfo && c.urgency === 'critical' && <span className="text-xs text-red-500 font-medium">فوری</span>}
                         </div>
                         <div className="flex items-center gap-0.5 text-xs text-slate-400">
@@ -330,6 +335,7 @@ export function CustomersPage({ initialId, initialFilter }: { initialId?: string
 
 // Customer Detail Page
 function CustomerDetail({ customerId, onBack, onEdit }: { customerId: string; onBack: () => void; onEdit: () => void }) {
+  const colleagues = useColleagues();
   const [customer, setCustomer] = useState<Customer | null>(null);
   const [calls, setCalls] = useState<any[]>([]);
   const [followups, setFollowups] = useState<any[]>([]);
@@ -371,7 +377,9 @@ function CustomerDetail({ customerId, onBack, onEdit }: { customerId: string; on
     return <div className="flex justify-center py-16"><Spinner size={32} /></div>;
   }
 
-  const custAddress = ((customer.property_preferences as Record<string, unknown> | null)?.address as string) || customer.address || '';
+  const customerPreferences = customer.property_preferences as Record<string, unknown> | null;
+  const custAddress = (customerPreferences?.address as string) || customer.address || '';
+  const referringColleague = colleagues.find((colleague) => colleague.id === customerPreferences?.colleague_id);
 
   const temp = getTemperatureInfo(customer.temperature);
   const status = getStatusInfo(CUSTOMER_STATUSES, customer.status);
@@ -410,6 +418,12 @@ function CustomerDetail({ customerId, onBack, onEdit }: { customerId: string; on
             )}
           </div>
         </div>
+
+        {referringColleague && (
+          <div className="mt-4 rounded-lg border border-indigo-100 bg-indigo-50 p-3 text-sm text-indigo-700">
+            این مشتری توسط همکار «{referringColleague.name}» معرفی شده است.
+          </div>
+        )}
 
         {/* Quick Actions */}
         <div className="flex gap-2 mt-4 flex-wrap">
@@ -962,6 +976,7 @@ function StepSummary({ items }: { items: { label: string; value: string }[] }) {
 // Customer create/edit form
 function CustomerForm({ customerId, onBack, onSaved }: { customerId?: string; onBack: () => void; onSaved: () => void }) {
   const { user } = useAuth();
+  const colleagues = useColleagues();
   const isEditing = Boolean(customerId);
   const [step, setStep] = useState(0);
   const [saving, setSaving] = useState(false);
@@ -984,6 +999,7 @@ function CustomerForm({ customerId, onBack, onSaved }: { customerId?: string; on
   });
   const [location, setLocation] = useState({ county_id: '', neighborhood_id: '' });
   const [address, setAddress] = useState('');
+  const [colleagueId, setColleagueId] = useState('');
   const [typePrefs, setTypePrefs] = useState<Record<string, Record<string, string | boolean>>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
 
@@ -1025,6 +1041,7 @@ function CustomerForm({ customerId, onBack, onSaved }: { customerId?: string; on
         neighborhood_id: savedLocation?.neighborhood_id ?? '',
       });
       setAddress((preferences.address as string) ?? data.address ?? '');
+      setColleagueId((preferences.colleague_id as string) ?? '');
       setTypePrefs(savedTypePrefs);
       setEditingStatus((data.status as Customer['status']) ?? 'active');
       setEditingConsultantId(data.assigned_consultant_id ?? null);
@@ -1076,6 +1093,9 @@ function CustomerForm({ customerId, onBack, onSaved }: { customerId?: string; on
     }
     if (address.trim()) {
       propertyPreferences.address = address.trim();
+    }
+    if (colleagueId) {
+      propertyPreferences.colleague_id = colleagueId;
     }
     for (const type of form.preferred_property_types) {
       const prefs = typePrefs[type] ?? {};
@@ -1342,6 +1362,17 @@ function CustomerForm({ customerId, onBack, onSaved }: { customerId?: string; on
             <div>
               <label className="label">یادداشت</label>
               <textarea className="input min-h-[80px]" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} placeholder="توضیحات اضافی..." />
+            </div>
+            <div>
+              <label className="label">همکار معرف <span className="font-normal text-slate-400">(اختیاری)</span></label>
+              <select className="input" value={colleagueId} onChange={(e) => setColleagueId(e.target.value)}>
+                <option value="">این مشتری متعلق به خودم است</option>
+                {colleagues.map((colleague) => (
+                  <option key={colleague.id} value={colleague.id} disabled={colleague.status === 'inactive' && colleague.id !== colleagueId}>
+                    {colleague.name}{colleague.agency_name ? ` — ${colleague.agency_name}` : ''}{colleague.status === 'inactive' ? ' (غیرفعال)' : ''}
+                  </option>
+                ))}
+              </select>
             </div>
             {isEditing && (
               <div>

@@ -5,6 +5,7 @@ import { useAuth } from '@/lib/auth';
 import { normalizePhone, validatePhone, formatDate, timeAgo, toEnglishDigits, toPersianDigits, COLLEAGUE_TAG } from '@/lib/constants';
 import { Badge, EmptyState, Spinner, Modal, PageHeader, Pagination, ConfirmDialog, CopyButton, SortSelect } from '@/components/ui';
 import type { Owner } from '@/lib/types';
+import { getColleagueRef, useColleagues, visibleOwnerTags, withColleagueRef } from '@/lib/colleagues';
 
 const PAGE_SIZE = 20;
 
@@ -24,6 +25,7 @@ const OWNER_SORTS = [
 
 export function OwnersPage({ initialId, onNavigate }: { initialId?: string; onNavigate?: (page: string, params?: Record<string, unknown>) => void }) {
   const { user } = useAuth();
+  const colleagues = useColleagues();
   const [view, setView] = useState<'list' | 'detail' | 'create'>('list');
   const [owners, setOwners] = useState<OwnerRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -82,6 +84,8 @@ export function OwnersPage({ initialId, onNavigate }: { initialId?: string; onNa
     return rows;
   }, [owners, search, sortKey]);
 
+  const colleagueOf = (owner: Owner) => colleagues.find((colleague) => colleague.id === getColleagueRef(owner.tags));
+
   if (view === 'detail' && selectedId) {
     return (
       <OwnerDetail
@@ -125,7 +129,8 @@ export function OwnersPage({ initialId, onNavigate }: { initialId?: string; onNa
                     <div className="flex-1 min-w-0 space-y-0.5">
                       <div className="flex items-center gap-2">
                         <p className="text-sm font-medium text-slate-800 truncate">{o.name}</p>
-                        {o.tags?.length > 0 && o.tags.slice(0, 2).map((t, i) => <span key={i} className="text-xs text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded">{t}</span>)}
+                        {colleagueOf(o) && <span className="text-xs text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded">همکار: {colleagueOf(o)?.name}</span>}
+                        {visibleOwnerTags(o.tags).slice(0, 2).map((t, i) => <span key={i} className="text-xs text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded">{t}</span>)}
                       </div>
                       <div className="flex items-center gap-0.5 text-xs text-slate-400">
                         <span dir="ltr">{o.phone}</span>
@@ -158,6 +163,7 @@ export function OwnersPage({ initialId, onNavigate }: { initialId?: string; onNa
 }
 
 function OwnerDetail({ ownerId, onBack, onPropertyOpen }: { ownerId: string; onBack: () => void; onPropertyOpen: (propertyId: string) => void }) {
+  const colleagues = useColleagues();
   const [owner, setOwner] = useState<Owner | null>(null);
   const [properties, setProperties] = useState<any[]>([]);
   const [calls, setCalls] = useState<any[]>([]);
@@ -184,6 +190,8 @@ function OwnerDetail({ ownerId, onBack, onPropertyOpen }: { ownerId: string; onB
 
   if (loading || !owner) return <div className="flex justify-center py-16"><Spinner size={32} /></div>;
 
+  const referringColleague = colleagues.find((colleague) => colleague.id === getColleagueRef(owner.tags));
+
   return (
     <div className="animate-fade-in space-y-4">
       <button onClick={onBack} className="flex items-center gap-1 text-sm text-slate-500 hover:text-slate-700"><ArrowLeft size={16} /> بازگشت</button>
@@ -197,13 +205,18 @@ function OwnerDetail({ ownerId, onBack, onPropertyOpen }: { ownerId: string; onB
           </div>
           <Badge color={owner.status === 'active' ? 'green' : 'red'}>{owner.status === 'active' ? 'فعال' : 'غیرفعال'}</Badge>
         </div>
+        {referringColleague && (
+          <div className="mt-4 rounded-lg border border-indigo-100 bg-indigo-50 p-3 text-sm text-indigo-700">
+            این مالک توسط همکار «{referringColleague.name}» معرفی شده است.
+          </div>
+        )}
         <div className="flex gap-2 mt-4 flex-wrap">
           <a href={`tel:${normalizePhone(owner.phone)}`} className="btn-primary"><Phone size={16} /> تماس</a>
           <button onClick={() => setShowEdit(true)} className="btn-secondary"><Pencil size={16} /> ویرایش مالک</button>
           <button onClick={() => setShowDeleteConfirm(true)} className="btn-danger" aria-label="حذف مالک"><Trash2 size={16} /></button>
         </div>
         {owner.notes && <p className="text-sm text-slate-600 bg-slate-50 p-3 rounded-lg mt-4">{owner.notes}</p>}
-        {owner.tags?.length > 0 && <div className="flex flex-wrap gap-1.5 mt-3">{owner.tags.map((t, i) => <Badge key={i} color="blue">{t}</Badge>)}</div>}
+        {visibleOwnerTags(owner.tags).length > 0 && <div className="flex flex-wrap gap-1.5 mt-3">{visibleOwnerTags(owner.tags).map((t, i) => <Badge key={i} color="blue">{t}</Badge>)}</div>}
       </div>
 
       <div className="card overflow-hidden">
@@ -262,12 +275,14 @@ function OwnerDetail({ ownerId, onBack, onPropertyOpen }: { ownerId: string; onB
 
 function OwnerForm({ owner, onClose, onSaved }: { owner?: Owner; onClose: () => void; onSaved: () => void }) {
   const { user } = useAuth();
+  const colleagues = useColleagues();
   const isEditing = Boolean(owner);
   const [name, setName] = useState(owner?.name ?? '');
   const [phone, setPhone] = useState(owner?.phone ?? '');
   const [secondaryPhone, setSecondaryPhone] = useState(owner?.secondary_phone ?? '');
   const [notes, setNotes] = useState(owner?.notes ?? '');
-  const [tags, setTags] = useState(owner?.tags?.join('، ') ?? '');
+  const [tags, setTags] = useState(visibleOwnerTags(owner?.tags).join('، '));
+  const [colleagueId, setColleagueId] = useState(getColleagueRef(owner?.tags));
   const [status, setStatus] = useState<Owner['status']>(owner?.status ?? 'active');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -283,7 +298,7 @@ function OwnerForm({ owner, onClose, onSaved }: { owner?: Owner; onClose: () => 
       phone: normalizePhone(phone),
       secondary_phone: secondaryPhone ? normalizePhone(secondaryPhone) : null,
       notes: notes.trim() || null,
-      tags: tags ? tags.split('،').map((tag) => tag.trim()).filter(Boolean) : [],
+      tags: withColleagueRef(tags ? tags.split('،').map((tag) => tag.trim()).filter(Boolean) : [], colleagueId),
       status,
       ...(!isEditing ? { assigned_consultant_id: user?.id } : {}),
     };
@@ -313,6 +328,17 @@ function OwnerForm({ owner, onClose, onSaved }: { owner?: Owner; onClose: () => 
         <div><label className="label">نام *</label><input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="نام و نام خانوادگی" /></div>
         <div><label className="label">تلفن *</label><input className="input" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="09123456789" dir="ltr" /></div>
         <div><label className="label">تلفن ثانویه</label><input className="input" value={secondaryPhone} onChange={(e) => setSecondaryPhone(e.target.value)} placeholder="02112345678" dir="ltr" /></div>
+        <div>
+          <label className="label">همکار معرف <span className="font-normal text-slate-400">(اختیاری)</span></label>
+          <select className="input" value={colleagueId} onChange={(e) => setColleagueId(e.target.value)}>
+            <option value="">این مالک متعلق به خودم است</option>
+            {colleagues.map((colleague) => (
+              <option key={colleague.id} value={colleague.id} disabled={colleague.status === 'inactive' && colleague.id !== colleagueId}>
+                {colleague.name}{colleague.agency_name ? ` — ${colleague.agency_name}` : ''}{colleague.status === 'inactive' ? ' (غیرفعال)' : ''}
+              </option>
+            ))}
+          </select>
+        </div>
         <div><label className="label">تگ‌ها (با ویرگول جدا کنید)</label><input className="input" value={tags} onChange={(e) => setTags(e.target.value)} placeholder="سرمایه‌گذار، فوری" /></div>
         <div><label className="label">یادداشت</label><textarea className="input min-h-[60px]" value={notes} onChange={(e) => setNotes(e.target.value)} /></div>
         {isEditing && (
