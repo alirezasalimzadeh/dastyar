@@ -982,6 +982,7 @@ function PropertyForm({ propertyId, onBack, onSaved }: { propertyId?: string; on
     pool: false,
     security: false,
     sale_price: '',
+    price_per_meter: '',
     deposit_price: '',
     monthly_rent: '',
     negotiable: false,
@@ -1037,8 +1038,8 @@ function PropertyForm({ propertyId, onBack, onSaved }: { propertyId?: string; on
         neighborhood_id: text(data.neighborhood_id),
         street: getStreet(data),
         address: text(data.address),
-        land_area: text(data.land_area),
-        building_area: text(data.building_area),
+        land_area: data.land_area == null ? '' : String(Math.trunc(Number(data.land_area))),
+        building_area: data.building_area == null ? '' : String(Math.trunc(Number(data.building_area))),
         bedrooms: text(data.bedrooms),
         rooms: text(data.rooms),
         floor: text(data.floor),
@@ -1053,6 +1054,7 @@ function PropertyForm({ propertyId, onBack, onSaved }: { propertyId?: string; on
         pool: Boolean(data.pool),
         security: Boolean(data.security),
         sale_price: text(data.sale_price),
+        price_per_meter: text(data.price_per_meter),
         deposit_price: text(data.deposit_price),
         monthly_rent: text(data.monthly_rent),
         negotiable: Boolean(data.negotiable),
@@ -1081,6 +1083,41 @@ function PropertyForm({ propertyId, onBack, onSaved }: { propertyId?: string; on
     isRobatKarim ? ROBAT_KARIM_NEIGHBORHOODS : [],
   );
   const showStreet = isRobatKarim && form.neighborhood_id === neighborhoods.find((n) => n.name === ROBAT_KARIM_COUNTY_NAME)?.id;
+
+  const wholeArea = (value: string) =>
+    toEnglishDigits(value).split(/[.٫]/)[0].replace(/[^0-9]/g, '').replace(/^0+(?=\d)/, '');
+  const numericValue = (value: string) => value ? Number(toEnglishDigits(value)) : 0;
+
+  const changeTotalPrice = (value: string) => setForm((current) => {
+    const area = numericValue(current.land_area);
+    const pricePerMeter = numericValue(current.price_per_meter);
+    if (!value) return { ...current, sale_price: '' };
+    const total = numericValue(value);
+    if (area > 0) return { ...current, sale_price: value, price_per_meter: String(Math.round(total / area)) };
+    if (pricePerMeter > 0) return { ...current, sale_price: value, land_area: String(Math.round(total / pricePerMeter)) };
+    return { ...current, sale_price: value };
+  });
+
+  const changePricePerMeter = (value: string) => setForm((current) => {
+    const area = numericValue(current.land_area);
+    const total = numericValue(current.sale_price);
+    if (!value) return { ...current, price_per_meter: '' };
+    const pricePerMeter = numericValue(value);
+    if (area > 0) return { ...current, price_per_meter: value, sale_price: String(pricePerMeter * area) };
+    if (total > 0) return { ...current, price_per_meter: value, land_area: String(Math.round(total / pricePerMeter)) };
+    return { ...current, price_per_meter: value };
+  });
+
+  const changeArea = (rawValue: string) => setForm((current) => {
+    const value = wholeArea(rawValue);
+    if (!value) return { ...current, land_area: '' };
+    const area = Number(value);
+    const pricePerMeter = numericValue(current.price_per_meter);
+    const total = numericValue(current.sale_price);
+    if (pricePerMeter > 0) return { ...current, land_area: value, sale_price: String(pricePerMeter * area) };
+    if (total > 0) return { ...current, land_area: value, price_per_meter: String(Math.round(total / area)) };
+    return { ...current, land_area: value };
+  });
 
   const steps = [
     { title: 'نوع معامله', fields: ['transaction_type'] },
@@ -1153,7 +1190,10 @@ function PropertyForm({ propertyId, onBack, onSaved }: { propertyId?: string; on
 
     const usesSalePrice = ['buy', 'sell', 'partnership'].includes(form.transaction_type);
     const salePrice = usesSalePrice && form.sale_price ? Number(toEnglishDigits(form.sale_price)) : null;
-    const landArea = form.land_area ? Number(toEnglishDigits(form.land_area)) : null;
+    const landArea = form.land_area ? Math.trunc(Number(toEnglishDigits(form.land_area))) : null;
+    const enteredPricePerMeter = usesSalePrice && form.price_per_meter
+      ? Number(toEnglishDigits(form.price_per_meter))
+      : null;
 
     const payload = {
       title: form.title,
@@ -1175,7 +1215,7 @@ function PropertyForm({ propertyId, onBack, onSaved }: { propertyId?: string; on
       street: showStreet ? form.street || null : null,
       address: form.address || null,
       land_area: landArea,
-      building_area: form.building_area ? Number(toEnglishDigits(form.building_area)) : null,
+      building_area: form.building_area ? Math.trunc(Number(toEnglishDigits(form.building_area))) : null,
       bedrooms: form.bedrooms ? Number(toEnglishDigits(form.bedrooms)) : null,
       rooms: form.rooms ? Number(toEnglishDigits(form.rooms)) : null,
       floor: form.floor ? Number(toEnglishDigits(form.floor)) : null,
@@ -1192,9 +1232,11 @@ function PropertyForm({ propertyId, onBack, onSaved }: { propertyId?: string; on
       sale_price: salePrice,
       deposit_price: form.transaction_type === 'rent' && form.deposit_price ? Number(toEnglishDigits(form.deposit_price)) : null,
       monthly_rent: form.transaction_type === 'rent' && form.monthly_rent ? Number(toEnglishDigits(form.monthly_rent)) : null,
-      price_per_meter: salePrice != null && landArea != null && landArea > 0
-        ? Math.round(salePrice / landArea)
-        : null,
+      price_per_meter: enteredPricePerMeter ?? (
+        salePrice != null && landArea != null && landArea > 0
+          ? Math.round(salePrice / landArea)
+          : null
+      ),
       negotiable: form.negotiable,
       commission: form.commission ? Number(toEnglishDigits(form.commission)) : null,
       owner_notes: form.contact_type === 'owner' ? form.owner_notes || null : null,
@@ -1397,11 +1439,11 @@ function PropertyForm({ propertyId, onBack, onSaved }: { propertyId?: string; on
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="label">متراژ زمین</label>
-                <input className="input" value={form.land_area} onChange={(e) => setForm({ ...form, land_area: e.target.value })} placeholder="120" dir="ltr" />
+                <input className="input" type="text" inputMode="numeric" value={form.land_area} onChange={(e) => changeArea(e.target.value)} placeholder="120" dir="ltr" />
               </div>
               <div>
                 <label className="label">متراژ بنا</label>
-                <input className="input" value={form.building_area} onChange={(e) => setForm({ ...form, building_area: e.target.value })} placeholder="90" dir="ltr" />
+                <input className="input" type="text" inputMode="numeric" value={form.building_area} onChange={(e) => setForm({ ...form, building_area: wholeArea(e.target.value) })} placeholder="90" dir="ltr" />
               </div>
               <div>
                 <label className="label">تعداد خواب</label>
@@ -1459,12 +1501,7 @@ function PropertyForm({ propertyId, onBack, onSaved }: { propertyId?: string; on
               ...(form.building_area ? [{ label: 'متراژ بنا', value: form.building_area }] : []),
               ...(form.bedrooms ? [{ label: 'خواب', value: form.bedrooms }] : []),
             ]} />
-            {form.transaction_type === 'buy' || form.transaction_type === 'sell' ? (
-              <div>
-                <label className="label">قیمت فروش (تومان)</label>
-                <MoneyInput value={form.sale_price} onChange={(value) => setForm({ ...form, sale_price: value })} placeholder="2000000000" />
-              </div>
-            ) : form.transaction_type === 'rent' ? (
+            {form.transaction_type === 'rent' ? (
               <>
                 <div>
                   <label className="label">رهن (تومان)</label>
@@ -1476,14 +1513,34 @@ function PropertyForm({ propertyId, onBack, onSaved }: { propertyId?: string; on
                 </div>
               </>
             ) : (
-              <div>
-                <label className="label">قیمت مشارکت (تومان)</label>
-                <MoneyInput value={form.sale_price} onChange={(value) => setForm({ ...form, sale_price: value })} placeholder="2000000000" />
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 items-start">
+                <div>
+                  <label className="label">قیمت کل (تومان)</label>
+                  <MoneyInput value={form.sale_price} onChange={changeTotalPrice} placeholder="2000000000" />
+                </div>
+                <div>
+                  <label className="label">قیمت متری (تومان)</label>
+                  <MoneyInput value={form.price_per_meter} onChange={changePricePerMeter} placeholder="20000000" wordsTone="indigo" />
+                </div>
+                <div>
+                  <label className="label">متراژ (متر مربع)</label>
+                  <input
+                    className="input text-left font-medium tracking-wide"
+                    type="text"
+                    inputMode="numeric"
+                    dir="ltr"
+                    value={form.land_area}
+                    onChange={(event) => changeArea(event.target.value)}
+                    placeholder="100"
+                  />
+                  <p className="mt-1.5 min-h-5 px-1 text-[11px] leading-5 text-slate-500">فقط عدد صحیح بدون اعشار</p>
+                </div>
+                <p className="md:col-span-3 -mt-1 text-xs text-slate-500">با وارد کردن هر دو مقدار، مقدار سوم به‌صورت خودکار محاسبه می‌شود.</p>
               </div>
             )}
             <div>
               <label className="label">پورسانت (تومان)</label>
-              <MoneyInput value={form.commission} onChange={(value) => setForm({ ...form, commission: value })} placeholder="50000000" />
+              <MoneyInput value={form.commission} onChange={(value) => setForm({ ...form, commission: value })} placeholder="50000000" wordsTone="amber" />
             </div>
             <div>
               <label className="flex items-center gap-2 cursor-pointer">

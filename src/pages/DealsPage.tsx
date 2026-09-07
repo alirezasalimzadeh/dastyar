@@ -131,7 +131,7 @@ function DealModal({ onClose, onSaved }: { onClose: () => void; onSaved: () => v
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div><label className="label">ارزش معامله (تومان)</label><MoneyInput value={dealValue} onChange={setDealValue} placeholder="2000000000" /></div>
-          <div><label className="label">پورسانت (تومان)</label><MoneyInput value={commission} onChange={setCommission} placeholder="50000000" /></div>
+          <div><label className="label">پورسانت (تومان)</label><MoneyInput value={commission} onChange={setCommission} placeholder="50000000" wordsTone="amber" /></div>
         </div>
         <div><label className="label">وضعیت</label><select className="input" value={status} onChange={(e) => setStatus(e.target.value)}>{DEAL_STATUSES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}</select></div>
         <div><label className="label">یادداشت</label><textarea className="input min-h-[60px]" value={notes} onChange={(e) => setNotes(e.target.value)} /></div>
