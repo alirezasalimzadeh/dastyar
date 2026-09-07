@@ -1087,15 +1087,17 @@ function PropertyForm({ propertyId, onBack, onSaved }: { propertyId?: string; on
   const wholeArea = (value: string) =>
     toEnglishDigits(value).split(/[.٫]/)[0].replace(/[^0-9]/g, '').replace(/^0+(?=\d)/, '');
   const numericValue = (value: string) => value ? Number(toEnglishDigits(value)) : 0;
+  const totalCommission = (total: number) => String(Math.round(total * 0.02));
 
   const changeTotalPrice = (value: string) => setForm((current) => {
     const area = numericValue(current.land_area);
     const pricePerMeter = numericValue(current.price_per_meter);
-    if (!value) return { ...current, sale_price: '' };
+    if (!value) return { ...current, sale_price: '', commission: '' };
     const total = numericValue(value);
-    if (area > 0) return { ...current, sale_price: value, price_per_meter: String(Math.round(total / area)) };
-    if (pricePerMeter > 0) return { ...current, sale_price: value, land_area: String(Math.round(total / pricePerMeter)) };
-    return { ...current, sale_price: value };
+    const commission = totalCommission(total);
+    if (area > 0) return { ...current, sale_price: value, price_per_meter: String(Math.round(total / area)), commission };
+    if (pricePerMeter > 0) return { ...current, sale_price: value, land_area: String(Math.round(total / pricePerMeter)), commission };
+    return { ...current, sale_price: value, commission };
   });
 
   const changePricePerMeter = (value: string) => setForm((current) => {
@@ -1103,8 +1105,11 @@ function PropertyForm({ propertyId, onBack, onSaved }: { propertyId?: string; on
     const total = numericValue(current.sale_price);
     if (!value) return { ...current, price_per_meter: '' };
     const pricePerMeter = numericValue(value);
-    if (area > 0) return { ...current, price_per_meter: value, sale_price: String(pricePerMeter * area) };
-    if (total > 0) return { ...current, price_per_meter: value, land_area: String(Math.round(total / pricePerMeter)) };
+    if (area > 0) {
+      const calculatedTotal = pricePerMeter * area;
+      return { ...current, price_per_meter: value, sale_price: String(calculatedTotal), commission: totalCommission(calculatedTotal) };
+    }
+    if (total > 0) return { ...current, price_per_meter: value, land_area: String(Math.round(total / pricePerMeter)), commission: totalCommission(total) };
     return { ...current, price_per_meter: value };
   });
 
@@ -1114,8 +1119,11 @@ function PropertyForm({ propertyId, onBack, onSaved }: { propertyId?: string; on
     const area = Number(value);
     const pricePerMeter = numericValue(current.price_per_meter);
     const total = numericValue(current.sale_price);
-    if (pricePerMeter > 0) return { ...current, land_area: value, sale_price: String(pricePerMeter * area) };
-    if (total > 0) return { ...current, land_area: value, price_per_meter: String(Math.round(total / area)) };
+    if (pricePerMeter > 0) {
+      const calculatedTotal = pricePerMeter * area;
+      return { ...current, land_area: value, sale_price: String(calculatedTotal), commission: totalCommission(calculatedTotal) };
+    }
+    if (total > 0) return { ...current, land_area: value, price_per_meter: String(Math.round(total / area)), commission: totalCommission(total) };
     return { ...current, land_area: value };
   });
 
@@ -1541,6 +1549,13 @@ function PropertyForm({ propertyId, onBack, onSaved }: { propertyId?: string; on
             <div>
               <label className="label">پورسانت (تومان)</label>
               <MoneyInput value={form.commission} onChange={(value) => setForm({ ...form, commission: value })} placeholder="50000000" wordsTone="amber" />
+              {form.transaction_type !== 'rent' && numericValue(form.sale_price) > 0 && (
+                <div className="mt-2 grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
+                  <div className="rounded-lg bg-slate-50 px-3 py-2 text-slate-600">سهم طرف اول (۱٪): <strong>{formatPrice(Math.round(numericValue(form.sale_price) * 0.01))} تومان</strong></div>
+                  <div className="rounded-lg bg-slate-50 px-3 py-2 text-slate-600">سهم طرف دوم (۱٪): <strong>{formatPrice(Math.round(numericValue(form.sale_price) * 0.01))} تومان</strong></div>
+                  <div className="rounded-lg bg-amber-50 px-3 py-2 text-amber-700">مجموع (۲٪): <strong>{formatPrice(Math.round(numericValue(form.sale_price) * 0.02))} تومان</strong></div>
+                </div>
+              )}
             </div>
             <div>
               <label className="flex items-center gap-2 cursor-pointer">

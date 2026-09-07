@@ -99,6 +99,14 @@ function DealModal({ onClose, onSaved }: { onClose: () => void; onSaved: () => v
     } else setProperties([]);
   }, [propSearch]);
 
+  const dealAmount = dealValue ? Number(toEnglishDigits(dealValue)) : 0;
+  const oneSideCommission = Math.round(dealAmount * 0.01);
+  const standardCommission = Math.round(dealAmount * 0.02);
+  const changeDealValue = (value: string) => {
+    setDealValue(value);
+    setCommission(value ? String(Math.round(Number(toEnglishDigits(value)) * 0.02)) : '');
+  };
+
   const handleSave = async () => {
     setSaving(true);
     const { data: deal } = await supabase.from('deals').insert({
@@ -130,9 +138,16 @@ function DealModal({ onClose, onSaved }: { onClose: () => void; onSaved: () => v
           {properties.length > 0 && <div className="border border-slate-200 rounded-lg max-h-32 overflow-y-auto divide-y divide-slate-100">{properties.map((p) => <button key={p.id} onClick={() => { setPropertyId(p.id); setPropSearch(p.title); setProperties([]); }} className="w-full px-3 py-2 text-right hover:bg-slate-50 text-sm">{p.title}</button>)}</div>}
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <div><label className="label">ارزش معامله (تومان)</label><MoneyInput value={dealValue} onChange={setDealValue} placeholder="2000000000" /></div>
-          <div><label className="label">پورسانت (تومان)</label><MoneyInput value={commission} onChange={setCommission} placeholder="50000000" wordsTone="amber" /></div>
+          <div><label className="label">ارزش معامله (تومان)</label><MoneyInput value={dealValue} onChange={changeDealValue} placeholder="2000000000" /></div>
+          <div><label className="label">پورسانت کل (تومان)</label><MoneyInput value={commission} onChange={setCommission} placeholder="40000000" wordsTone="amber" /></div>
         </div>
+        {dealAmount > 0 && (
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
+            <div className="rounded-lg bg-slate-50 px-3 py-2 text-slate-600">طرف اول (۱٪): <strong>{formatPrice(oneSideCommission)} تومان</strong></div>
+            <div className="rounded-lg bg-slate-50 px-3 py-2 text-slate-600">طرف دوم (۱٪): <strong>{formatPrice(oneSideCommission)} تومان</strong></div>
+            <div className="rounded-lg bg-amber-50 px-3 py-2 text-amber-700">مجموع (۲٪): <strong>{formatPrice(standardCommission)} تومان</strong></div>
+          </div>
+        )}
         <div><label className="label">وضعیت</label><select className="input" value={status} onChange={(e) => setStatus(e.target.value)}>{DEAL_STATUSES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}</select></div>
         <div><label className="label">یادداشت</label><textarea className="input min-h-[60px]" value={notes} onChange={(e) => setNotes(e.target.value)} /></div>
         <button onClick={handleSave} disabled={saving} className="btn-primary w-full">{saving ? 'در حال ذخیره...' : 'ذخیره'}</button>
