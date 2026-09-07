@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
-import { Plus, Search, Home, Phone, X, Filter, ArrowLeft, Trash2, Flame, Star, MapPin, Target, User, ImagePlus, Images, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Plus, Search, Home, Phone, X, Filter, ArrowLeft, Trash2, Flame, Star, MapPin, Target, User, ImagePlus, Images, ChevronLeft, ChevronRight, Pencil } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth';
 import {
@@ -60,7 +60,7 @@ const getStreet = (p: { street?: string | null; payment_conditions?: string | nu
 
 export function PropertiesPage({ initialId }: { initialId?: string }) {
   const { user } = useAuth();
-  const [view, setView] = useState<'list' | 'detail' | 'create'>('list');
+  const [view, setView] = useState<'list' | 'detail' | 'create' | 'edit'>('list');
   const [properties, setProperties] = useState<PropertyListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -129,8 +129,24 @@ export function PropertiesPage({ initialId }: { initialId?: string }) {
     return <PropertyForm onBack={() => setView('list')} onSaved={() => { setView('list'); loadProperties(); }} />;
   }
 
+  if (view === 'edit' && selectedId) {
+    return (
+      <PropertyForm
+        propertyId={selectedId}
+        onBack={() => setView('detail')}
+        onSaved={() => { setView('detail'); loadProperties(); }}
+      />
+    );
+  }
+
   if (view === 'detail' && selectedId) {
-    return <PropertyDetail propertyId={selectedId} onBack={() => { setView('list'); setSelectedId(null); }} />;
+    return (
+      <PropertyDetail
+        propertyId={selectedId}
+        onBack={() => { setView('list'); setSelectedId(null); }}
+        onEdit={() => setView('edit')}
+      />
+    );
   }
 
   const totalPages = Math.ceil(visibleProperties.length / PAGE_SIZE);
@@ -361,7 +377,7 @@ export function PropertiesPage({ initialId }: { initialId?: string }) {
 }
 
 // Property Detail
-function PropertyDetail({ propertyId, onBack }: { propertyId: string; onBack: () => void }) {
+function PropertyDetail({ propertyId, onBack, onEdit }: { propertyId: string; onBack: () => void; onEdit: () => void }) {
   const [property, setProperty] = useState<(PropertyListItem) | null>(null);
   const [owner, setOwner] = useState<Owner | null>(null);
   const [calls, setCalls] = useState<any[]>([]);
@@ -459,7 +475,10 @@ function PropertyDetail({ propertyId, onBack }: { propertyId: string; onBack: ()
               <Phone size={16} /> تماس با مالک
             </a>
           )}
-          <button onClick={() => setShowDeleteConfirm(true)} className="btn-danger">
+          <button onClick={onEdit} className="btn-secondary">
+            <Pencil size={16} /> ویرایش آگهی
+          </button>
+          <button onClick={() => setShowDeleteConfirm(true)} className="btn-danger" aria-label="حذف آگهی">
             <Trash2 size={16} />
           </button>
         </div>
@@ -680,10 +699,21 @@ function StepSummary({ items }: { items: { label: string; value: string }[] }) {
   );
 }
 
-function PropertyImagePicker({ files, onChange }: { files: File[]; onChange: (files: File[]) => void }) {
+function PropertyImagePicker({
+  files,
+  onChange,
+  existingImages = [],
+  onExistingImagesChange,
+}: {
+  files: File[];
+  onChange: (files: File[]) => void;
+  existingImages?: string[];
+  onExistingImagesChange?: (images: string[]) => void;
+}) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [message, setMessage] = useState('');
   const previews = useMemo(() => files.map((file) => ({ file, url: URL.createObjectURL(file) })), [files]);
+  const totalImages = existingImages.length + files.length;
 
   useEffect(() => () => previews.forEach((preview) => URL.revokeObjectURL(preview.url)), [previews]);
 
@@ -695,7 +725,7 @@ function PropertyImagePicker({ files, onChange }: { files: File[]; onChange: (fi
     const unique = candidates.filter((candidate) => !files.some((file) =>
       file.name === candidate.name && file.size === candidate.size && file.lastModified === candidate.lastModified,
     ));
-    const available = MAX_PROPERTY_IMAGES - files.length;
+    const available = MAX_PROPERTY_IMAGES - totalImages;
     onChange([...files, ...unique.filter((file) => PROPERTY_IMAGE_TYPES.includes(file.type) && file.size <= MAX_PROPERTY_IMAGE_SIZE).slice(0, available)]);
 
     if (invalidType) setMessage('فقط فایل‌های JPG، PNG و WebP قابل انتخاب هستند.');
@@ -715,7 +745,7 @@ function PropertyImagePicker({ files, onChange }: { files: File[]; onChange: (fi
       <button
         type="button"
         onClick={() => inputRef.current?.click()}
-        disabled={files.length >= MAX_PROPERTY_IMAGES}
+        disabled={totalImages >= MAX_PROPERTY_IMAGES}
         className="w-full rounded-xl border-2 border-dashed border-slate-300 px-4 py-7 text-slate-500 transition-colors hover:border-slate-400 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
       >
         <ImagePlus size={28} className="mx-auto mb-2" />
@@ -723,30 +753,48 @@ function PropertyImagePicker({ files, onChange }: { files: File[]; onChange: (fi
         <span className="mt-1 block text-xs">انتخاب عکس الزامی نیست</span>
       </button>
       {message && <p className="text-xs text-amber-600">{message}</p>}
-      {previews.length > 0 && (
+      {totalImages > 0 && (
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-          {previews.map(({ file, url }, index) => (
-            <div key={`${file.name}-${file.lastModified}`} className="relative aspect-square overflow-hidden rounded-lg bg-slate-100">
-              <img src={url} alt={`پیش‌نمایش عکس ${index + 1}`} className="h-full w-full object-cover" />
-              <button type="button" onClick={() => onChange(files.filter((_, fileIndex) => fileIndex !== index))} className="absolute left-1.5 top-1.5 rounded-full bg-black/65 p-1 text-white hover:bg-black/80" aria-label={`حذف عکس ${index + 1}`}>
+          {existingImages.map((url, index) => (
+            <div key={`${url.slice(0, 80)}-${index}`} className="relative aspect-square overflow-hidden rounded-lg bg-slate-100">
+              <img src={url} alt={`عکس فعلی ${index + 1}`} className="h-full w-full object-cover" />
+              <button type="button" onClick={() => onExistingImagesChange?.(existingImages.filter((_, imageIndex) => imageIndex !== index))} className="absolute left-1.5 top-1.5 rounded-full bg-black/65 p-1 text-white hover:bg-black/80" aria-label={`حذف عکس ${index + 1}`}>
                 <X size={15} />
               </button>
               {index === 0 && <span className="absolute right-1.5 bottom-1.5 rounded bg-black/60 px-1.5 py-0.5 text-[10px] text-white">تصویر اصلی</span>}
             </div>
           ))}
+          {previews.map(({ file, url }, index) => {
+            const displayIndex = existingImages.length + index;
+            return (
+              <div key={`${file.name}-${file.lastModified}`} className="relative aspect-square overflow-hidden rounded-lg bg-slate-100">
+                <img src={url} alt={`پیش‌نمایش عکس ${displayIndex + 1}`} className="h-full w-full object-cover" />
+                <button type="button" onClick={() => onChange(files.filter((_, fileIndex) => fileIndex !== index))} className="absolute left-1.5 top-1.5 rounded-full bg-black/65 p-1 text-white hover:bg-black/80" aria-label={`حذف عکس ${displayIndex + 1}`}>
+                  <X size={15} />
+                </button>
+                {displayIndex === 0 && <span className="absolute right-1.5 bottom-1.5 rounded bg-black/60 px-1.5 py-0.5 text-[10px] text-white">تصویر اصلی</span>}
+              </div>
+            );
+          })}
         </div>
       )}
     </div>
   );
 }
 
-// Property Creation Form (Multi-step dynamic form)
-function PropertyForm({ onBack, onSaved }: { onBack: () => void; onSaved: () => void }) {
+// Property create/edit form (Multi-step dynamic form)
+function PropertyForm({ propertyId, onBack, onSaved }: { propertyId?: string; onBack: () => void; onSaved: () => void }) {
   const { user } = useAuth();
   const { counties } = useActiveCounties();
+  const isEditing = Boolean(propertyId);
   const [step, setStep] = useState(0);
   const [saving, setSaving] = useState(false);
+  const [formLoading, setFormLoading] = useState(Boolean(propertyId));
   const [imageFiles, setImageFiles] = useState<File[]>([]);
+  const [existingImages, setExistingImages] = useState<string[]>([]);
+  const [editingOwnerId, setEditingOwnerId] = useState<string | null>(null);
+  const [editingConsultantId, setEditingConsultantId] = useState<string | null>(null);
+  const [editingStatus, setEditingStatus] = useState<Property['status']>('active');
   const [saveError, setSaveError] = useState('');
   const [form, setForm] = useState({
     title: '',
@@ -784,6 +832,69 @@ function PropertyForm({ onBack, onSaved }: { onBack: () => void; onSaved: () => 
     owner_notes: '',
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    if (!propertyId) return;
+    let cancelled = false;
+    const loadPropertyForEdit = async () => {
+      setFormLoading(true);
+      const { data, error } = await supabase
+        .from('properties')
+        .select('*, owners(name, phone, notes)')
+        .eq('id', propertyId)
+        .maybeSingle();
+      if (cancelled) return;
+      if (error || !data) {
+        setSaveError(error?.message ?? 'اطلاعات آگهی برای ویرایش پیدا نشد.');
+        setFormLoading(false);
+        return;
+      }
+      const ownerInfo = data.owners as { name?: string; phone?: string; notes?: string } | null;
+      const text = (value: unknown) => value == null ? '' : String(value);
+      setForm({
+        title: text(data.title),
+        description: text(data.description),
+        transaction_type: text(data.transaction_type),
+        transaction_role: text(data.transaction_role),
+        category: text(data.category),
+        property_type: text(data.property_type),
+        county_id: text(data.county_id),
+        neighborhood_id: text(data.neighborhood_id),
+        street: getStreet(data),
+        address: text(data.address),
+        land_area: text(data.land_area),
+        building_area: text(data.building_area),
+        bedrooms: text(data.bedrooms),
+        rooms: text(data.rooms),
+        floor: text(data.floor),
+        total_floors: text(data.total_floors),
+        building_age: text(data.building_age),
+        parking: Boolean(data.parking),
+        storage: Boolean(data.storage),
+        elevator: Boolean(data.elevator),
+        balcony: Boolean(data.balcony),
+        yard: Boolean(data.yard),
+        garden: Boolean(data.garden),
+        pool: Boolean(data.pool),
+        security: Boolean(data.security),
+        sale_price: text(data.sale_price),
+        deposit_price: text(data.deposit_price),
+        monthly_rent: text(data.monthly_rent),
+        negotiable: Boolean(data.negotiable),
+        commission: text(data.commission),
+        owner_name: text(ownerInfo?.name),
+        owner_phone: text(ownerInfo?.phone),
+        owner_notes: text(ownerInfo?.notes ?? data.owner_notes),
+      });
+      setExistingImages(Array.isArray(data.images) ? data.images : []);
+      setEditingOwnerId(data.owner_id ?? null);
+      setEditingConsultantId(data.assigned_consultant_id ?? null);
+      setEditingStatus((data.status as Property['status']) ?? 'active');
+      setFormLoading(false);
+    };
+    loadPropertyForEdit();
+    return () => { cancelled = true; };
+  }, [propertyId]);
 
   const selectedCounty = counties.find((c) => c.id === form.county_id);
   const isRobatKarim = selectedCounty?.name === ROBAT_KARIM_COUNTY_NAME;
@@ -834,9 +945,20 @@ function PropertyForm({ onBack, onSaved }: { onBack: () => void; onSaved: () => 
       ? await preparePropertyImages(imageFiles)
       : { images: [] as string[], failedImages: [] as { fileName: string; message: string }[] };
 
-    // First create or find owner
-    let ownerId: string | null = null;
-    if (form.owner_name && form.owner_phone) {
+    // Update the current owner while editing, or create/find one for a new property.
+    let ownerId: string | null = editingOwnerId;
+    if (editingOwnerId) {
+      const { error: ownerUpdateError } = await supabase.from('owners').update({
+        name: form.owner_name,
+        phone: normalizePhone(form.owner_phone),
+        notes: form.owner_notes || null,
+      }).eq('id', editingOwnerId);
+      if (ownerUpdateError) {
+        setSaveError(`ویرایش اطلاعات مالک انجام نشد: ${ownerUpdateError.message}`);
+        setSaving(false);
+        return;
+      }
+    } else if (form.owner_name && form.owner_phone) {
       const { data: existingOwner } = await supabase.from('owners').select('id').eq('phone', normalizePhone(form.owner_phone)).maybeSingle();
       if (existingOwner) {
         ownerId = existingOwner.id;
@@ -848,9 +970,18 @@ function PropertyForm({ onBack, onSaved }: { onBack: () => void; onSaved: () => 
           assigned_consultant_id: user?.id,
           status: 'active',
         }).select().single();
-        if (!ownerError && newOwner) ownerId = newOwner.id;
+        if (ownerError || !newOwner) {
+          setSaveError(`ثبت مالک انجام نشد: ${ownerError?.message ?? 'خطای نامشخص'}`);
+          setSaving(false);
+          return;
+        }
+        ownerId = newOwner.id;
       }
     }
+
+    const usesSalePrice = ['buy', 'sell', 'partnership'].includes(form.transaction_type);
+    const salePrice = usesSalePrice && form.sale_price ? Number(toEnglishDigits(form.sale_price)) : null;
+    const landArea = form.land_area ? Number(toEnglishDigits(form.land_area)) : null;
 
     const payload = {
       title: form.title,
@@ -859,10 +990,10 @@ function PropertyForm({ onBack, onSaved }: { onBack: () => void; onSaved: () => 
       transaction_role: form.transaction_role || null,
       category: form.category,
       property_type: form.property_type,
-      status: 'active',
-      is_active: true,
+      status: editingStatus,
+      is_active: editingStatus === 'active',
       owner_id: ownerId,
-      assigned_consultant_id: user?.id,
+      assigned_consultant_id: editingConsultantId || user?.id,
       province_id: TEHRAN_PROVINCE_ID,
       county_id: form.county_id || null,
       district_id: null,
@@ -870,7 +1001,7 @@ function PropertyForm({ onBack, onSaved }: { onBack: () => void; onSaved: () => 
       neighborhood_id: form.neighborhood_id || null,
       street: showStreet ? form.street || null : null,
       address: form.address || null,
-      land_area: form.land_area ? Number(toEnglishDigits(form.land_area)) : null,
+      land_area: landArea,
       building_area: form.building_area ? Number(toEnglishDigits(form.building_area)) : null,
       bedrooms: form.bedrooms ? Number(toEnglishDigits(form.bedrooms)) : null,
       rooms: form.rooms ? Number(toEnglishDigits(form.rooms)) : null,
@@ -885,22 +1016,29 @@ function PropertyForm({ onBack, onSaved }: { onBack: () => void; onSaved: () => 
       garden: form.garden,
       pool: form.pool,
       security: form.security,
-      sale_price: form.sale_price ? Number(toEnglishDigits(form.sale_price)) : null,
-      deposit_price: form.deposit_price ? Number(toEnglishDigits(form.deposit_price)) : null,
-      monthly_rent: form.monthly_rent ? Number(toEnglishDigits(form.monthly_rent)) : null,
+      sale_price: salePrice,
+      deposit_price: form.transaction_type === 'rent' && form.deposit_price ? Number(toEnglishDigits(form.deposit_price)) : null,
+      monthly_rent: form.transaction_type === 'rent' && form.monthly_rent ? Number(toEnglishDigits(form.monthly_rent)) : null,
+      price_per_meter: salePrice != null && landArea != null && landArea > 0
+        ? Math.round(salePrice / landArea)
+        : null,
       negotiable: form.negotiable,
       commission: form.commission ? Number(toEnglishDigits(form.commission)) : null,
       owner_notes: form.owner_notes || null,
-      images: preparedImages,
+      images: [...existingImages, ...preparedImages],
     };
-    let { data, error } = await supabase.from('properties').insert(payload).select().single();
+    let { data, error } = isEditing && propertyId
+      ? await supabase.from('properties').update(payload).eq('id', propertyId).select().single()
+      : await supabase.from('properties').insert(payload).select().single();
     // اگر ستون street هنوز در دیتابیس ساخته نشده باشد، فیلد را از درخواست حذف کن.
     // در صورت وجود مقدار خیابان، آن را موقتاً در payment_conditions نگه می‌داریم.
     const streetColumnMissing = error?.code === 'PGRST204' || error?.message?.includes("'street' column");
     if (error && streetColumnMissing) {
       const { street, ...withoutStreet } = payload;
       const fallbackPayload = street ? { ...withoutStreet, payment_conditions: street } : withoutStreet;
-      ({ data, error } = await supabase.from('properties').insert(fallbackPayload).select().single());
+      ({ data, error } = isEditing && propertyId
+        ? await supabase.from('properties').update(fallbackPayload).eq('id', propertyId).select().single()
+        : await supabase.from('properties').insert(fallbackPayload).select().single());
     }
 
     if (error || !data) {
@@ -916,20 +1054,18 @@ function PropertyForm({ onBack, onSaved }: { onBack: () => void; onSaved: () => 
       );
     }
 
-    // Calculate price per meter
-    if (data.sale_price && data.land_area) {
-      await supabase.from('properties').update({ price_per_meter: Math.round(data.sale_price / data.land_area) }).eq('id', data.id);
-    }
     await supabase.from('activities').insert({
       user_id: user?.id,
       entity_type: 'property',
       entity_id: data.id,
-      action: 'property_created',
-      description: `فایل جدید ${form.title} ثبت شد`,
+      action: isEditing ? 'property_updated' : 'property_created',
+      description: isEditing ? `آگهی ${form.title} ویرایش شد` : `فایل جدید ${form.title} ثبت شد`,
     });
     setSaving(false);
     onSaved();
   };
+
+  if (formLoading) return <div className="flex justify-center py-16"><Spinner size={32} /></div>;
 
   return (
     <div className="animate-fade-in max-w-2xl mx-auto">
@@ -937,7 +1073,7 @@ function PropertyForm({ onBack, onSaved }: { onBack: () => void; onSaved: () => 
         <ArrowLeft size={16} /> بازگشت
       </button>
 
-      <PageHeader title="فایل جدید" subtitle={`مرحله ${step + 1} از ${steps.length}: ${steps[step].title}`} />
+      <PageHeader title={isEditing ? 'ویرایش آگهی' : 'فایل جدید'} subtitle={`مرحله ${step + 1} از ${steps.length}: ${steps[step].title}`} />
 
       <div className="flex gap-1 mb-6">
         {steps.map((_, i) => (
@@ -1214,7 +1350,20 @@ function PropertyForm({ onBack, onSaved }: { onBack: () => void; onSaved: () => 
               ...(form.title ? [{ label: 'عنوان', value: form.title }] : []),
               ...(form.owner_name ? [{ label: 'مالک', value: form.owner_name }] : []),
             ]} />
-            <PropertyImagePicker files={imageFiles} onChange={setImageFiles} />
+            {isEditing && (
+              <div>
+                <label className="label">وضعیت آگهی</label>
+                <select className="input" value={editingStatus} onChange={(event) => setEditingStatus(event.target.value as Property['status'])}>
+                  {PROPERTY_STATUSES.map((status) => <option key={status.value} value={status.value}>{status.label}</option>)}
+                </select>
+              </div>
+            )}
+            <PropertyImagePicker
+              files={imageFiles}
+              onChange={setImageFiles}
+              existingImages={existingImages}
+              onExistingImagesChange={setExistingImages}
+            />
           </>
         )}
 
@@ -1225,7 +1374,9 @@ function PropertyForm({ onBack, onSaved }: { onBack: () => void; onSaved: () => 
           {step < steps.length - 1 ? (
             <button onClick={handleNext} className="btn-primary flex-1">مرحله بعد</button>
           ) : (
-            <button onClick={handleSave} disabled={saving} className="btn-primary flex-1">{saving ? 'در حال ذخیره...' : 'ثبت فایل'}</button>
+            <button onClick={handleSave} disabled={saving} className="btn-primary flex-1">
+              {saving ? 'در حال ذخیره...' : isEditing ? 'ذخیره تغییرات' : 'ثبت فایل'}
+            </button>
           )}
         </div>
       </div>
