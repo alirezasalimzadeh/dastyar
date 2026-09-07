@@ -111,7 +111,7 @@ export function SettingsPage() {
     setBacking(true);
     setBackupMsg(null);
     try {
-      const tables = ['owners', 'colleagues', 'customers', 'properties', 'deals', 'calls', 'follow_ups', 'tasks', 'tags', 'activities'];
+      const tables = ['owners', 'customers', 'properties', 'deals', 'calls', 'follow_ups', 'tasks', 'tags', 'activities'];
       const backup: Record<string, unknown[]> = {};
       for (const table of tables) {
         const { data, error } = await supabase.from(table).select('*').limit(10000);

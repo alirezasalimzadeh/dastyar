@@ -26,7 +26,7 @@ import {
 import { Badge, EmptyState, Spinner, Modal, PageHeader, Pagination, ConfirmDialog, SortSelect } from '@/components/ui';
 import { useActiveCounties, useCountyNeighborhoods } from '@/lib/geo';
 import type { Property, Owner, Colleague } from '@/lib/types';
-import { useColleagues } from '@/lib/colleagues';
+import { ownerToColleague, useColleagues } from '@/lib/colleagues';
 import propertyPlaceholder from '@/assets/property-placeholder.jpg';
 import {
   MAX_PROPERTY_IMAGES,
@@ -39,7 +39,6 @@ const PAGE_SIZE = 20;
 
 type PropertyListItem = Property & {
   owners?: { name: string; phone: string } | null;
-  colleagues?: { name: string; phone: string; agency_name?: string | null } | null;
   provinces?: { name: string } | null;
   counties?: { name: string } | null;
   cities?: { name: string } | null;
@@ -60,8 +59,12 @@ const PROPERTY_SORTS = [
 const getStreet = (p: { street?: string | null; payment_conditions?: string | null }) =>
   p.street ?? p.payment_conditions ?? '';
 
+const isUuid = (value: unknown): value is string =>
+  typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+
 export function PropertiesPage({ initialId }: { initialId?: string }) {
   const { user } = useAuth();
+  const colleagueOptions = useColleagues();
   const [view, setView] = useState<'list' | 'detail' | 'create' | 'edit'>('list');
   const [properties, setProperties] = useState<PropertyListItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -89,7 +92,7 @@ export function PropertiesPage({ initialId }: { initialId?: string }) {
     setLoading(true);
     const { data, count } = await supabase
       .from('properties')
-      .select('*, owners(name, phone), colleagues(id, name, phone, agency_name), provinces(name), counties(name), cities(name), neighborhoods(name)', { count: 'exact' });
+      .select('*, owners(name, phone), provinces(name), counties(name), cities(name), neighborhoods(name)', { count: 'exact' });
     setProperties((data as PropertyListItem[]) ?? []);
     setTotal(count ?? 0);
     setLoading(false);
@@ -243,6 +246,7 @@ export function PropertiesPage({ initialId }: { initialId?: string }) {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {pageItems.map((p) => {
               const status = getStatusInfo(PROPERTY_STATUSES, p.status);
+              const sourceColleague = colleagueOptions.find((colleague) => colleague.id === p.owner_relationship);
               const locationParts = [p.neighborhoods?.name, p.counties?.name].filter(Boolean) as string[];
               const locationLine = locationParts.length > 0 ? locationParts.join('، ') : p.address || 'بدون موقعیت';
               const roleLabel = p.transaction_role
@@ -362,9 +366,9 @@ export function PropertiesPage({ initialId }: { initialId?: string }) {
 
                   <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-100 text-xs">
                     <span className="flex items-center gap-1 text-slate-500 font-medium min-w-0">
-                      {p.contact_type === 'colleague' ? <Handshake size={12} className="shrink-0 text-indigo-400" /> : <User size={12} className="shrink-0 text-slate-400" />}
+                      {sourceColleague ? <Handshake size={12} className="shrink-0 text-indigo-400" /> : <User size={12} className="shrink-0 text-slate-400" />}
                       <span className="truncate">
-                        {p.contact_type === 'colleague' ? `همکار: ${p.colleagues?.name || 'نامشخص'}` : p.owners?.name || 'بدون مالک'}
+                        {sourceColleague ? `همکار: ${sourceColleague.name}` : p.owners?.name || 'بدون مالک'}
                       </span>
                     </span>
                     <span className="text-slate-400 shrink-0">{timeAgo(p.created_at)}</span>
@@ -396,17 +400,20 @@ function PropertyDetail({ propertyId, onBack, onEdit }: { propertyId: string; on
   const loadDetail = useCallback(async () => {
     setLoading(true);
     const [propRes, callsRes, fuRes, matchRes] = await Promise.all([
-      supabase.from('properties').select('*, owners(name, phone), colleagues(id, name, phone, agency_name), counties(name), neighborhoods(name)').eq('id', propertyId).maybeSingle(),
+      supabase.from('properties').select('*, owners(name, phone), counties(name), neighborhoods(name)').eq('id', propertyId).maybeSingle(),
       supabase.from('calls').select('*').eq('property_id', propertyId).order('call_date', { ascending: false }).limit(10),
       supabase.from('follow_ups').select('*').eq('property_id', propertyId).order('due_date', { ascending: false }).limit(10),
       supabase.from('property_matches').select('*, customers(id, first_name, last_name, mobile, temperature)').eq('property_id', propertyId).order('score', { ascending: false }).limit(5),
     ]);
     setProperty(propRes.data as PropertyListItem);
     setOwner(null);
-    setColleague((propRes.data?.colleagues as Pick<Colleague, 'id' | 'name' | 'phone' | 'agency_name'> | null) ?? null);
+    setColleague(null);
     if (propRes.data?.owner_id) {
       const { data: ownerData } = await supabase.from('owners').select('*').eq('id', propRes.data.owner_id).maybeSingle();
       setOwner(ownerData as Owner);
+    } else if (isUuid(propRes.data?.owner_relationship)) {
+      const { data: colleagueData } = await supabase.from('owners').select('*').eq('id', propRes.data.owner_relationship).maybeSingle();
+      if (colleagueData) setColleague(ownerToColleague(colleagueData as Owner));
     }
     setCalls(callsRes.data ?? []);
     setFollowups(fuRes.data ?? []);
@@ -459,7 +466,7 @@ function PropertyDetail({ propertyId, onBack, onEdit }: { propertyId: string; on
               {property.is_hot && <Flame size={18} className="text-red-500" />}
               {property.is_featured && <Star size={18} className="text-yellow-500" />}
               <h2 className="text-lg font-bold text-slate-800">{property.title}</h2>
-              {property.contact_type === 'colleague' && <Badge color="purple"><Handshake size={12} /> فایل همکار</Badge>}
+              {colleague && <Badge color="purple"><Handshake size={12} /> فایل همکار</Badge>}
             </div>
             <p className="text-xs text-slate-400">
               {getTransactionLabel(property.transaction_type)} • {getCategoryLabel(property.category)} • {getPropertyTypeLabel(property.category, property.property_type)}
@@ -483,7 +490,7 @@ function PropertyDetail({ propertyId, onBack, onEdit }: { propertyId: string; on
         )}
 
         <div className="flex gap-2 flex-wrap">
-          {property.contact_type === 'colleague' && colleague ? (
+          {colleague ? (
             <a href={`tel:${normalizePhone(colleague.phone)}`} className="btn-primary">
               <Handshake size={16} /> تماس با همکار
             </a>
@@ -630,7 +637,7 @@ function PropertyDetail({ propertyId, onBack, onEdit }: { propertyId: string; on
               <InfoField label="قابل مذاکره" value={property.negotiable ? 'بله' : 'خیر'} />
             </div>
           </div>
-          {property.contact_type === 'colleague' && colleague ? (
+          {colleague ? (
             <div className="border-t border-slate-100 pt-4">
               <h4 className="flex items-center gap-2 text-sm font-bold text-indigo-700 mb-3"><Handshake size={16} /> منبع فایل: همکار</h4>
               <div className="grid grid-cols-2 gap-4">
@@ -996,8 +1003,8 @@ function PropertyForm({ propertyId, onBack, onSaved }: { propertyId?: string; on
         monthly_rent: text(data.monthly_rent),
         negotiable: Boolean(data.negotiable),
         commission: text(data.commission),
-        contact_type: data.contact_type === 'colleague' ? 'colleague' : 'owner',
-        colleague_id: text(data.colleague_id),
+        contact_type: isUuid(data.owner_relationship) ? 'colleague' : 'owner',
+        colleague_id: isUuid(data.owner_relationship) ? data.owner_relationship : '',
         owner_name: text(ownerInfo?.name),
         owner_phone: text(ownerInfo?.phone),
         owner_notes: text(ownerInfo?.notes ?? data.owner_notes),
@@ -1110,8 +1117,7 @@ function PropertyForm({ propertyId, onBack, onSaved }: { propertyId?: string; on
       status: editingStatus,
       is_active: editingStatus === 'active',
       owner_id: ownerId,
-      contact_type: form.contact_type,
-      colleague_id: form.contact_type === 'colleague' ? form.colleague_id : null,
+      owner_relationship: form.contact_type === 'colleague' ? form.colleague_id : null,
       assigned_consultant_id: editingConsultantId || user?.id,
       province_id: TEHRAN_PROVINCE_ID,
       county_id: form.county_id || null,

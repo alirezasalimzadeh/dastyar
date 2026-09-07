@@ -2,9 +2,10 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ArrowLeft, Building2, FileText, Pencil, Phone, Plus, Search, Trash2, UserPlus } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth';
-import { normalizePhone, validatePhone, toEnglishDigits, toPersianDigits } from '@/lib/constants';
+import { COLLEAGUE_TAG, normalizePhone, validatePhone, toEnglishDigits, toPersianDigits } from '@/lib/constants';
+import { colleagueTags, ownerToColleague } from '@/lib/colleagues';
 import { Badge, ConfirmDialog, CopyButton, EmptyState, Modal, PageHeader, Spinner } from '@/components/ui';
-import type { Colleague } from '@/lib/types';
+import type { Colleague, Owner } from '@/lib/types';
 
 type ColleagueRow = Colleague & { properties?: { id: string; status: string; title: string }[] | null };
 
@@ -18,11 +19,15 @@ export function ColleaguesPage() {
 
   const load = useCallback(async () => {
     setLoading(true);
-    const { data } = await supabase
-      .from('colleagues')
-      .select('*, properties(id, status, title)')
-      .order('created_at', { ascending: false });
-    setColleagues((data as ColleagueRow[]) ?? []);
+    const [colleagueRes, propertyRes] = await Promise.all([
+      supabase.from('owners').select('*').contains('tags', [COLLEAGUE_TAG]).order('created_at', { ascending: false }),
+      supabase.from('properties').select('id, status, title, owner_relationship'),
+    ]);
+    const properties = (propertyRes.data as { id: string; status: string; title: string; owner_relationship: string | null }[]) ?? [];
+    setColleagues(((colleagueRes.data as Owner[]) ?? []).map((owner) => ({
+      ...ownerToColleague(owner),
+      properties: properties.filter((property) => property.owner_relationship === owner.id),
+    })));
     setLoading(false);
   }, []);
 
@@ -119,12 +124,14 @@ function ColleagueDetail({ colleagueId, onBack }: { colleagueId: string; onBack:
 
   const load = useCallback(async () => {
     setLoading(true);
-    const { data } = await supabase
-      .from('colleagues')
-      .select('*, properties(id, status, title)')
-      .eq('id', colleagueId)
-      .maybeSingle();
-    setColleague(data as ColleagueRow | null);
+    const [colleagueRes, propertyRes] = await Promise.all([
+      supabase.from('owners').select('*').eq('id', colleagueId).maybeSingle(),
+      supabase.from('properties').select('id, status, title').eq('owner_relationship', colleagueId).order('created_at', { ascending: false }),
+    ]);
+    setColleague(colleagueRes.data ? {
+      ...ownerToColleague(colleagueRes.data as Owner),
+      properties: propertyRes.data ?? [],
+    } : null);
     setLoading(false);
   }, [colleagueId]);
 
@@ -133,9 +140,9 @@ function ColleagueDetail({ colleagueId, onBack }: { colleagueId: string; onBack:
   const handleDelete = async () => {
     if (!colleague) return;
     if ((colleague.properties?.length ?? 0) > 0) {
-      await supabase.from('colleagues').update({ status: 'inactive' }).eq('id', colleague.id);
+      await supabase.from('owners').update({ status: 'inactive' }).eq('id', colleague.id);
     } else {
-      await supabase.from('colleagues').delete().eq('id', colleague.id);
+      await supabase.from('owners').delete().eq('id', colleague.id);
     }
     onBack();
   };
@@ -228,15 +235,14 @@ function ColleagueForm({ initial, onClose, onSaved }: { initial: Colleague | nul
       name: name.trim(),
       phone: normalizePhone(phone),
       secondary_phone: secondaryPhone ? normalizePhone(secondaryPhone) : null,
-      agency_name: agencyName.trim() || null,
-      specialization: specialization.trim() || null,
       notes: notes.trim() || null,
+      tags: colleagueTags(agencyName, specialization),
       status,
       ...(!isEditing ? { assigned_consultant_id: user?.id } : {}),
     };
     const { data, error: saveError } = initial
-      ? await supabase.from('colleagues').update(payload).eq('id', initial.id).select().single()
-      : await supabase.from('colleagues').insert(payload).select().single();
+      ? await supabase.from('owners').update(payload).eq('id', initial.id).select().single()
+      : await supabase.from('owners').insert(payload).select().single();
     if (saveError || !data) {
       setError(saveError?.message ?? 'ذخیره همکار انجام نشد.');
       setSaving(false);

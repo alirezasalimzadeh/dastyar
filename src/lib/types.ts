@@ -183,8 +183,6 @@ export interface Property {
   is_featured: boolean;
   is_active: boolean;
   owner_id: string;
-  contact_type: 'owner' | 'colleague';
-  colleague_id: string;
   assigned_consultant_id: string;
   province_id: string;
   county_id: string;
