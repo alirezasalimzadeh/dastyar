@@ -30,9 +30,7 @@ import {
   MAX_PROPERTY_IMAGES,
   MAX_PROPERTY_IMAGE_SIZE,
   PROPERTY_IMAGE_TYPES,
-  PROPERTY_IMAGES_BUCKET,
-  propertyImageObjectPaths,
-  uploadPropertyImages,
+  preparePropertyImages,
 } from '@/lib/propertyImages';
 
 const PAGE_SIZE = 20;
@@ -406,8 +404,6 @@ function PropertyDetail({ propertyId, onBack }: { propertyId: string; onBack: ()
   }, [selectedImageIndex, property?.images]);
 
   const handleDelete = async () => {
-    const paths = propertyImageObjectPaths(property?.images ?? []);
-    if (paths.length > 0) await supabase.storage.from(PROPERTY_IMAGES_BUCKET).remove(paths);
     await supabase.from('properties').delete().eq('id', propertyId);
     onBack();
   };
@@ -824,6 +820,12 @@ function PropertyForm({ onBack, onSaved }: { onBack: () => void; onSaved: () => 
     setSaving(true);
     setSaveError('');
 
+    // Images are compressed locally and saved directly in the existing images column.
+    // No external storage bucket is required.
+    const { images: preparedImages, failedImages } = imageFiles.length > 0
+      ? await preparePropertyImages(imageFiles)
+      : { images: [] as string[], failedImages: [] as { fileName: string; message: string }[] };
+
     // First create or find owner
     let ownerId: string | null = null;
     if (form.owner_name && form.owner_phone) {
@@ -881,7 +883,7 @@ function PropertyForm({ onBack, onSaved }: { onBack: () => void; onSaved: () => 
       negotiable: form.negotiable,
       commission: form.commission ? Number(toEnglishDigits(form.commission)) : null,
       owner_notes: form.owner_notes || null,
-      images: [],
+      images: preparedImages,
     };
     let { data, error } = await supabase.from('properties').insert(payload).select().single();
     // اگر ستون street هنوز در دیتابیس ساخته نشده باشد، فیلد را از درخواست حذف کن.
@@ -899,30 +901,11 @@ function PropertyForm({ onBack, onSaved }: { onBack: () => void; onSaved: () => 
       return;
     }
 
-    // Images are optional. When selected, upload them only after the property ID exists.
-    if (imageFiles.length > 0 && user?.id) {
-      const { urls, objectPaths, failedUploads } = await uploadPropertyImages(imageFiles, data.id, user.id);
-      let imageSaveError = '';
-
-      if (urls.length > 0) {
-        const { error: updateImagesError } = await supabase.from('properties').update({ images: urls }).eq('id', data.id);
-        if (updateImagesError) {
-          imageSaveError = `آدرس تصاویر در فایل ذخیره نشد: ${updateImagesError.message}`;
-          await supabase.storage.from(PROPERTY_IMAGES_BUCKET).remove(objectPaths);
-        }
-      }
-
-      if (failedUploads.length > 0 || imageSaveError) {
-        const storageMessages = [...new Set(failedUploads.map((failure) => failure.message))].join('، ');
-        const bucketHint = /bucket.*not found|not found.*bucket/i.test(storageMessages)
-          ? '\nفضای ذخیره‌سازی تصاویر در Supabase ساخته نشده است؛ migration مربوط به property-images را اجرا کنید.'
-          : '';
-        const uploadedCount = imageSaveError ? 0 : urls.length;
-        window.alert(
-          `${imageFiles.length - uploadedCount} عکس بارگذاری یا ذخیره نشد.${uploadedCount > 0 ? ` ${uploadedCount} عکس با موفقیت ذخیره شد.` : ''}`
-          + `\nخطای Supabase: ${imageSaveError || storageMessages || 'خطای نامشخص'}${bucketHint}`,
-        );
-      }
+    if (failedImages.length > 0) {
+      const messages = [...new Set(failedImages.map((failure) => failure.message))].join('، ');
+      window.alert(
+        `${failedImages.length} عکس پردازش نشد.${preparedImages.length > 0 ? ` ${preparedImages.length} عکس با موفقیت ذخیره شد.` : ''}\nخطا: ${messages}`,
+      );
     }
 
     // Calculate price per meter
