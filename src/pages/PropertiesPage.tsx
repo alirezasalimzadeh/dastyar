@@ -278,6 +278,38 @@ export function PropertiesPage({ initialId }: { initialId?: string }) {
     setFilters({ ...EMPTY_PROPERTY_FILTERS });
     setPage(1);
   };
+  const removeFilter = (key: keyof PropertyFilters) => {
+    setFilters((current) => {
+      if (key === 'transaction_type') return { ...current, transaction_type: '', transaction_role: '', min_deposit: '', max_deposit: '', min_rent: '', max_rent: '' };
+      if (key === 'category') return { ...current, category: '', property_type: '' };
+      return { ...current, [key]: EMPTY_PROPERTY_FILTERS[key] };
+    });
+    setPage(1);
+  };
+  const filterChips: { key: keyof PropertyFilters; label: string }[] = [];
+  const addChip = (key: keyof PropertyFilters, label: string, active = Boolean(filters[key])) => { if (active) filterChips.push({ key, label }); };
+  addChip('transaction_type', TRANSACTION_TYPES.find((item) => item.value === filters.transaction_type)?.label ?? '');
+  addChip('transaction_role', TRANSACTION_ROLES[filters.transaction_type]?.find((item) => item.value === filters.transaction_role)?.label ?? '');
+  addChip('category', CATEGORIES.find((item) => item.value === filters.category)?.label ?? '');
+  addChip('property_type', PROPERTY_TYPES[filters.category]?.find((item) => item.value === filters.property_type)?.label ?? '');
+  addChip('county_id', filterCounties.find((item) => item.id === filters.county_id)?.name ?? '');
+  addChip('status', PROPERTY_STATUSES.find((item) => item.value === filters.status)?.label ?? '');
+  addChip('min_price', `قیمت از ${formatPrice(Number(filters.min_price))}`);
+  addChip('max_price', `قیمت تا ${formatPrice(Number(filters.max_price))}`);
+  addChip('min_deposit', `پول پیش از ${formatPrice(Number(filters.min_deposit))}`);
+  addChip('max_deposit', `پول پیش تا ${formatPrice(Number(filters.max_deposit))}`);
+  addChip('min_rent', `اجاره از ${formatPrice(Number(filters.min_rent))}`);
+  addChip('max_rent', `اجاره تا ${formatPrice(Number(filters.max_rent))}`);
+  addChip('min_area', `متراژ از ${toPersianDigits(filters.min_area)}`);
+  addChip('max_area', `متراژ تا ${toPersianDigits(filters.max_area)}`);
+  addChip('min_bedrooms', `${toPersianDigits(filters.min_bedrooms)} خواب و بیشتر`);
+  addChip('source', filters.source === 'owner' ? 'مالک مستقیم' : 'فایل همکار');
+  addChip('is_hot', filters.is_hot === 'true' ? 'فقط داغ' : 'فقط عادی');
+  addChip('has_images', filters.has_images === 'true' ? 'دارای عکس' : 'بدون عکس');
+  addChip('negotiable', filters.negotiable === 'true' ? 'قابل تبدیل/مذاکره' : 'غیرقابل تبدیل/مذاکره');
+  addChip('parking', 'پارکینگ', filters.parking);
+  addChip('elevator', 'آسانسور', filters.elevator);
+  addChip('storage', 'انباری', filters.storage);
 
   return (
     <div className="animate-fade-in">
@@ -292,26 +324,46 @@ export function PropertiesPage({ initialId }: { initialId?: string }) {
         }
       />
 
-      <div className="flex gap-2 mb-4">
-        <div className="relative flex-1">
-          <Search size={18} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" />
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-            className="input pr-10"
-            placeholder="عنوان، آدرس، مالک، تلفن یا موقعیت..."
-          />
-        </div>
-        <button
-          onClick={() => setShowFilters(!showFilters)}
-          className={`btn-secondary relative ${activeFilterCount > 0 ? 'border-slate-800 bg-slate-900 text-white hover:bg-slate-800' : ''}`}
-        >
-          <Filter size={18} />
-          <span className="hidden sm:inline">فیلترها</span>
-          {activeFilterCount > 0 && <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-white px-1 text-[10px] font-bold text-slate-900">{toPersianDigits(activeFilterCount)}</span>}
-        </button>
+      <div className="relative mb-3">
+        <Search size={18} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" />
+        <input
+          type="text"
+          value={search}
+          onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+          className="input pr-10"
+          placeholder="عنوان، آدرس، مالک، تلفن یا موقعیت..."
+        />
       </div>
+
+      <div className="mb-3 flex gap-2 overflow-x-auto pb-1 no-scrollbar">
+        <select className="shrink-0 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 outline-none focus:border-slate-400" value={filters.transaction_type} onChange={(e) => { setFilters((current) => ({ ...current, transaction_type: e.target.value, transaction_role: '', min_price: '', max_price: '', min_deposit: '', max_deposit: '', min_rent: '', max_rent: '' })); setPage(1); }}>
+          <option value="">نوع معامله</option>
+          {TRANSACTION_TYPES.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
+        </select>
+        <select className="shrink-0 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 outline-none focus:border-slate-400" value={filters.category} onChange={(e) => { setFilters((current) => ({ ...current, category: e.target.value, property_type: '' })); setPage(1); }}>
+          <option value="">دسته‌بندی</option>
+          {CATEGORIES.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
+        </select>
+        <select className="shrink-0 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 outline-none focus:border-slate-400" value={filters.county_id} onChange={(e) => updateFilter('county_id', e.target.value)}>
+          <option value="">شهرستان</option>
+          {filterCounties.map((county) => <option key={county.id} value={county.id}>{county.name}</option>)}
+        </select>
+        <button onClick={() => setShowFilters(!showFilters)} className={`btn-secondary relative shrink-0 ${showFilters ? 'border-slate-800 bg-slate-900 text-white hover:bg-slate-800' : ''}`}>
+          <Filter size={16} /> فیلترهای بیشتر
+          {activeFilterCount > 0 && <span className={`flex h-5 min-w-5 items-center justify-center rounded-full px-1 text-[10px] font-bold ${showFilters ? 'bg-white text-slate-900' : 'bg-slate-900 text-white'}`}>{toPersianDigits(activeFilterCount)}</span>}
+        </button>
+        {activeFilterCount > 0 && <button type="button" onClick={clearFilters} className="shrink-0 px-2 text-xs font-medium text-red-500">پاک کردن</button>}
+      </div>
+
+      {filterChips.length > 0 && (
+        <div className="mb-3 flex gap-1.5 overflow-x-auto pb-1 no-scrollbar">
+          {filterChips.map((chip) => (
+            <button key={chip.key} type="button" onClick={() => removeFilter(chip.key)} className="inline-flex shrink-0 items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-medium text-slate-600 hover:bg-red-50 hover:text-red-600">
+              {chip.label}<X size={12} />
+            </button>
+          ))}
+        </div>
+      )}
 
       <SortSelect value={sortKey} options={PROPERTY_SORTS} onChange={(v) => { setSortKey(v); setPage(1); }} />
 
@@ -327,41 +379,27 @@ export function PropertiesPage({ initialId }: { initialId?: string }) {
 
           <div className="space-y-5 p-4">
             <section>
-              <p className="mb-2 text-xs font-bold text-slate-600">نوع و موقعیت فایل</p>
-              <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+              <p className="mb-2 text-xs font-bold text-slate-600">جزئیات فایل</p>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                 <div>
-                  <label className="label">نوع معامله</label>
-                  <select className="input" value={filters.transaction_type} onChange={(e) => { setFilters((current) => ({ ...current, transaction_type: e.target.value, transaction_role: '', min_price: '', max_price: '', min_deposit: '', max_deposit: '', min_rent: '', max_rent: '' })); setPage(1); }}>
-                    <option value="">همه معاملات</option>
-                    {TRANSACTION_TYPES.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="label">نقش</label>
+                  <label className="label">نقش در معامله</label>
                   <select className="input" value={filters.transaction_role} disabled={!filters.transaction_type} onChange={(e) => updateFilter('transaction_role', e.target.value)}>
                     <option value="">همه نقش‌ها</option>
                     {(TRANSACTION_ROLES[filters.transaction_type] ?? []).map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
                   </select>
                 </div>
                 <div>
-                  <label className="label">دسته‌بندی</label>
-                  <select className="input" value={filters.category} onChange={(e) => { setFilters((current) => ({ ...current, category: e.target.value, property_type: '' })); setPage(1); }}>
-                    <option value="">همه دسته‌ها</option>
-                    {CATEGORIES.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="label">نوع ملک</label>
+                  <label className="label">نوع دقیق ملک</label>
                   <select className="input" value={filters.property_type} disabled={!filters.category} onChange={(e) => updateFilter('property_type', e.target.value)}>
                     <option value="">همه انواع</option>
                     {(PROPERTY_TYPES[filters.category] ?? []).map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
                   </select>
                 </div>
                 <div>
-                  <label className="label">شهرستان</label>
-                  <select className="input" value={filters.county_id} onChange={(e) => updateFilter('county_id', e.target.value)}>
-                    <option value="">همه شهرستان‌ها</option>
-                    {filterCounties.map((county) => <option key={county.id} value={county.id}>{county.name}</option>)}
+                  <label className="label">وضعیت فایل</label>
+                  <select className="input" value={filters.status} onChange={(e) => updateFilter('status', e.target.value)}>
+                    <option value="">همه وضعیت‌ها</option>
+                    {PROPERTY_STATUSES.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
                   </select>
                 </div>
               </div>
@@ -386,7 +424,7 @@ export function PropertiesPage({ initialId }: { initialId?: string }) {
                 <div><label className="label">حداقل متراژ</label><input className="input" type="number" min="0" inputMode="numeric" value={filters.min_area} onChange={(e) => updateFilter('min_area', e.target.value)} placeholder="۷۰" /></div>
                 <div><label className="label">حداکثر متراژ</label><input className="input" type="number" min="0" inputMode="numeric" value={filters.max_area} onChange={(e) => updateFilter('max_area', e.target.value)} placeholder="۱۵۰" /></div>
                 <div><label className="label">حداقل خواب</label><select className="input" value={filters.min_bedrooms} onChange={(e) => updateFilter('min_bedrooms', e.target.value)}><option value="">مهم نیست</option>{[1, 2, 3, 4, 5].map((count) => <option key={count} value={count}>{toPersianDigits(count)} خواب و بیشتر</option>)}</select></div>
-                <div><label className="label">وضعیت فایل</label><select className="input" value={filters.status} onChange={(e) => updateFilter('status', e.target.value)}><option value="">همه وضعیت‌ها</option>{PROPERTY_STATUSES.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></div>
+
               </div>
             </section>
 
