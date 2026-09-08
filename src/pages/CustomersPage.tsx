@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
-import { Plus, Search, Flame, Users, Phone, X, Filter, ArrowLeft, Trash2, Tag, Clock, Target, MapPin, Pencil } from 'lucide-react';
+import { Plus, Search, Users, Phone, X, Filter, ArrowLeft, Trash2, Tag, Clock, Target, MapPin, Pencil } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth';
 import {
@@ -37,7 +37,6 @@ const PAGE_SIZE = 20;
 
 type CustomerRow = Customer & { calls?: { call_date: string }[] | null };
 
-const INTENTION_COLORS: Record<string, string> = { buy: 'blue', rent: 'purple', partnership: 'teal', sell: 'orange' };
 
 const CUSTOMER_SORTS = [
   { value: 'newest', label: 'جدیدترین' },
@@ -269,7 +268,6 @@ export function CustomersPage({ initialId, initialFilter }: { initialId?: string
                 const status = getStatusInfo(CUSTOMER_STATUSES, c.status);
                 const colleagueId = (c.property_preferences as Record<string, unknown> | null)?.colleague_id as string | undefined;
                 const referringColleague = colleagues.find((colleague) => colleague.id === colleagueId);
-                const urgencyInfo = URGENCY_LEVELS.find(u => u.value === c.urgency);
                 const typeLabels = c.preferred_property_types?.length
                   ? c.preferred_property_types.slice(0, 2).map((pt) => PROPERTY_TYPES[c.preferred_category!]?.find((p) => p.value === pt)?.label ?? pt).join('، ')
                   : null;
@@ -284,42 +282,52 @@ export function CustomersPage({ initialId, initialFilter }: { initialId?: string
                   <div
                     key={c.id}
                     onClick={() => { setSelectedId(c.id); setView('detail'); }}
-                    className="card px-4 py-3 cursor-pointer transition-all hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md"
+                    className="card p-4 cursor-pointer transition-all hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md"
                   >
-                    <div className="flex items-center gap-3">
-                      <div className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0 ${
-                        c.temperature === 'hot' ? 'bg-red-100 text-red-600' :
-                        c.temperature === 'warm' ? 'bg-orange-100 text-orange-600' :
-                        'bg-blue-100 text-blue-600'
+                    <div className="flex items-start gap-3">
+                      <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-sm font-extrabold ${
+                        c.temperature === 'hot' ? 'bg-red-50 text-red-600' :
+                        c.temperature === 'warm' ? 'bg-orange-50 text-orange-600' :
+                        'bg-blue-50 text-blue-600'
                       }`}>
                         {c.name?.[0] ?? '؟'}
                       </div>
-                      <div className="flex-1 min-w-0 space-y-0.5">
-                        <div className="flex items-center gap-2">
-                          <p className="text-sm font-medium text-slate-800 truncate">{c.name}</p>
-                          {c.temperature === 'hot' && <Flame size={14} className="text-red-500 flex-shrink-0" />}
-                          {referringColleague && <span className="text-xs text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded">همکار: {referringColleague.name}</span>}
-                          {urgencyInfo && c.urgency === 'critical' && <span className="text-xs text-red-500 font-medium">فوری</span>}
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2">
+                              <p className="truncate text-sm font-bold text-slate-800">{c.name}</p>
+                              {c.urgency === 'critical' && <span className="text-[11px] font-bold text-red-500">فوری</span>}
+                            </div>
+                            <div className="mt-1 flex items-center gap-1 text-xs text-slate-400">
+                              <span dir="ltr">{c.mobile}</span>
+                              <CopyButton text={c.mobile} />
+                            </div>
+                          </div>
+                          <div className="shrink-0 text-left">
+                            <p className={`text-[11px] font-medium ${c.temperature === 'hot' ? 'text-red-500' : c.temperature === 'warm' ? 'text-orange-500' : 'text-blue-500'}`}>{temp.label}</p>
+                            <p className="mt-1 text-[10px] text-slate-400">{status.label}</p>
+                          </div>
                         </div>
-                        <div className="flex items-center gap-0.5 text-xs text-slate-400">
-                          <span dir="ltr">{c.mobile}</span>
-                          <CopyButton text={c.mobile} />
-                          <span className="text-slate-300 mx-1">•</span>
-                          <span className={c.lastContact ? 'text-slate-500' : 'text-slate-400'}>
-                            آخرین تماس: {c.lastContact ? timeAgo(c.lastContact) : 'بدون تماس'}
-                          </span>
+
+                        <div className="mt-3 grid grid-cols-1 gap-2 rounded-xl bg-slate-50 px-3 py-2.5 sm:grid-cols-2">
+                          <div className="min-w-0">
+                            <p className="text-[10px] font-medium text-slate-400">نیاز مشتری</p>
+                            <p className="mt-1 truncate text-xs font-semibold text-slate-700">
+                              {[c.transaction_intention ? getTransactionLabel(c.transaction_intention) : '', c.preferred_category ? getCategoryLabel(c.preferred_category) : '', typeLabels ?? ''].filter(Boolean).join(' • ') || 'ثبت نشده'}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-[10px] font-medium text-slate-400">بودجه</p>
+                            <p className="mt-1 text-xs font-semibold text-slate-700">{budgetText ?? 'ثبت نشده'}</p>
+                          </div>
                         </div>
-                        <div className="flex items-center flex-wrap gap-x-1.5 gap-y-0.5 mt-0.5 text-[11px]">
-                          {budgetText && <span className="text-slate-600 font-medium">بودجه: {budgetText}</span>}
-                          {budgetText && c.preferred_category && <span className="text-slate-300">•</span>}
-                          {c.preferred_category && <span className="text-slate-500">{getCategoryLabel(c.preferred_category)}</span>}
-                          {typeLabels && <><span className="text-slate-300">•</span><span className="truncate text-slate-500">{typeLabels}</span></>}
+
+                        <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-slate-400">
+                          <span>آخرین تماس: {c.lastContact ? timeAgo(c.lastContact) : 'بدون تماس'}</span>
+                          {c.next_followup && <span className="font-medium text-amber-600">پیگیری: {formatDate(c.next_followup)}</span>}
+                          {referringColleague && <span className="text-indigo-500">معرف: {referringColleague.name}</span>}
                         </div>
-                      </div>
-                      <div className="flex flex-col items-end gap-1 flex-shrink-0">
-                        {c.temperature && <Badge color={temp.color}>{temp.icon} {temp.label}</Badge>}
-                        {c.transaction_intention && <Badge color={INTENTION_COLORS[c.transaction_intention] ?? 'gray'}>{getTransactionLabel(c.transaction_intention)}</Badge>}
-                        {c.next_followup && <Badge color="orange">پیگیری: {formatDate(c.next_followup)}</Badge>}
                       </div>
                     </div>
                   </div>
