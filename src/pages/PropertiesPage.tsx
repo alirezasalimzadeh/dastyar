@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
-import { Plus, Search, Home, Phone, X, Filter, ArrowLeft, Trash2, Flame, Star, MapPin, Target, User, ImagePlus, Images, ChevronLeft, ChevronRight, Pencil, Maximize2, Handshake } from 'lucide-react';
+import { Plus, Search, Home, Phone, X, Filter, ArrowLeft, Trash2, Flame, Star, MapPin, Target, User, ImagePlus, Images, ChevronLeft, ChevronRight, Pencil, Maximize2, Handshake, Percent } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth';
 import {
@@ -358,7 +358,7 @@ export function PropertiesPage({ initialId }: { initialId?: string }) {
                       </Badge>
                       {p.is_hot && <Flame size={15} className="text-red-500 shrink-0" />}
                       {p.is_featured && <Star size={15} className="text-yellow-500 shrink-0" />}
-                      {p.negotiable && <span className="badge bg-emerald-50 text-emerald-600">قابل مذاکره</span>}
+                      {p.negotiable && <span className="badge bg-emerald-50 text-emerald-600">{p.transaction_type === 'rent' ? 'قابل تبدیل' : 'قابل مذاکره'}</span>}
                     </div>
                     <Badge color={status.color}>{status.label}</Badge>
                   </div>
@@ -701,7 +701,7 @@ function PropertyDetail({ propertyId, onBack, onEdit }: { propertyId: string; on
               {property.monthly_rent != null && <InfoField label={property.transaction_role === 'applicant' ? 'بودجه اجاره' : 'اجاره'} value={`${detailRentBudget.isRange && detailRentBudget.rent ? `${formatPrice(Number(detailRentBudget.rent))} تا ` : property.transaction_role === 'applicant' ? 'تا ' : ''}${formatPrice(property.monthly_rent)} ت`} />}
               {property.price_per_meter != null && <InfoField label="قیمت هر متر" value={`${formatPrice(property.price_per_meter)} ت`} />}
               {property.commission != null && <InfoField label="پورسانت" value={`${formatPrice(property.commission)} ت`} />}
-              <InfoField label="قابل مذاکره" value={property.negotiable ? 'بله' : 'خیر'} />
+              {property.transaction_type === 'rent' && <InfoField label="قابل تبدیل" value={property.negotiable ? 'بله' : 'خیر'} />}
             </div>
           </div>
           {colleague ? (
@@ -1656,6 +1656,10 @@ function PropertyForm({ propertyId, onBack, onSaved }: { propertyId?: string; on
                     </div>
                   </div>
                   {errors.rent_budget && <p className="text-xs text-red-500">{errors.rent_budget}</p>}
+                  <label className="flex w-fit cursor-pointer items-center gap-2 rounded-lg bg-slate-50 px-3 py-2">
+                    <input type="checkbox" checked={form.negotiable} onChange={(e) => setForm({ ...form, negotiable: e.target.checked })} className="h-4 w-4 rounded" />
+                    <span className="text-sm font-medium text-slate-700">رهن و اجاره قابل تبدیل است</span>
+                  </label>
                 </div>
               ) : (
                 <>
@@ -1667,6 +1671,10 @@ function PropertyForm({ propertyId, onBack, onSaved }: { propertyId?: string; on
                     <label className="label">اجاره ماهانه (تومان)</label>
                     <MoneyInput value={form.monthly_rent} onChange={changeMonthlyRent} placeholder="3000000" />
                   </div>
+                  <label className="flex w-fit cursor-pointer items-center gap-2 rounded-lg bg-slate-50 px-3 py-2">
+                    <input type="checkbox" checked={form.negotiable} onChange={(e) => setForm({ ...form, negotiable: e.target.checked })} className="h-4 w-4 rounded" />
+                    <span className="text-sm font-medium text-slate-700">رهن و اجاره قابل تبدیل است</span>
+                  </label>
                 </>
               )
             ) : (
@@ -1696,33 +1704,29 @@ function PropertyForm({ propertyId, onBack, onSaved }: { propertyId?: string; on
               </div>
             )}
             {transactionCommissionValue > 0 && (
-              <div>
-                <label className="label">پورسانت</label>
-                {form.transaction_type === 'rent' && (
-                  <p className="mb-2 text-xs text-slate-500">
-                    ارزش معادل پول پیش: <strong>{formatPrice(transactionCommissionValue)} تومان</strong>
-                    <span className="mr-1 text-slate-400">(هر ۳ میلیون اجاره = ۱۰۰ میلیون پول پیش)</span>
-                  </p>
-                )}
+              <div className="rounded-2xl border border-amber-200 bg-gradient-to-l from-amber-50 to-white p-4">
+                <div className="mb-3 flex items-center gap-2 text-amber-800">
+                  <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-100"><Percent size={17} /></span>
+                  <div>
+                    <p className="text-sm font-bold">برآورد پورسانت</p>
+                    {form.transaction_type === 'rent' && (
+                      <p className="mt-0.5 text-[11px] font-normal text-slate-500">بر اساس ارزش معادل {formatPrice(transactionCommissionValue)} تومان</p>
+                    )}
+                  </div>
+                </div>
                 <div className="flex flex-wrap gap-2 text-xs">
-                  <span className="inline-flex items-center rounded-full bg-slate-100 px-3 py-1.5 font-medium text-slate-700">
+                  <span className="inline-flex items-center rounded-full border border-slate-200 bg-white px-3 py-1.5 font-medium text-slate-700 shadow-sm">
                     سهم هر طرف (۱٪): {formatPrice(oneSideCommission)} تومان
                   </span>
-                  <span className="inline-flex items-center rounded-full bg-amber-100 px-3 py-1.5 font-bold text-amber-800">
+                  <span className="inline-flex items-center rounded-full bg-amber-500 px-3 py-1.5 font-bold text-white shadow-sm">
                     مجموع (۲٪): {formatPrice(combinedCommission)} تومان
                   </span>
                 </div>
-                <p className="mt-2 rounded-md bg-amber-50 px-2.5 py-1 text-[11px] leading-5 text-amber-700">
+                <p className="mt-3 border-t border-amber-100 pt-2 text-[11px] leading-5 text-amber-800">
                   {moneyToPersianWords(combinedCommission)}
                 </p>
               </div>
             )}
-            <div>
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input type="checkbox" checked={form.negotiable} onChange={(e) => setForm({ ...form, negotiable: e.target.checked })} className="w-4 h-4 rounded" />
-                <span className="text-sm text-slate-700">قابل مذاکره</span>
-              </label>
-            </div>
           </>
         )}
 

@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Handshake, Plus, ArrowLeft, Trash2, TrendingUp } from 'lucide-react';
+import { Handshake, Plus, ArrowLeft, Trash2, TrendingUp, Percent } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth';
 import { DEAL_STATUSES, TRANSACTION_TYPES, getDealStatusInfo, getTransactionLabel, formatPrice, moneyToPersianWords, rentToDepositEquivalent, commissionFromTransactionValue, formatDate, toEnglishDigits } from '@/lib/constants';
@@ -162,17 +162,23 @@ function DealModal({ onClose, onSaved }: { onClose: () => void; onSaved: () => v
           </div>
         )}
         {dealAmount > 0 && (
-          <div>
-            <label className="label">پورسانت</label>
+          <div className="rounded-2xl border border-amber-200 bg-gradient-to-l from-amber-50 to-white p-4">
+            <div className="mb-3 flex items-center gap-2 text-amber-800">
+              <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-100"><Percent size={17} /></span>
+              <div>
+                <p className="text-sm font-bold">برآورد پورسانت</p>
+                {transactionType === 'rent' && <p className="mt-0.5 text-[11px] font-normal text-slate-500">بر اساس ارزش معادل {formatPrice(dealAmount)} تومان</p>}
+              </div>
+            </div>
             <div className="flex flex-wrap gap-2 text-xs">
-              <span className="inline-flex items-center rounded-full bg-slate-100 px-3 py-1.5 font-medium text-slate-700">
+              <span className="inline-flex items-center rounded-full border border-slate-200 bg-white px-3 py-1.5 font-medium text-slate-700 shadow-sm">
                 سهم هر طرف (۱٪): {formatPrice(oneSideCommission)} تومان
               </span>
-              <span className="inline-flex items-center rounded-full bg-amber-100 px-3 py-1.5 font-bold text-amber-800">
+              <span className="inline-flex items-center rounded-full bg-amber-500 px-3 py-1.5 font-bold text-white shadow-sm">
                 مجموع (۲٪): {formatPrice(standardCommission)} تومان
               </span>
             </div>
-            <p className="mt-2 rounded-md bg-amber-50 px-2.5 py-1 text-[11px] leading-5 text-amber-700">
+            <p className="mt-3 border-t border-amber-100 pt-2 text-[11px] leading-5 text-amber-800">
               {moneyToPersianWords(standardCommission)}
             </p>
           </div>
