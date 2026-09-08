@@ -1,14 +1,32 @@
-import { useEffect, useState, useCallback } from 'react';
-import { Settings as SettingsIcon, MapPin, Plus, Edit2, X, Search, Power, Lock, Download, Upload, Database, Tag as TagIcon, AlertTriangle, CheckCircle2, Loader2, FileText, Clock } from 'lucide-react';
+import { useEffect, useState, useCallback, type ReactNode } from 'react';
+import { Settings as SettingsIcon, MapPin, Plus, Edit2, X, Search, Power, Lock, Download, Upload, Database, Tag as TagIcon, AlertTriangle, CheckCircle2, Loader2, Clock, UserRound, Mail, Smartphone, ShieldCheck, CalendarDays } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth';
-import { Badge, EmptyState, Spinner, Modal, PageHeader, ConfirmDialog } from '@/components/ui';
+import { EmptyState, Spinner, Modal, PageHeader, ConfirmDialog } from '@/components/ui';
 import type { Province, County, City, Neighborhood, Tag } from '@/lib/types';
 
 type Tab = 'account' | 'security' | 'geographic' | 'tags' | 'backup';
 type GeoLevel = 'provinces' | 'counties' | 'cities' | 'neighborhoods';
 
 const TAG_COLORS = ['slate', 'red', 'orange', 'amber', 'green', 'teal', 'blue', 'cyan', 'purple', 'pink'];
+
+function AccountInfoCard({ icon, label, value, color, ltr = false }: { icon: ReactNode; label: string; value: string; color: 'blue' | 'emerald' | 'violet' | 'amber'; ltr?: boolean }) {
+  const tones = {
+    blue: 'bg-blue-50 text-blue-600',
+    emerald: 'bg-emerald-50 text-emerald-600',
+    violet: 'bg-violet-50 text-violet-600',
+    amber: 'bg-amber-50 text-amber-600',
+  };
+  return (
+    <div className="card flex items-center gap-3 p-4 transition-all hover:border-slate-300 hover:shadow-sm">
+      <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${tones[color]}`}>{icon}</div>
+      <div className="min-w-0 flex-1">
+        <p className="text-[11px] font-medium text-slate-400">{label}</p>
+        <p className="mt-1 truncate text-sm font-bold text-slate-700" dir={ltr ? 'ltr' : undefined}>{value}</p>
+      </div>
+    </div>
+  );
+}
 
 const colorClasses: Record<string, string> = {
   slate: 'bg-slate-100 text-slate-700 border-slate-200',
@@ -174,6 +192,9 @@ export function SettingsPage() {
   const levelLabels: Record<GeoLevel, string> = {
     provinces: 'استان‌ها', counties: 'شهرستان‌ها', cities: 'شهرها', neighborhoods: 'محله‌ها',
   };
+  const accountName = [profile?.first_name, profile?.last_name].filter(Boolean).join(' ') || 'کاربر دستیار';
+  const accountRole = profile?.role === 'manager' ? 'مدیر' : profile?.role === 'office_manager' ? 'مدیر دفتر' : profile?.role === 'system_admin' ? 'مدیر سیستم' : 'مشاور';
+  const accountActive = profile?.account_status === 'active';
 
   return (
     <div className="animate-fade-in">
@@ -201,17 +222,50 @@ export function SettingsPage() {
       {/* Account Tab */}
       {tab === 'account' && (
         <div className="space-y-4 animate-fade-in">
-          <div className="card p-5 space-y-4">
-            <h3 className="text-sm font-bold text-slate-700">اطلاعات حساب</h3>
-            <div className="grid grid-cols-2 gap-4">
-              <div><p className="text-xs text-slate-400">نام</p><p className="text-sm text-slate-700">{profile?.first_name ?? '-'}</p></div>
-              <div><p className="text-xs text-slate-400">نام خانوادگی</p><p className="text-sm text-slate-700">{profile?.last_name ?? '-'}</p></div>
-              <div><p className="text-xs text-slate-400">موبایل</p><p className="text-sm text-slate-700" dir="ltr">{profile?.mobile ?? '-'}</p></div>
-              <div><p className="text-xs text-slate-400">ایمیل</p><p className="text-sm text-slate-700" dir="ltr">{profile?.email ?? '-'}</p></div>
-              <div><p className="text-xs text-slate-400">نقش</p><p className="text-sm text-slate-700">{profile?.role === 'manager' ? 'مدیر' : profile?.role === 'office_manager' ? 'مدیر دفتر' : profile?.role === 'system_admin' ? 'ادمین سیستم' : 'مشاور'}</p></div>
-              <div><p className="text-xs text-slate-400">وضعیت</p><Badge color={profile?.account_status === 'active' ? 'green' : 'red'}>{profile?.account_status === 'active' ? 'فعال' : 'غیرفعال'}</Badge></div>
+          <section className="relative overflow-hidden rounded-2xl border border-blue-100 bg-gradient-to-bl from-blue-50 via-white to-indigo-50 p-5 sm:p-6">
+            <div className="pointer-events-none absolute -left-10 -top-14 h-40 w-40 rounded-full bg-blue-200/30 blur-2xl" />
+            <div className="relative flex flex-col gap-5 sm:flex-row sm:items-center">
+              <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-600 text-2xl font-extrabold text-white shadow-lg shadow-blue-200">
+                {profile?.first_name?.[0] ?? profile?.email?.[0]?.toUpperCase() ?? 'ک'}
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h2 className="text-xl font-extrabold text-slate-800">{accountName}</h2>
+                  <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-bold ${accountActive ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
+                    <span className={`h-1.5 w-1.5 rounded-full ${accountActive ? 'bg-emerald-500' : 'bg-red-500'}`} />
+                    {accountActive ? 'حساب فعال' : 'حساب غیرفعال'}
+                  </span>
+                </div>
+                <p className="mt-1 truncate text-sm text-slate-500" dir="ltr">{profile?.email ?? user?.email ?? 'ایمیل ثبت نشده'}</p>
+                <div className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-indigo-100 bg-white/80 px-3 py-1.5 text-xs font-semibold text-indigo-700 shadow-sm">
+                  <ShieldCheck size={14} /> {accountRole}
+                </div>
+              </div>
             </div>
-            <p className="text-xs text-slate-400 pt-3 border-t border-slate-100">برای ویرایش اطلاعات به صفحه پروفایل بروید.</p>
+          </section>
+
+          <section className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <AccountInfoCard icon={<UserRound size={18} />} label="نام و نام خانوادگی" value={accountName} color="blue" />
+            <AccountInfoCard icon={<Smartphone size={18} />} label="شماره موبایل" value={profile?.mobile ?? 'ثبت نشده'} ltr color="emerald" />
+            <AccountInfoCard icon={<Mail size={18} />} label="ایمیل حساب" value={profile?.email ?? user?.email ?? 'ثبت نشده'} ltr color="violet" />
+            <AccountInfoCard icon={<ShieldCheck size={18} />} label="سطح دسترسی" value={accountRole} color="amber" />
+          </section>
+
+          <section className="card overflow-hidden">
+            <div className="flex items-center gap-2 border-b border-slate-100 bg-slate-50/70 px-4 py-3">
+              <CalendarDays size={16} className="text-slate-500" />
+              <h3 className="text-sm font-bold text-slate-700">اطلاعات حساب</h3>
+            </div>
+            <div className="grid grid-cols-1 divide-y divide-slate-100 sm:grid-cols-3 sm:divide-x sm:divide-x-reverse sm:divide-y-0">
+              <div className="p-4"><p className="text-[11px] text-slate-400">تاریخ عضویت</p><p className="mt-1 text-sm font-semibold text-slate-700">{user?.created_at ? new Date(user.created_at).toLocaleDateString('fa-IR') : '—'}</p></div>
+              <div className="p-4"><p className="text-[11px] text-slate-400">آخرین به‌روزرسانی</p><p className="mt-1 text-sm font-semibold text-slate-700">{profile?.updated_at ? new Date(profile.updated_at).toLocaleDateString('fa-IR') : '—'}</p></div>
+              <div className="p-4"><p className="text-[11px] text-slate-400">شناسه حساب</p><p className="mt-1 text-sm font-semibold text-slate-700" dir="ltr">{user?.id ? `${user.id.slice(0, 8)}…` : '—'}</p></div>
+            </div>
+          </section>
+
+          <div className="flex items-start gap-3 rounded-xl border border-blue-100 bg-blue-50/60 px-4 py-3 text-xs leading-6 text-blue-700">
+            <SettingsIcon size={17} className="mt-0.5 shrink-0" />
+            <p>برای ویرایش نام، شماره تماس و سایر اطلاعات شخصی از صفحه «پروفایل» استفاده کنید. تنظیمات امنیتی و تغییر رمز عبور نیز در تب «امنیت» در دسترس است.</p>
           </div>
         </div>
       )}
