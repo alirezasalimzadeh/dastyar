@@ -108,7 +108,12 @@ export function useActiveCounties() {
       const provinceId = await getTehranProvinceId();
       let query = supabase.from('counties').select('*').in('name', ACTIVE_COUNTY_NAMES).order('name');
       if (provinceId) query = query.eq('province_id', provinceId);
-      const result = await query;
+      let result = await query;
+      if (!result.error && (result.data?.length ?? 0) === 0) {
+        let fallbackQuery = supabase.from('counties').select('*').eq('active', true).order('name');
+        if (provinceId) fallbackQuery = fallbackQuery.eq('province_id', provinceId);
+        result = await fallbackQuery;
+      }
       if (!active) return;
       if (result.error) {
         setError(result.error.message || 'دریافت شهرستان‌ها انجام نشد.');

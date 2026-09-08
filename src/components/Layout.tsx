@@ -19,6 +19,7 @@ import {
   Bell,
   Search,
   Download,
+  WifiOff,
 } from 'lucide-react';
 import { useAuth } from '@/lib/auth';
 import { getUserRoleLabel } from '@/lib/constants';
@@ -66,6 +67,17 @@ export function Layout({
   const [showSearch, setShowSearch] = useState(false);
   const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [installDismissed, setInstallDismissed] = useState(false);
+  const [online, setOnline] = useState(() => navigator.onLine);
+
+  useEffect(() => {
+    const updateConnection = () => setOnline(navigator.onLine);
+    window.addEventListener('online', updateConnection);
+    window.addEventListener('offline', updateConnection);
+    return () => {
+      window.removeEventListener('online', updateConnection);
+      window.removeEventListener('offline', updateConnection);
+    };
+  }, []);
 
   useEffect(() => {
     const onInstallPrompt = (event: Event) => {
@@ -208,6 +220,12 @@ export function Layout({
           {children}
         </main>
       </div>
+
+      {!online && (
+        <div className="fixed left-3 top-16 z-40 inline-flex items-center gap-2 rounded-full bg-amber-100 px-3 py-1.5 text-xs font-bold text-amber-800 shadow-sm lg:top-4">
+          <WifiOff size={14} /> حالت آفلاین؛ تغییرات بعداً همگام می‌شوند
+        </div>
+      )}
 
       {installPrompt && !installDismissed && (
         <div className="fixed bottom-20 left-3 right-3 z-40 mx-auto flex max-w-md items-center gap-3 rounded-2xl border border-blue-200 bg-white p-3 shadow-xl lg:bottom-5 lg:left-5 lg:right-auto">

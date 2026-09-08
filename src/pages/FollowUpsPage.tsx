@@ -23,7 +23,12 @@ export function FollowUpsPage({ initialFilter }: { initialFilter?: string }) {
     const today = todayLocal();
     let query = supabase.from('follow_ups').select('*, customers(first_name, last_name, mobile), owners(name, phone), properties(title)');
     if (statusFilter !== 'all') query = query.eq('status', statusFilter);
-    const response = await query.order('due_date', { ascending: statusFilter === 'pending' }).order('due_time', { ascending: true, nullsFirst: false }).limit(200);
+    let response = await query.order('due_date', { ascending: statusFilter === 'pending' }).order('due_time', { ascending: true, nullsFirst: false }).limit(200);
+    if (response.error) {
+      let fallbackQuery = supabase.from('follow_ups').select('*');
+      if (statusFilter !== 'all') fallbackQuery = fallbackQuery.eq('status', statusFilter);
+      response = await fallbackQuery.order('due_date', { ascending: statusFilter === 'pending' }).order('due_time', { ascending: true, nullsFirst: false }).limit(200);
+    }
     if (response.error) setLoadError(response.error.message);
     let rows = response.data ?? [];
     if (timeFilter === 'today') rows = rows.filter((item) => item.due_date === today);

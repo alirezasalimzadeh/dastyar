@@ -10,6 +10,23 @@ type GeoLevel = 'provinces' | 'counties' | 'cities' | 'neighborhoods';
 
 const TAG_COLORS = ['slate', 'red', 'orange', 'amber', 'green', 'teal', 'blue', 'cyan', 'purple', 'pink'];
 
+const BACKUP_TABLES = [
+  'provinces', 'counties', 'districts', 'cities', 'neighborhoods',
+  'agencies', 'branches', 'profiles', 'tags', 'customers', 'owners', 'properties',
+  'customer_preferred_cities', 'customer_preferred_neighborhoods', 'customer_tags', 'property_tags',
+  'calls', 'follow_ups', 'tasks', 'deals', 'property_matches', 'property_requests', 'activities', 'notifications',
+];
+
+const RESET_TABLES: [string, string][] = [
+  ['activities', 'id'], ['notifications', 'id'], ['property_matches', 'id'], ['property_requests', 'id'],
+  ['calls', 'id'], ['follow_ups', 'id'], ['tasks', 'id'], ['deals', 'id'],
+  ['property_tags', 'property_id'], ['customer_tags', 'customer_id'],
+  ['customer_preferred_cities', 'customer_id'], ['customer_preferred_neighborhoods', 'customer_id'],
+  ['properties', 'id'], ['customers', 'id'], ['owners', 'id'], ['tags', 'id'],
+];
+
+const ZERO_UUID = '00000000-0000-0000-0000-000000000000';
+
 function AccountInfoCard({ icon, label, value, color, ltr = false }: { icon: ReactNode; label: string; value: string; color: 'blue' | 'emerald' | 'violet' | 'amber'; ltr?: boolean }) {
   const tones = {
     blue: 'bg-blue-50 text-blue-600',
@@ -72,6 +89,8 @@ export function SettingsPage() {
   const [lastBackup, setLastBackup] = useState<string | null>(null);
   const [showRestoreConfirm, setShowRestoreConfirm] = useState(false);
   const [restoreData, setRestoreData] = useState<string>('');
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
+  const [resetting, setResetting] = useState(false);
 
   const loadItems = useCallback(async () => {
     setLoading(true);
@@ -129,9 +148,8 @@ export function SettingsPage() {
     setBacking(true);
     setBackupMsg(null);
     try {
-      const tables = ['owners', 'customers', 'properties', 'deals', 'calls', 'follow_ups', 'tasks', 'tags', 'activities'];
       const backup: Record<string, unknown[]> = {};
-      for (const table of tables) {
+      for (const table of BACKUP_TABLES) {
         const { data, error } = await supabase.from(table).select('*').limit(10000);
         if (error) { backup[table] = []; continue; }
         backup[table] = data ?? [];
@@ -187,6 +205,31 @@ export function SettingsPage() {
     setRestoring(false);
     setShowRestoreConfirm(false);
     setRestoreData('');
+  };
+
+  const handleResetData = async () => {
+    setResetting(true);
+    setBackupMsg(null);
+    try {
+      for (const [table, column] of RESET_TABLES) {
+        const { error } = await supabase.from(table).delete().neq(column, ZERO_UUID);
+        if (error) throw error;
+      }
+      if (user?.id) {
+        const { error } = await supabase.from('profiles').delete().neq('id', user.id);
+        if (error) throw error;
+      }
+      setBackupMsg({
+        type: 'success',
+        text: navigator.onLine
+          ? 'تمام اطلاعات کاری و پروفایل سایر کاربران پاک شد. حساب فعال شما برای ورود باقی ماند.'
+          : 'حذف اطلاعات ثبت شد و پس از اتصال اینترنت با PostgreSQL همگام می‌شود.',
+      });
+    } catch (error) {
+      setBackupMsg({ type: 'error', text: error instanceof Error ? error.message : 'پاک‌سازی اطلاعات انجام نشد.' });
+    }
+    setResetting(false);
+    setShowResetConfirm(false);
   };
 
   const levelLabels: Record<GeoLevel, string> = {
@@ -338,6 +381,21 @@ export function SettingsPage() {
             </label>
           </div>
 
+          {isAdmin && (
+            <div className="card space-y-4 border-red-200 bg-red-50/40 p-5">
+              <div className="flex items-center gap-2">
+                <AlertTriangle size={18} className="text-red-600" />
+                <h3 className="text-sm font-bold text-red-700">پاک‌سازی کامل اطلاعات کاری</h3>
+              </div>
+              <p className="text-xs leading-6 text-red-600">
+                مشتری‌ها، مالک‌ها، فایل‌ها، تماس‌ها، پیگیری‌ها، وظایف، معاملات، برچسب‌ها و پروفایل سایر کاربران حذف می‌شوند. اطلاعات جغرافیایی و حساب فعلی برای امکان ورود باقی می‌مانند. ابتدا فایل پشتیبان بگیرید.
+              </p>
+              <button type="button" disabled={resetting} onClick={() => setShowResetConfirm(true)} className="btn-danger text-sm">
+                {resetting ? <><Loader2 size={15} className="animate-spin" /> در حال پاک‌سازی...</> : 'پاک کردن اطلاعات کاری'}
+              </button>
+            </div>
+          )}
+
           {backupMsg && (
             <div className={`card p-4 flex items-center gap-2 ${backupMsg.type === 'success' ? 'bg-green-50' : 'bg-red-50'}`}>
               {backupMsg.type === 'success' ? <CheckCircle2 size={18} className="text-green-600" /> : <AlertTriangle size={18} className="text-red-500" />}
@@ -437,6 +495,16 @@ export function SettingsPage() {
       {showCreate && (
         <GeoFormModal level={geoLevel} item={editItem} onClose={() => { setShowCreate(false); setEditItem(null); }} onSaved={() => { setShowCreate(false); setEditItem(null); loadItems(); }} />
       )}
+
+      <ConfirmDialog
+        open={showResetConfirm}
+        onClose={() => setShowResetConfirm(false)}
+        onConfirm={handleResetData}
+        title="پاک‌سازی اطلاعات کاری"
+        message="این عملیات قابل بازگشت نیست. آیا قبل از ادامه فایل پشتیبان را دانلود کرده‌اید؟"
+        confirmLabel="بله، اطلاعات پاک شود"
+        danger
+      />
 
       <ConfirmDialog
         open={showRestoreConfirm}

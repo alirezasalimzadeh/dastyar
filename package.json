@@ -9,10 +9,12 @@
     "lint": "eslint .",
     "preview": "npm run build && vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.app.json",
-    "deploy:pwa": "npm run build && gh-pages -d dist"
+    "deploy:pwa": "npm run build && gh-pages -d dist",
+    "backup:postgres": "bash scripts/postgres-backup.sh"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.57.4",
+    "idb": "^8.0.3",
     "lucide-react": "^0.446.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"

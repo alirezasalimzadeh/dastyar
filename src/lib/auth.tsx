@@ -16,6 +16,16 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
+const OFFLINE_TABLES = [
+  'profiles', 'counties', 'cities', 'neighborhoods', 'tags', 'customers', 'owners',
+  'properties', 'calls', 'follow_ups', 'tasks', 'deals', 'activities', 'property_matches',
+];
+
+async function warmOfflineData() {
+  if (!navigator.onLine) return;
+  await Promise.allSettled(OFFLINE_TABLES.map((table) => supabase.from(table).select('*').limit(10000)));
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [user, setUser] = useState<User | null>(null);
@@ -29,6 +39,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .eq('id', userId)
       .maybeSingle();
     if (data) setProfile(data as Profile);
+    void warmOfflineData();
   };
 
   useEffect(() => {
