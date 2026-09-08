@@ -1509,7 +1509,7 @@ function PropertyForm({ propertyId, onBack, onSaved }: { propertyId?: string; on
                   { key: 'parking', label: 'پارکینگ' },
                   { key: 'storage', label: 'انباری' },
                   { key: 'elevator', label: 'آسانسور' },
-                  { key: 'balcony', label: 'بالکن' },
+                  { key: 'balcony', label: 'بالکن دارد' },
                   { key: 'yard', label: 'حیاط' },
                   { key: 'garden', label: 'باغ' },
                   { key: 'pool', label: 'استخر' },
