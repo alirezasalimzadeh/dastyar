@@ -261,8 +261,7 @@ export function CustomersPage({ initialId, initialFilter }: { initialId?: string
         />
       ) : (
         <>
-          <div className="card overflow-hidden">
-            <div className="divide-y divide-slate-100">
+          <div className="space-y-3">
               {pageItems.map((c) => {
                 const temp = getTemperatureInfo(c.temperature);
                 const status = getStatusInfo(CUSTOMER_STATUSES, c.status);
@@ -283,7 +282,7 @@ export function CustomersPage({ initialId, initialFilter }: { initialId?: string
                   <div
                     key={c.id}
                     onClick={() => { setSelectedId(c.id); setView('detail'); }}
-                    className="px-4 py-3 hover:bg-slate-50 cursor-pointer transition-colors"
+                    className="card px-4 py-3 cursor-pointer transition-all hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md"
                   >
                     <div className="flex items-center gap-3">
                       <div className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0 ${
@@ -324,7 +323,6 @@ export function CustomersPage({ initialId, initialFilter }: { initialId?: string
                   </div>
                 );
               })}
-            </div>
           </div>
           <Pagination page={page} totalPages={totalPages} onPageChange={setPage} />
         </>

@@ -120,10 +120,9 @@ export function OwnersPage({ initialId, onNavigate }: { initialId?: string; onNa
         <EmptyState icon={<Building2 size={48} />} title="مالکی یافت نشد" action={<button onClick={() => setShowCreate(true)} className="btn-primary"><Plus size={18} /> مالک جدید</button>} />
       ) : (
         <>
-          <div className="card overflow-hidden">
-            <div className="divide-y divide-slate-100">
+          <div className="space-y-3">
               {pageItems.map((o) => (
-                <div key={o.id} onClick={() => { setSelectedId(o.id); setView('detail'); }} className="px-4 py-3 hover:bg-slate-50 cursor-pointer transition-colors">
+                <div key={o.id} onClick={() => { setSelectedId(o.id); setView('detail'); }} className="card px-4 py-3 cursor-pointer transition-all hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md">
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 rounded-full bg-slate-200 flex items-center justify-center text-sm font-bold text-slate-600 flex-shrink-0">{o.name?.[0] ?? '؟'}</div>
                     <div className="flex-1 min-w-0 space-y-0.5">
@@ -151,7 +150,6 @@ export function OwnersPage({ initialId, onNavigate }: { initialId?: string; onNa
                   </div>
                 </div>
               ))}
-            </div>
           </div>
           <Pagination page={page} totalPages={totalPages} onPageChange={setPage} />
         </>
