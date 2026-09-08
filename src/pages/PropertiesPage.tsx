@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
-import { Plus, Search, Home, Phone, X, Filter, ArrowLeft, Trash2, Flame, Star, MapPin, Target, User, ImagePlus, Images, ChevronLeft, ChevronRight, Pencil, Maximize2, Handshake, Percent } from 'lucide-react';
+import { Plus, Search, Home, Phone, X, Filter, ArrowLeft, Trash2, Flame, Star, MapPin, Target, User, ImagePlus, Images, ChevronLeft, ChevronRight, Pencil, Maximize2, Handshake, Percent, Clock } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth';
 import {
@@ -33,6 +33,7 @@ import { useActiveCounties, useCountyNeighborhoods } from '@/lib/geo';
 import type { Property, Owner, Colleague } from '@/lib/types';
 import { ownerToColleague, useColleagues } from '@/lib/colleagues';
 import { CallFormModal, CallRecordCard } from '@/components/calls';
+import { FollowupFormModal, FollowupRecordCard } from '@/components/followups';
 import propertyPlaceholder from '@/assets/property-placeholder.jpg';
 import {
   MAX_PROPERTY_IMAGES,
@@ -627,6 +628,7 @@ function PropertyDetail({ propertyId, onBack, onEdit }: { propertyId: string; on
   const [activeTab, setActiveTab] = useState<'info' | 'matches' | 'calls' | 'followups'>('info');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showCallModal, setShowCallModal] = useState(false);
+  const [showFollowupModal, setShowFollowupModal] = useState(false);
   const [selectedImageIndex, setSelectedImageIndex] = useState<number | null>(null);
 
   const loadDetail = useCallback(async () => {
@@ -634,7 +636,7 @@ function PropertyDetail({ propertyId, onBack, onEdit }: { propertyId: string; on
     const [richPropRes, callsRes, fuRes, matchRes] = await Promise.all([
       supabase.from('properties').select('*, owners(name, phone), counties(name), neighborhoods(name)').eq('id', propertyId).maybeSingle(),
       supabase.from('calls').select('*, customers(first_name, last_name), owners(name), properties(title)').eq('property_id', propertyId).order('call_date', { ascending: false }).limit(20),
-      supabase.from('follow_ups').select('*').eq('property_id', propertyId).order('due_date', { ascending: false }).limit(10),
+      supabase.from('follow_ups').select('*, customers(first_name, last_name), owners(name), properties(title)').eq('property_id', propertyId).order('due_date', { ascending: false }).limit(20),
       supabase.from('property_matches').select('*, customers(id, first_name, last_name, mobile, temperature)').eq('property_id', propertyId).order('score', { ascending: false }).limit(5),
     ]);
     const propRes = richPropRes.error
@@ -737,6 +739,7 @@ function PropertyDetail({ propertyId, onBack, onEdit }: { propertyId: string; on
             </a>
           ) : null}
           {owner && <button type="button" onClick={() => setShowCallModal(true)} className="btn-secondary"><Phone size={16} /> ثبت تماس</button>}
+          {owner && <button type="button" onClick={() => setShowFollowupModal(true)} className="btn-secondary"><Clock size={16} /> پیگیری</button>}
           <button onClick={onEdit} className="btn-secondary">
             <Pencil size={16} /> ویرایش آگهی
           </button>
@@ -925,25 +928,9 @@ function PropertyDetail({ propertyId, onBack, onEdit }: { propertyId: string; on
       )}
 
       {activeTab === 'followups' && (
-        <div className="card overflow-hidden">
-          {followups.length > 0 ? (
-            <div className="divide-y divide-slate-100">
-              {followups.map((fu) => (
-                <div key={fu.id} className="px-5 py-3 flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium text-slate-700">{fu.reason ?? 'پیگیری'}</p>
-                    <p className="text-xs text-slate-400">{formatDate(fu.due_date)} {fu.due_time}</p>
-                  </div>
-                  <Badge color={fu.status === 'completed' ? 'green' : fu.status === 'pending' ? 'yellow' : 'red'}>
-                    {fu.status === 'completed' ? 'انجام شده' : fu.status === 'pending' ? 'در انتظار' : fu.status}
-                  </Badge>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <EmptyState title="پیگیری‌ای ثبت نشده" />
-          )}
-        </div>
+        followups.length > 0 ? (
+          <div className="space-y-3">{followups.map((item) => <FollowupRecordCard key={item.id} followup={item} targetName={owner?.name} onChanged={loadDetail} />)}</div>
+        ) : <EmptyState icon={<Clock size={36} />} title="پیگیری‌ای ثبت نشده" />
       )}
 
       {selectedImageIndex !== null && property.images?.[selectedImageIndex] && (
@@ -1009,6 +996,16 @@ function PropertyDetail({ propertyId, onBack, onEdit }: { propertyId: string; on
           propertyId={property.id}
           propertyTitle={property.title}
           onClose={() => setShowCallModal(false)}
+          onSaved={loadDetail}
+        />
+      )}
+      {showFollowupModal && owner && (
+        <FollowupFormModal
+          ownerId={owner.id}
+          ownerName={owner.name}
+          propertyId={property.id}
+          propertyTitle={property.title}
+          onClose={() => setShowFollowupModal(false)}
           onSaved={loadDetail}
         />
       )}

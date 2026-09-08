@@ -31,6 +31,7 @@ import type { Customer } from '@/lib/types';
 import { getFieldSections, getFieldLabel, type FieldDef } from '@/lib/propertyFields';
 import { useColleagues } from '@/lib/colleagues';
 import { CallFormModal, CallRecordCard } from '@/components/calls';
+import { FollowupFormModal, FollowupRecordCard } from '@/components/followups';
 
 const PAGE_SIZE = 20;
 
@@ -351,7 +352,7 @@ function CustomerDetail({ customerId, onBack, onEdit }: { customerId: string; on
     const [custRes, callsRes, fuRes, actRes, matchRes] = await Promise.all([
       supabase.from('customers').select('*').eq('id', customerId).maybeSingle(),
       supabase.from('calls').select('*, properties(title)').eq('customer_id', customerId).order('call_date', { ascending: false }).limit(20),
-      supabase.from('follow_ups').select('*').eq('customer_id', customerId).order('due_date', { ascending: false }).limit(10),
+      supabase.from('follow_ups').select('*, properties(title)').eq('customer_id', customerId).order('due_date', { ascending: false }).limit(20),
       supabase.from('activities').select('*').eq('entity_type', 'customer').eq('entity_id', customerId).order('created_at', { ascending: false }).limit(10),
       supabase.from('property_matches').select('*, properties(id, title, transaction_type, category, sale_price, deposit_price, monthly_rent, land_area, building_area, bedrooms, parking, elevator)').eq('customer_id', customerId).order('score', { ascending: false }).limit(5),
     ]);
@@ -506,25 +507,9 @@ function CustomerDetail({ customerId, onBack, onEdit }: { customerId: string; on
       )}
 
       {activeTab === 'followups' && (
-        <div className="card overflow-hidden">
-          {followups.length > 0 ? (
-            <div className="divide-y divide-slate-100">
-              {followups.map((fu) => (
-                <div key={fu.id} className="px-5 py-3 flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium text-slate-700">{fu.reason ?? 'پیگیری'}</p>
-                    <p className="text-xs text-slate-400">{formatDate(fu.due_date)} {fu.due_time}</p>
-                  </div>
-                  <Badge color={fu.status === 'completed' ? 'green' : fu.status === 'pending' ? 'yellow' : 'red'}>
-                    {fu.status === 'completed' ? 'انجام شده' : fu.status === 'pending' ? 'در انتظار' : fu.status === 'missed' ? 'عقب‌افتاده' : 'لغو'}
-                  </Badge>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <EmptyState icon={<Clock size={36} />} title="پیگیری‌ای ثبت نشده" />
-          )}
-        </div>
+        followups.length > 0 ? (
+          <div className="space-y-3">{followups.map((item) => <FollowupRecordCard key={item.id} followup={item} targetName={customer.name} onChanged={loadDetail} />)}</div>
+        ) : <EmptyState icon={<Clock size={36} />} title="پیگیری‌ای ثبت نشده" />
       )}
 
       {activeTab === 'matches' && (
@@ -572,7 +557,7 @@ function CustomerDetail({ customerId, onBack, onEdit }: { customerId: string; on
         <CallFormModal customerId={customerId} customerName={customer.name} allowPropertySelection onClose={() => setShowCallModal(false)} onSaved={loadDetail} />
       )}
       {showFollowupModal && (
-        <FollowupModal customerId={customerId} onClose={() => setShowFollowupModal(false)} onSaved={loadDetail} />
+        <FollowupFormModal customerId={customerId} customerName={customer.name} allowPropertySelection onClose={() => setShowFollowupModal(false)} onSaved={loadDetail} />
       )}
       <ConfirmDialog
         open={showDeleteConfirm}
@@ -665,81 +650,6 @@ function CustomerPrefsDisplay({ prefs, category, propertyTypes, role, transactio
         );
       })}
     </div>
-  );
-}
-
-// Followup Modal
-function FollowupModal({ customerId, onClose, onSaved }: { customerId: string; onClose: () => void; onSaved: () => void }) {
-  const { user } = useAuth();
-  const [reason, setReason] = useState('');
-  const [dueDate, setDueDate] = useState('');
-  const [dueTime, setDueTime] = useState('');
-  const [priority, setPriority] = useState('normal');
-  const [notes, setNotes] = useState('');
-  const [saving, setSaving] = useState(false);
-
-  const handleSave = async () => {
-    setSaving(true);
-    await supabase.from('follow_ups').insert({
-      entity_type: 'customer',
-      entity_id: customerId,
-      customer_id: customerId,
-      reason: reason || null,
-      due_date: dueDate,
-      due_time: dueTime || null,
-      priority,
-      notes: notes || null,
-      assigned_consultant_id: user?.id,
-      status: 'pending',
-    });
-    await supabase.from('customers').update({ next_followup: dueDate }).eq('id', customerId);
-    await supabase.from('activities').insert({
-      user_id: user?.id,
-      entity_type: 'customer',
-      entity_id: customerId,
-      action: 'followup_created',
-      description: `پیگیری جدید برای ${formatDate(dueDate)}`,
-    });
-    setSaving(false);
-    onSaved();
-    onClose();
-  };
-
-  return (
-    <Modal open={true} onClose={onClose} title="ایجاد پیگیری">
-      <div className="space-y-4">
-        <div>
-          <label className="label">دلیل پیگیری</label>
-          <input className="input" value={reason} onChange={(e) => setReason(e.target.value)} placeholder="مثلا: تماس برای فایل جدید" />
-        </div>
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="label">تاریخ</label>
-            <input type="date" className="input" value={dueDate} onChange={(e) => setDueDate(e.target.value)} required />
-          </div>
-          <div>
-            <label className="label">ساعت</label>
-            <input type="time" className="input" value={dueTime} onChange={(e) => setDueTime(e.target.value)} />
-          </div>
-        </div>
-        <div>
-          <label className="label">اولویت</label>
-          <select className="input" value={priority} onChange={(e) => setPriority(e.target.value)}>
-            <option value="low">کم</option>
-            <option value="normal">عادی</option>
-            <option value="high">زیاد</option>
-            <option value="critical">فوری</option>
-          </select>
-        </div>
-        <div>
-          <label className="label">یادداشت</label>
-          <textarea className="input min-h-[60px]" value={notes} onChange={(e) => setNotes(e.target.value)} />
-        </div>
-        <button onClick={handleSave} disabled={saving || !dueDate} className="btn-primary w-full">
-          {saving ? 'در حال ذخیره...' : 'ذخیره'}
-        </button>
-      </div>
-    </Modal>
   );
 }
 

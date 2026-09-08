@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
-import { Plus, Search, Building2, Phone, ArrowLeft, Trash2, X, Pencil } from 'lucide-react';
+import { Plus, Search, Building2, Phone, Clock, ArrowLeft, Trash2, X, Pencil } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth';
 import { normalizePhone, validatePhone, formatDate, timeAgo, toEnglishDigits, toPersianDigits, COLLEAGUE_TAG } from '@/lib/constants';
@@ -7,6 +7,7 @@ import { Badge, EmptyState, Spinner, Modal, PageHeader, Pagination, ConfirmDialo
 import type { Owner } from '@/lib/types';
 import { getColleagueRef, useColleagues, visibleOwnerTags, withColleagueRef } from '@/lib/colleagues';
 import { CallFormModal, CallRecordCard } from '@/components/calls';
+import { FollowupFormModal, FollowupRecordCard } from '@/components/followups';
 
 const PAGE_SIZE = 20;
 
@@ -166,21 +167,25 @@ function OwnerDetail({ ownerId, onBack, onPropertyOpen }: { ownerId: string; onB
   const [owner, setOwner] = useState<Owner | null>(null);
   const [properties, setProperties] = useState<any[]>([]);
   const [calls, setCalls] = useState<any[]>([]);
+  const [followups, setFollowups] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showEdit, setShowEdit] = useState(false);
   const [showCallModal, setShowCallModal] = useState(false);
+  const [showFollowupModal, setShowFollowupModal] = useState(false);
 
   const loadDetail = useCallback(async () => {
     setLoading(true);
-    const [ownerRes, propsRes, callsRes] = await Promise.all([
+    const [ownerRes, propsRes, callsRes, followupsRes] = await Promise.all([
       supabase.from('owners').select('*').eq('id', ownerId).maybeSingle(),
       supabase.from('properties').select('id, title, transaction_type, status, sale_price, deposit_price').eq('owner_id', ownerId).order('created_at', { ascending: false }),
       supabase.from('calls').select('*, properties(title)').eq('owner_id', ownerId).order('call_date', { ascending: false }).limit(20),
+      supabase.from('follow_ups').select('*, properties(title)').eq('owner_id', ownerId).order('due_date', { ascending: false }).limit(20),
     ]);
     setOwner(ownerRes.data as Owner);
     setProperties(propsRes.data ?? []);
     setCalls(callsRes.data ?? []);
+    setFollowups(followupsRes.data ?? []);
     setLoading(false);
   }, [ownerId]);
 
@@ -214,6 +219,7 @@ function OwnerDetail({ ownerId, onBack, onPropertyOpen }: { ownerId: string; onB
         <div className="flex gap-2 mt-5 flex-wrap border-t border-slate-200/70 pt-4">
           <a href={`tel:${normalizePhone(owner.phone)}`} className="btn-primary"><Phone size={16} /> تماس</a>
           <button onClick={() => setShowCallModal(true)} className="btn-secondary"><Phone size={16} /> ثبت تماس</button>
+          <button onClick={() => setShowFollowupModal(true)} className="btn-secondary"><Clock size={16} /> پیگیری</button>
           <button onClick={() => setShowEdit(true)} className="btn-secondary"><Pencil size={16} /> ویرایش مالک</button>
           <button onClick={() => setShowDeleteConfirm(true)} className="btn-danger" aria-label="حذف مالک"><Trash2 size={16} /></button>
         </div>
@@ -253,8 +259,16 @@ function OwnerDetail({ ownerId, onBack, onPropertyOpen }: { ownerId: string; onB
         ) : <EmptyState icon={<Phone size={36} />} title="تماسی ثبت نشده" />}
       </div>
 
+      <div className="detail-section !p-0 overflow-hidden">
+        <h3 className="detail-section-title !mb-0 px-5 py-4"><Clock size={17} className="text-amber-500" /> پیگیری‌ها <span className="mr-auto text-xs font-normal text-slate-400">{followups.length} مورد</span></h3>
+        {followups.length > 0 ? <div className="space-y-3 p-3">{followups.map((item) => <FollowupRecordCard key={item.id} followup={item} targetName={owner.name} onChanged={loadDetail} />)}</div> : <EmptyState icon={<Clock size={36} />} title="پیگیری‌ای ثبت نشده" />}
+      </div>
+
       {showCallModal && (
         <CallFormModal ownerId={ownerId} ownerName={owner.name} allowPropertySelection onClose={() => setShowCallModal(false)} onSaved={loadDetail} />
+      )}
+      {showFollowupModal && (
+        <FollowupFormModal ownerId={ownerId} ownerName={owner.name} allowPropertySelection onClose={() => setShowFollowupModal(false)} onSaved={loadDetail} />
       )}
       {showEdit && (
         <OwnerForm
