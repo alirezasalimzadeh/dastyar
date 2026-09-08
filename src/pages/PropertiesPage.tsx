@@ -72,6 +72,17 @@ const setUnitsPerFloor = (metadata: string, value: string) => {
   return [rest, value ? `[units_per_floor:${value}]` : ''].filter(Boolean).join('\n') || null;
 };
 
+const RENT_BUDGET_MARKER = /(?:^|\n)\[rent_budget_mins:(\d*),(\d*)\](?=\n|$)/;
+const getRentBudgetMins = (metadata?: string | null) => {
+  const match = metadata?.match(RENT_BUDGET_MARKER);
+  return { deposit: match?.[1] ?? '', rent: match?.[2] ?? '', isRange: Boolean(match) };
+};
+const setRentBudgetMins = (metadata: string, deposit: string, rent: string, enabled: boolean) => {
+  const rest = metadata.replace(RENT_BUDGET_MARKER, '').trim();
+  const marker = enabled ? `[rent_budget_mins:${deposit},${rent}]` : '';
+  return [rest, marker].filter(Boolean).join('\n');
+};
+
 const isUuid = (value: unknown): value is string =>
   typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 
@@ -294,6 +305,7 @@ export function PropertiesPage({ initialId }: { initialId?: string }) {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {pageItems.map((p) => {
               const status = getStatusInfo(PROPERTY_STATUSES, p.status);
+              const rentBudget = getRentBudgetMins(p.owner_followup_status);
               const sourceColleague = colleagueOptions.find((colleague) => colleague.id === p.owner_relationship);
               const locationParts = [p.neighborhoods?.name, p.counties?.name].filter(Boolean) as string[];
               const locationLine = locationParts.length > 0 ? locationParts.join('، ') : p.address || 'بدون موقعیت';
@@ -393,17 +405,17 @@ export function PropertiesPage({ initialId }: { initialId?: string }) {
                       <div className="flex items-start gap-5">
                         {p.deposit_price != null && (
                           <div>
-                            <p className="text-[11px] text-slate-400 mb-0.5">رهن</p>
+                            <p className="text-[11px] text-slate-400 mb-0.5">{p.transaction_role === 'applicant' ? 'بودجه رهن' : 'رهن'}</p>
                             <p className="text-sm font-extrabold text-slate-800">
-                              {formatPrice(p.deposit_price)} <span className="text-[10px] font-medium text-slate-400">تومان</span>
+                              {rentBudget.isRange && rentBudget.deposit ? `${formatPrice(Number(rentBudget.deposit))} تا ` : p.transaction_role === 'applicant' ? 'تا ' : ''}{formatPrice(p.deposit_price)} <span className="text-[10px] font-medium text-slate-400">تومان</span>
                             </p>
                           </div>
                         )}
                         {p.monthly_rent != null && (
                           <div>
-                            <p className="text-[11px] text-slate-400 mb-0.5">اجاره ماهانه</p>
+                            <p className="text-[11px] text-slate-400 mb-0.5">{p.transaction_role === 'applicant' ? 'بودجه اجاره ماهانه' : 'اجاره ماهانه'}</p>
                             <p className="text-sm font-extrabold text-slate-800">
-                              {p.monthly_rent === 0 ? 'بدون اجاره' : `${formatPrice(p.monthly_rent)} تومان`}
+                              {p.monthly_rent === 0 ? 'بدون اجاره' : `${rentBudget.isRange && rentBudget.rent ? `${formatPrice(Number(rentBudget.rent))} تا ` : p.transaction_role === 'applicant' ? 'تا ' : ''}${formatPrice(p.monthly_rent)} تومان`}
                             </p>
                           </div>
                         )}
@@ -504,6 +516,7 @@ function PropertyDetail({ propertyId, onBack, onEdit }: { propertyId: string; on
   }
 
   const status = getStatusInfo(PROPERTY_STATUSES, property.status);
+  const detailRentBudget = getRentBudgetMins(property.owner_followup_status);
 
   return (
     <div className="animate-fade-in space-y-4">
@@ -684,8 +697,8 @@ function PropertyDetail({ propertyId, onBack, onEdit }: { propertyId: string; on
             <h4 className="text-sm font-bold text-slate-700 mb-3">اطلاعات مالی</h4>
             <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
               {property.sale_price != null && <InfoField label="قیمت فروش" value={`${formatPrice(property.sale_price)} ت`} />}
-              {property.deposit_price != null && <InfoField label="رهن" value={`${formatPrice(property.deposit_price)} ت`} />}
-              {property.monthly_rent != null && <InfoField label="اجاره" value={`${formatPrice(property.monthly_rent)} ت`} />}
+              {property.deposit_price != null && <InfoField label={property.transaction_role === 'applicant' ? 'بودجه رهن' : 'رهن'} value={`${detailRentBudget.isRange && detailRentBudget.deposit ? `${formatPrice(Number(detailRentBudget.deposit))} تا ` : property.transaction_role === 'applicant' ? 'تا ' : ''}${formatPrice(property.deposit_price)} ت`} />}
+              {property.monthly_rent != null && <InfoField label={property.transaction_role === 'applicant' ? 'بودجه اجاره' : 'اجاره'} value={`${detailRentBudget.isRange && detailRentBudget.rent ? `${formatPrice(Number(detailRentBudget.rent))} تا ` : property.transaction_role === 'applicant' ? 'تا ' : ''}${formatPrice(property.monthly_rent)} ت`} />}
               {property.price_per_meter != null && <InfoField label="قیمت هر متر" value={`${formatPrice(property.price_per_meter)} ت`} />}
               {property.commission != null && <InfoField label="پورسانت" value={`${formatPrice(property.commission)} ت`} />}
               <InfoField label="قابل مذاکره" value={property.negotiable ? 'بله' : 'خیر'} />
@@ -1002,7 +1015,10 @@ function PropertyForm({ propertyId, onBack, onSaved }: { propertyId?: string; on
     sale_price: '',
     price_per_meter: '',
     deposit_price: '',
+    deposit_price_min: '',
     monthly_rent: '',
+    monthly_rent_min: '',
+    rent_budget_mode: 'max' as 'max' | 'range',
     negotiable: false,
     commission: '',
     contact_type: 'owner' as 'owner' | 'colleague',
@@ -1045,6 +1061,7 @@ function PropertyForm({ propertyId, onBack, onSaved }: { propertyId?: string; on
       }
       const ownerInfo = data.owners as { name?: string; phone?: string; notes?: string } | null;
       const text = (value: unknown) => value == null ? '' : String(value);
+      const rentBudget = getRentBudgetMins(data.owner_followup_status);
       setForm({
         title: text(data.title),
         description: text(data.description),
@@ -1076,7 +1093,10 @@ function PropertyForm({ propertyId, onBack, onSaved }: { propertyId?: string; on
         sale_price: text(data.sale_price),
         price_per_meter: text(data.price_per_meter),
         deposit_price: text(data.deposit_price),
+        deposit_price_min: rentBudget.deposit,
         monthly_rent: text(data.monthly_rent),
+        monthly_rent_min: rentBudget.rent,
+        rent_budget_mode: rentBudget.isRange ? 'range' : 'max',
         negotiable: Boolean(data.negotiable),
         commission: text(data.commission),
         contact_type: isUuid(data.owner_relationship) ? 'colleague' : 'owner',
@@ -1184,6 +1204,10 @@ function PropertyForm({ propertyId, onBack, onSaved }: { propertyId?: string; on
     if (step === 2 && !form.county_id) errs.county_id = 'شهرستان الزامی است';
     if (step === 2 && !form.address.trim()) errs.address = 'آدرس کامل الزامی است';
     if (step === 3 && !form.title.trim()) errs.title = 'عنوان الزامی است';
+    if (step === 4 && form.transaction_type === 'rent' && form.transaction_role === 'applicant' && form.rent_budget_mode === 'range') {
+      if (numericValue(form.deposit_price_min) > numericValue(form.deposit_price)) errs.rent_budget = 'حداقل پول پیش نباید از حداکثر بیشتر باشد';
+      else if (numericValue(form.monthly_rent_min) > numericValue(form.monthly_rent)) errs.rent_budget = 'حداقل اجاره نباید از حداکثر بیشتر باشد';
+    }
     if (step === 5 && form.contact_type === 'owner' && addingNewOwner && !form.owner_name.trim()) errs.owner_name = 'نام مالک الزامی است';
     if (step === 5 && form.contact_type === 'owner' && addingNewOwner && !form.owner_phone.trim()) errs.owner_phone = 'تلفن مالک الزامی است';
     else if (step === 5 && form.contact_type === 'owner' && addingNewOwner && !validatePhone(form.owner_phone)) errs.owner_phone = 'فرمت موبایل صحیح نیست (09123456789)';
@@ -1296,7 +1320,12 @@ function PropertyForm({ propertyId, onBack, onSaved }: { propertyId?: string; on
       commission: commissionBase > 0 ? commissionFromTransactionValue(commissionBase) : null,
       owner_notes: form.contact_type === 'owner' ? form.owner_notes || null : null,
       owner_followup_status: setUnitsPerFloor(
-        propertyMetadata,
+        setRentBudgetMins(
+          propertyMetadata,
+          form.deposit_price_min,
+          form.monthly_rent_min,
+          form.transaction_type === 'rent' && form.transaction_role === 'applicant' && form.rent_budget_mode === 'range',
+        ),
         form.property_type === 'apartment' ? form.units_per_floor : '',
       ),
       images: [...existingImages, ...preparedImages],
@@ -1596,16 +1625,43 @@ function PropertyForm({ propertyId, onBack, onSaved }: { propertyId?: string; on
               ...(form.bedrooms ? [{ label: 'خواب', value: form.bedrooms }] : []),
             ]} />
             {form.transaction_type === 'rent' ? (
-              <>
-                <div>
-                  <label className="label">رهن (تومان)</label>
-                  <MoneyInput value={form.deposit_price} onChange={changeDepositPrice} placeholder="100000000" />
+              form.transaction_role === 'applicant' ? (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <label className="label mb-0">بودجه رهن و اجاره</label>
+                    <div className="inline-flex rounded-lg bg-slate-100 p-1 text-xs">
+                      <button type="button" onClick={() => setForm({ ...form, rent_budget_mode: 'max', deposit_price_min: '', monthly_rent_min: '' })} className={`rounded-md px-3 py-1.5 ${form.rent_budget_mode === 'max' ? 'bg-white font-bold text-slate-800 shadow-sm' : 'text-slate-500'}`}>تا سقف</button>
+                      <button type="button" onClick={() => setForm({ ...form, rent_budget_mode: 'range' })} className={`rounded-md px-3 py-1.5 ${form.rent_budget_mode === 'range' ? 'bg-white font-bold text-slate-800 shadow-sm' : 'text-slate-500'}`}>بازه</button>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="label">{form.rent_budget_mode === 'range' ? 'پول پیش؛ از' : 'حداکثر پول پیش'} (تومان)</label>
+                      {form.rent_budget_mode === 'range' && <MoneyInput value={form.deposit_price_min} onChange={(value) => setForm({ ...form, deposit_price_min: value })} placeholder="400000000" wordsTone="indigo" />}
+                      {form.rent_budget_mode === 'range' && <label className="mt-2 block text-xs text-slate-500">تا</label>}
+                      <MoneyInput value={form.deposit_price} onChange={changeDepositPrice} placeholder="500000000" />
+                    </div>
+                    <div>
+                      <label className="label">{form.rent_budget_mode === 'range' ? 'اجاره ماهانه؛ از' : 'حداکثر اجاره ماهانه'} (تومان)</label>
+                      {form.rent_budget_mode === 'range' && <MoneyInput value={form.monthly_rent_min} onChange={(value) => setForm({ ...form, monthly_rent_min: value })} placeholder="4000000" wordsTone="indigo" />}
+                      {form.rent_budget_mode === 'range' && <label className="mt-2 block text-xs text-slate-500">تا</label>}
+                      <MoneyInput value={form.monthly_rent} onChange={changeMonthlyRent} placeholder="5000000" />
+                    </div>
+                  </div>
+                  {errors.rent_budget && <p className="text-xs text-red-500">{errors.rent_budget}</p>}
                 </div>
-                <div>
-                  <label className="label">اجاره ماهانه (تومان)</label>
-                  <MoneyInput value={form.monthly_rent} onChange={changeMonthlyRent} placeholder="3000000" />
-                </div>
-              </>
+              ) : (
+                <>
+                  <div>
+                    <label className="label">رهن (تومان)</label>
+                    <MoneyInput value={form.deposit_price} onChange={changeDepositPrice} placeholder="100000000" />
+                  </div>
+                  <div>
+                    <label className="label">اجاره ماهانه (تومان)</label>
+                    <MoneyInput value={form.monthly_rent} onChange={changeMonthlyRent} placeholder="3000000" />
+                  </div>
+                </>
+              )
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3 items-start">
                 <div>
