@@ -35,6 +35,13 @@ const supabase = createClient(url, serviceKey, {
   auth: { autoRefreshToken: false, persistSession: false },
 });
 
+const { error: adminAccessError } = await supabase.auth.admin.listUsers({ page: 1, perPage: 1 });
+if (adminAccessError) {
+  console.error('\nخطا: کلید واردشده Service Role / Secret Key نیست و دسترسی مدیریت کاربران ندارد.');
+  console.error('از Anon Key یا Publishable Key استفاده نکنید. کلید صحیح را فقط از Project Settings → API Keys → Secret keys بگیرید.\n');
+  process.exit(1);
+}
+
 const tables = [
   ['activities', 'id'], ['notifications', 'id'], ['property_matches', 'id'], ['property_requests', 'id'],
   ['calls', 'id'], ['follow_ups', 'id'], ['tasks', 'id'], ['deals', 'id'],
