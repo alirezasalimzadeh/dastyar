@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { Handshake, Plus, ArrowLeft, Trash2, TrendingUp } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth';
-import { DEAL_STATUSES, TRANSACTION_TYPES, getDealStatusInfo, getTransactionLabel, formatPrice, moneyToPersianWords, formatDate, toEnglishDigits } from '@/lib/constants';
+import { DEAL_STATUSES, TRANSACTION_TYPES, getDealStatusInfo, getTransactionLabel, formatPrice, moneyToPersianWords, rentToDepositEquivalent, commissionFromTransactionValue, formatDate, toEnglishDigits } from '@/lib/constants';
 import { Badge, EmptyState, Spinner, Modal, MoneyInput, PageHeader, ConfirmDialog } from '@/components/ui';
 
 export function DealsPage({ initialId }: { initialId?: string }) {
@@ -78,7 +78,8 @@ function DealModal({ onClose, onSaved }: { onClose: () => void; onSaved: () => v
   const [customerId, setCustomerId] = useState('');
   const [propertyId, setPropertyId] = useState('');
   const [dealValue, setDealValue] = useState('');
-  const [commission, setCommission] = useState('');
+  const [depositPrice, setDepositPrice] = useState('');
+  const [monthlyRent, setMonthlyRent] = useState('');
   const [status, setStatus] = useState('negotiating');
   const [notes, setNotes] = useState('');
   const [customers, setCustomers] = useState<any[]>([]);
@@ -99,21 +100,19 @@ function DealModal({ onClose, onSaved }: { onClose: () => void; onSaved: () => v
     } else setProperties([]);
   }, [propSearch]);
 
-  const dealAmount = dealValue ? Number(toEnglishDigits(dealValue)) : 0;
+  const numericMoney = (value: string) => value ? Number(toEnglishDigits(value)) : 0;
+  const rentalEquivalent = rentToDepositEquivalent(numericMoney(depositPrice), numericMoney(monthlyRent));
+  const dealAmount = transactionType === 'rent' ? rentalEquivalent : numericMoney(dealValue);
   const oneSideCommission = Math.round(dealAmount * 0.01);
-  const standardCommission = Math.round(dealAmount * 0.02);
-  const changeDealValue = (value: string) => {
-    setDealValue(value);
-    setCommission(value ? String(Math.round(Number(toEnglishDigits(value)) * 0.02)) : '');
-  };
+  const standardCommission = commissionFromTransactionValue(dealAmount);
 
   const handleSave = async () => {
     setSaving(true);
     const { data: deal } = await supabase.from('deals').insert({
       customer_id: customerId || null, property_id: propertyId || null,
       consultant_id: user?.id, transaction_type: transactionType,
-      deal_value: dealValue ? Number(toEnglishDigits(dealValue)) : null,
-      commission: commission ? Number(toEnglishDigits(commission)) : null,
+      deal_value: dealAmount > 0 ? dealAmount : null,
+      commission: standardCommission > 0 ? standardCommission : null,
       status, notes: notes || null,
     }).select().single();
     if (deal) {
@@ -137,10 +136,31 @@ function DealModal({ onClose, onSaved }: { onClose: () => void; onSaved: () => v
           <input className="input mb-2" placeholder="جستجوی فایل..." value={propSearch} onChange={(e) => setPropSearch(e.target.value)} />
           {properties.length > 0 && <div className="border border-slate-200 rounded-lg max-h-32 overflow-y-auto divide-y divide-slate-100">{properties.map((p) => <button key={p.id} onClick={() => { setPropertyId(p.id); setPropSearch(p.title); setProperties([]); }} className="w-full px-3 py-2 text-right hover:bg-slate-50 text-sm">{p.title}</button>)}</div>}
         </div>
-        <div>
-          <label className="label">ارزش معامله (تومان)</label>
-          <MoneyInput value={dealValue} onChange={changeDealValue} placeholder="2000000000" />
-        </div>
+        {transactionType === 'rent' ? (
+          <div className="space-y-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="label">پول پیش (تومان)</label>
+                <MoneyInput value={depositPrice} onChange={setDepositPrice} placeholder="100000000" />
+              </div>
+              <div>
+                <label className="label">اجاره ماهانه (تومان)</label>
+                <MoneyInput value={monthlyRent} onChange={setMonthlyRent} placeholder="3000000" />
+              </div>
+            </div>
+            {rentalEquivalent > 0 && (
+              <p className="text-xs text-slate-500">
+                ارزش معادل پول پیش: <strong>{formatPrice(rentalEquivalent)} تومان</strong>
+                <span className="mr-1 text-slate-400">(هر ۳ میلیون اجاره = ۱۰۰ میلیون پول پیش)</span>
+              </p>
+            )}
+          </div>
+        ) : (
+          <div>
+            <label className="label">ارزش معامله (تومان)</label>
+            <MoneyInput value={dealValue} onChange={setDealValue} placeholder="2000000000" />
+          </div>
+        )}
         {dealAmount > 0 && (
           <div>
             <label className="label">پورسانت</label>

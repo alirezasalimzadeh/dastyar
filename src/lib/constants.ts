@@ -323,6 +323,18 @@ export function moneyToPersianWords(value: string | number): string {
   return `${words.join(' و ')} تومان`;
 }
 
+// Rental conversion used by the office: every 3 million toman of monthly rent
+// is equivalent to 100 million toman of deposit.
+export function rentToDepositEquivalent(deposit: number, monthlyRent: number): number {
+  const safeDeposit = Number.isFinite(deposit) ? Math.max(0, deposit) : 0;
+  const safeRent = Number.isFinite(monthlyRent) ? Math.max(0, monthlyRent) : 0;
+  return Math.round(safeDeposit + (safeRent * 100_000_000) / 3_000_000);
+}
+
+export function commissionFromTransactionValue(value: number): number {
+  return Math.round(Math.max(0, Number.isFinite(value) ? value : 0) * 0.02);
+}
+
 // Format price compactly (میلیارد / میلیون)
 export function formatMoneyShort(value?: number | null): string {
   if (value == null) return '-';

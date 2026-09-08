@@ -10,6 +10,8 @@ import {
   PROPERTY_STATUSES,
   formatPrice,
   moneyToPersianWords,
+  rentToDepositEquivalent,
+  commissionFromTransactionValue,
   formatDate,
   getTransactionLabel,
   getCategoryLabel,
@@ -1088,7 +1090,7 @@ function PropertyForm({ propertyId, onBack, onSaved }: { propertyId?: string; on
   const wholeArea = (value: string) =>
     toEnglishDigits(value).split(/[.٫]/)[0].replace(/[^0-9]/g, '').replace(/^0+(?=\d)/, '');
   const numericValue = (value: string) => value ? Number(toEnglishDigits(value)) : 0;
-  const totalCommission = (total: number) => String(Math.round(total * 0.02));
+  const totalCommission = (total: number) => String(commissionFromTransactionValue(total));
 
   const changeTotalPrice = (value: string) => setForm((current) => {
     const area = numericValue(current.land_area);
@@ -1127,6 +1129,22 @@ function PropertyForm({ propertyId, onBack, onSaved }: { propertyId?: string; on
     if (total > 0) return { ...current, land_area: value, price_per_meter: String(Math.round(total / area)), commission: totalCommission(total) };
     return { ...current, land_area: value };
   });
+
+  const changeDepositPrice = (value: string) => setForm((current) => {
+    const equivalentValue = rentToDepositEquivalent(numericValue(value), numericValue(current.monthly_rent));
+    return { ...current, deposit_price: value, commission: equivalentValue > 0 ? totalCommission(equivalentValue) : '' };
+  });
+
+  const changeMonthlyRent = (value: string) => setForm((current) => {
+    const equivalentValue = rentToDepositEquivalent(numericValue(current.deposit_price), numericValue(value));
+    return { ...current, monthly_rent: value, commission: equivalentValue > 0 ? totalCommission(equivalentValue) : '' };
+  });
+
+  const transactionCommissionValue = form.transaction_type === 'rent'
+    ? rentToDepositEquivalent(numericValue(form.deposit_price), numericValue(form.monthly_rent))
+    : numericValue(form.sale_price);
+  const oneSideCommission = Math.round(transactionCommissionValue * 0.01);
+  const combinedCommission = commissionFromTransactionValue(transactionCommissionValue);
 
   const steps = [
     { title: 'نوع معامله', fields: ['transaction_type'] },
@@ -1203,6 +1221,15 @@ function PropertyForm({ propertyId, onBack, onSaved }: { propertyId?: string; on
     const enteredPricePerMeter = usesSalePrice && form.price_per_meter
       ? Number(toEnglishDigits(form.price_per_meter))
       : null;
+    const depositPrice = form.transaction_type === 'rent' && form.deposit_price
+      ? Number(toEnglishDigits(form.deposit_price))
+      : null;
+    const monthlyRent = form.transaction_type === 'rent' && form.monthly_rent
+      ? Number(toEnglishDigits(form.monthly_rent))
+      : null;
+    const commissionBase = form.transaction_type === 'rent'
+      ? rentToDepositEquivalent(depositPrice ?? 0, monthlyRent ?? 0)
+      : (salePrice ?? 0);
 
     const payload = {
       title: form.title,
@@ -1239,15 +1266,15 @@ function PropertyForm({ propertyId, onBack, onSaved }: { propertyId?: string; on
       pool: form.pool,
       security: form.security,
       sale_price: salePrice,
-      deposit_price: form.transaction_type === 'rent' && form.deposit_price ? Number(toEnglishDigits(form.deposit_price)) : null,
-      monthly_rent: form.transaction_type === 'rent' && form.monthly_rent ? Number(toEnglishDigits(form.monthly_rent)) : null,
+      deposit_price: depositPrice,
+      monthly_rent: monthlyRent,
       price_per_meter: enteredPricePerMeter ?? (
         salePrice != null && landArea != null && landArea > 0
           ? Math.round(salePrice / landArea)
           : null
       ),
       negotiable: form.negotiable,
-      commission: form.commission ? Number(toEnglishDigits(form.commission)) : null,
+      commission: commissionBase > 0 ? commissionFromTransactionValue(commissionBase) : null,
       owner_notes: form.contact_type === 'owner' ? form.owner_notes || null : null,
       images: [...existingImages, ...preparedImages],
     };
@@ -1514,11 +1541,11 @@ function PropertyForm({ propertyId, onBack, onSaved }: { propertyId?: string; on
               <>
                 <div>
                   <label className="label">رهن (تومان)</label>
-                  <MoneyInput value={form.deposit_price} onChange={(value) => setForm({ ...form, deposit_price: value })} placeholder="100000000" />
+                  <MoneyInput value={form.deposit_price} onChange={changeDepositPrice} placeholder="100000000" />
                 </div>
                 <div>
                   <label className="label">اجاره ماهانه (تومان)</label>
-                  <MoneyInput value={form.monthly_rent} onChange={(value) => setForm({ ...form, monthly_rent: value })} placeholder="3000000" />
+                  <MoneyInput value={form.monthly_rent} onChange={changeMonthlyRent} placeholder="3000000" />
                 </div>
               </>
             ) : (
@@ -1547,19 +1574,25 @@ function PropertyForm({ propertyId, onBack, onSaved }: { propertyId?: string; on
                 <p className="md:col-span-3 -mt-1 text-xs text-slate-500">با وارد کردن هر دو مقدار، مقدار سوم به‌صورت خودکار محاسبه می‌شود.</p>
               </div>
             )}
-            {form.transaction_type !== 'rent' && numericValue(form.sale_price) > 0 && (
+            {transactionCommissionValue > 0 && (
               <div>
                 <label className="label">پورسانت</label>
+                {form.transaction_type === 'rent' && (
+                  <p className="mb-2 text-xs text-slate-500">
+                    ارزش معادل پول پیش: <strong>{formatPrice(transactionCommissionValue)} تومان</strong>
+                    <span className="mr-1 text-slate-400">(هر ۳ میلیون اجاره = ۱۰۰ میلیون پول پیش)</span>
+                  </p>
+                )}
                 <div className="flex flex-wrap gap-2 text-xs">
                   <span className="inline-flex items-center rounded-full bg-slate-100 px-3 py-1.5 font-medium text-slate-700">
-                    سهم هر طرف (۱٪): {formatPrice(Math.round(numericValue(form.sale_price) * 0.01))} تومان
+                    سهم هر طرف (۱٪): {formatPrice(oneSideCommission)} تومان
                   </span>
                   <span className="inline-flex items-center rounded-full bg-amber-100 px-3 py-1.5 font-bold text-amber-800">
-                    مجموع (۲٪): {formatPrice(Math.round(numericValue(form.sale_price) * 0.02))} تومان
+                    مجموع (۲٪): {formatPrice(combinedCommission)} تومان
                   </span>
                 </div>
                 <p className="mt-2 rounded-md bg-amber-50 px-2.5 py-1 text-[11px] leading-5 text-amber-700">
-                  {moneyToPersianWords(Math.round(numericValue(form.sale_price) * 0.02))}
+                  {moneyToPersianWords(combinedCommission)}
                 </p>
               </div>
             )}
