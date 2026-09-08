@@ -63,6 +63,15 @@ const PROPERTY_SORTS = [
 const getStreet = (p: { street?: string | null; payment_conditions?: string | null }) =>
   p.street ?? p.payment_conditions ?? '';
 
+// Keep this apartment-only value in an existing, currently unused metadata column so
+// older Supabase installations do not need a schema migration.
+const UNITS_PER_FLOOR_MARKER = /(?:^|\n)\[units_per_floor:(\d+)\](?=\n|$)/;
+const getUnitsPerFloor = (metadata?: string | null) => metadata?.match(UNITS_PER_FLOOR_MARKER)?.[1] ?? '';
+const setUnitsPerFloor = (metadata: string, value: string) => {
+  const rest = metadata.replace(UNITS_PER_FLOOR_MARKER, '').trim();
+  return [rest, value ? `[units_per_floor:${value}]` : ''].filter(Boolean).join('\n') || null;
+};
+
 const isUuid = (value: unknown): value is string =>
   typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 
@@ -298,6 +307,7 @@ export function PropertiesPage({ initialId }: { initialId?: string }) {
               if (p.bedrooms != null) specs.push(`${formatPrice(p.bedrooms)} خواب`);
               if (p.rooms != null) specs.push(`${formatPrice(p.rooms)} اتاق`);
               if (p.floor != null) specs.push(p.total_floors != null ? `طبقه ${formatPrice(p.floor)} از ${formatPrice(p.total_floors)}` : `طبقه ${formatPrice(p.floor)}`);
+              if (p.unit_number) specs.push(`واحد ${p.unit_number}`);
               if (p.building_age != null) specs.push(`${formatPrice(p.building_age)} ساله`);
               if (p.parking) specs.push('پارکینگ');
               if (p.elevator) specs.push('آسانسور');
@@ -654,8 +664,10 @@ function PropertyDetail({ propertyId, onBack, onEdit }: { propertyId: string; on
             {property.building_area != null && <InfoField label="متراژ بنا" value={`${property.building_area} متر`} />}
             {property.bedrooms != null && <InfoField label="تعداد خواب" value={String(property.bedrooms)} />}
             {property.rooms != null && <InfoField label="تعداد اتاق" value={String(property.rooms)} />}
-            {property.floor != null && <InfoField label="طبقه" value={String(property.floor)} />}
-            {property.total_floors != null && <InfoField label="طبقات" value={String(property.total_floors)} />}
+            {property.floor != null && <InfoField label="طبقه ملک" value={String(property.floor)} />}
+            {property.total_floors != null && <InfoField label="تعداد کل طبقات" value={String(property.total_floors)} />}
+            {getUnitsPerFloor(property.owner_followup_status) && <InfoField label="تعداد واحد در هر طبقه" value={getUnitsPerFloor(property.owner_followup_status)} />}
+            {property.unit_number && <InfoField label="واحد ملک" value={property.unit_number} />}
             {property.building_age != null && <InfoField label="سن بنا" value={`${property.building_age} سال`} />}
             {property.parking && <InfoField label="پارکینگ" value="دارد" />}
             {property.elevator && <InfoField label="آسانسور" value="دارد" />}
@@ -957,6 +969,7 @@ function PropertyForm({ propertyId, onBack, onSaved }: { propertyId?: string; on
   const [addingNewOwner, setAddingNewOwner] = useState(false);
   const [editingConsultantId, setEditingConsultantId] = useState<string | null>(null);
   const [editingStatus, setEditingStatus] = useState<Property['status']>('active');
+  const [propertyMetadata, setPropertyMetadata] = useState('');
   const [saveError, setSaveError] = useState('');
   const [form, setForm] = useState({
     title: '',
@@ -975,6 +988,8 @@ function PropertyForm({ propertyId, onBack, onSaved }: { propertyId?: string; on
     rooms: '',
     floor: '',
     total_floors: '',
+    units_per_floor: '',
+    unit_number: '',
     building_age: '',
     parking: false,
     storage: false,
@@ -1047,6 +1062,8 @@ function PropertyForm({ propertyId, onBack, onSaved }: { propertyId?: string; on
         rooms: text(data.rooms),
         floor: text(data.floor),
         total_floors: text(data.total_floors),
+        units_per_floor: getUnitsPerFloor(data.owner_followup_status),
+        unit_number: text(data.unit_number),
         building_age: text(data.building_age),
         parking: Boolean(data.parking),
         storage: Boolean(data.storage),
@@ -1070,6 +1087,7 @@ function PropertyForm({ propertyId, onBack, onSaved }: { propertyId?: string; on
         owner_notes: text(ownerInfo?.notes ?? data.owner_notes),
       });
       setExistingImages(Array.isArray(data.images) ? data.images : []);
+      setPropertyMetadata(text(data.owner_followup_status));
       setAddingNewOwner(!data.owner_id && !isUuid(data.owner_relationship));
       setEditingConsultantId(data.assigned_consultant_id ?? null);
       setEditingStatus((data.status as Property['status']) ?? 'active');
@@ -1256,6 +1274,7 @@ function PropertyForm({ propertyId, onBack, onSaved }: { propertyId?: string; on
       rooms: form.rooms ? Number(toEnglishDigits(form.rooms)) : null,
       floor: form.floor ? Number(toEnglishDigits(form.floor)) : null,
       total_floors: form.total_floors ? Number(toEnglishDigits(form.total_floors)) : null,
+      unit_number: form.property_type === 'apartment' ? form.unit_number || null : null,
       building_age: form.building_age ? Number(toEnglishDigits(form.building_age)) : null,
       parking: form.parking,
       storage: form.storage,
@@ -1276,6 +1295,10 @@ function PropertyForm({ propertyId, onBack, onSaved }: { propertyId?: string; on
       negotiable: form.negotiable,
       commission: commissionBase > 0 ? commissionFromTransactionValue(commissionBase) : null,
       owner_notes: form.contact_type === 'owner' ? form.owner_notes || null : null,
+      owner_followup_status: setUnitsPerFloor(
+        propertyMetadata,
+        form.property_type === 'apartment' ? form.units_per_floor : '',
+      ),
       images: [...existingImages, ...preparedImages],
     };
     let { data, error } = isEditing && propertyId
@@ -1490,13 +1513,25 @@ function PropertyForm({ propertyId, onBack, onSaved }: { propertyId?: string; on
                 <input className="input" value={form.rooms} onChange={(e) => setForm({ ...form, rooms: e.target.value })} placeholder="3" dir="ltr" />
               </div>
               <div>
-                <label className="label">طبقه</label>
-                <input className="input" value={form.floor} onChange={(e) => setForm({ ...form, floor: e.target.value })} placeholder="2" dir="ltr" />
+                <label className="label">{form.property_type === 'apartment' ? 'طبقه ملک' : 'طبقه'}</label>
+                <input className="input" type="text" inputMode="numeric" value={form.floor} onChange={(e) => setForm({ ...form, floor: wholeArea(e.target.value) })} placeholder="2" dir="ltr" />
               </div>
               <div>
-                <label className="label">طبقات</label>
-                <input className="input" value={form.total_floors} onChange={(e) => setForm({ ...form, total_floors: e.target.value })} placeholder="6" dir="ltr" />
+                <label className="label">{form.property_type === 'apartment' ? 'تعداد کل طبقات آپارتمان' : 'طبقات'}</label>
+                <input className="input" type="text" inputMode="numeric" value={form.total_floors} onChange={(e) => setForm({ ...form, total_floors: wholeArea(e.target.value) })} placeholder="6" dir="ltr" />
               </div>
+              {form.property_type === 'apartment' && (
+                <>
+                  <div>
+                    <label className="label">تعداد واحد در هر طبقه</label>
+                    <input className="input" type="text" inputMode="numeric" value={form.units_per_floor} onChange={(e) => setForm({ ...form, units_per_floor: wholeArea(e.target.value) })} placeholder="2" dir="ltr" />
+                  </div>
+                  <div>
+                    <label className="label">واحد ملک</label>
+                    <input className="input" type="text" inputMode="numeric" value={form.unit_number} onChange={(e) => setForm({ ...form, unit_number: wholeArea(e.target.value) })} placeholder="4" dir="ltr" />
+                  </div>
+                </>
+              )}
               <div>
                 <label className="label">سن بنا</label>
                 <input className="input" value={form.building_age} onChange={(e) => setForm({ ...form, building_age: e.target.value })} placeholder="5" dir="ltr" />
