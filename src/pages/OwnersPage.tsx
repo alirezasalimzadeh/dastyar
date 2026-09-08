@@ -6,6 +6,7 @@ import { normalizePhone, validatePhone, formatDate, timeAgo, toEnglishDigits, to
 import { Badge, EmptyState, Spinner, Modal, PageHeader, Pagination, ConfirmDialog, CopyButton, SortSelect } from '@/components/ui';
 import type { Owner } from '@/lib/types';
 import { getColleagueRef, useColleagues, visibleOwnerTags, withColleagueRef } from '@/lib/colleagues';
+import { CallFormModal, CallRecordCard } from '@/components/calls';
 
 const PAGE_SIZE = 20;
 
@@ -168,13 +169,14 @@ function OwnerDetail({ ownerId, onBack, onPropertyOpen }: { ownerId: string; onB
   const [loading, setLoading] = useState(true);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showEdit, setShowEdit] = useState(false);
+  const [showCallModal, setShowCallModal] = useState(false);
 
   const loadDetail = useCallback(async () => {
     setLoading(true);
     const [ownerRes, propsRes, callsRes] = await Promise.all([
       supabase.from('owners').select('*').eq('id', ownerId).maybeSingle(),
       supabase.from('properties').select('id, title, transaction_type, status, sale_price, deposit_price').eq('owner_id', ownerId).order('created_at', { ascending: false }),
-      supabase.from('calls').select('*').eq('owner_id', ownerId).order('call_date', { ascending: false }).limit(10),
+      supabase.from('calls').select('*, properties(title)').eq('owner_id', ownerId).order('call_date', { ascending: false }).limit(20),
     ]);
     setOwner(ownerRes.data as Owner);
     setProperties(propsRes.data ?? []);
@@ -211,6 +213,7 @@ function OwnerDetail({ ownerId, onBack, onPropertyOpen }: { ownerId: string; onB
         )}
         <div className="flex gap-2 mt-5 flex-wrap border-t border-slate-200/70 pt-4">
           <a href={`tel:${normalizePhone(owner.phone)}`} className="btn-primary"><Phone size={16} /> تماس</a>
+          <button onClick={() => setShowCallModal(true)} className="btn-secondary"><Phone size={16} /> ثبت تماس</button>
           <button onClick={() => setShowEdit(true)} className="btn-secondary"><Pencil size={16} /> ویرایش مالک</button>
           <button onClick={() => setShowDeleteConfirm(true)} className="btn-danger" aria-label="حذف مالک"><Trash2 size={16} /></button>
         </div>
@@ -246,20 +249,13 @@ function OwnerDetail({ ownerId, onBack, onPropertyOpen }: { ownerId: string; onB
       <div className="detail-section !p-0 overflow-hidden">
         <h3 className="detail-section-title !mb-0 px-5 py-4"><Phone size={17} className="text-blue-500" /> تماس‌ها <span className="mr-auto text-xs font-normal text-slate-400">{calls.length} تماس</span></h3>
         {calls.length > 0 ? (
-          <div className="divide-y divide-slate-100">
-            {calls.map((c) => (
-              <div key={c.id} className="px-5 py-3">
-                <div className="flex items-center justify-between mb-1">
-                  <span className="text-sm font-medium text-slate-700">{c.result ?? 'تماس'}</span>
-                  <span className="text-xs text-slate-400">{timeAgo(c.call_date)}</span>
-                </div>
-                {c.notes && <p className="text-xs text-slate-500">{c.notes}</p>}
-              </div>
-            ))}
-          </div>
+          <div className="space-y-3 p-3">{calls.map((call) => <CallRecordCard key={call.id} call={call} targetName={owner.name} />)}</div>
         ) : <EmptyState icon={<Phone size={36} />} title="تماسی ثبت نشده" />}
       </div>
 
+      {showCallModal && (
+        <CallFormModal ownerId={ownerId} ownerName={owner.name} allowPropertySelection onClose={() => setShowCallModal(false)} onSaved={loadDetail} />
+      )}
       {showEdit && (
         <OwnerForm
           owner={owner}

@@ -30,6 +30,7 @@ import { useActiveCounties, useCountyNeighborhoods } from '@/lib/geo';
 import type { Customer } from '@/lib/types';
 import { getFieldSections, getFieldLabel, type FieldDef } from '@/lib/propertyFields';
 import { useColleagues } from '@/lib/colleagues';
+import { CallFormModal, CallRecordCard } from '@/components/calls';
 
 const PAGE_SIZE = 20;
 
@@ -349,7 +350,7 @@ function CustomerDetail({ customerId, onBack, onEdit }: { customerId: string; on
     setLoading(true);
     const [custRes, callsRes, fuRes, actRes, matchRes] = await Promise.all([
       supabase.from('customers').select('*').eq('id', customerId).maybeSingle(),
-      supabase.from('calls').select('*').eq('customer_id', customerId).order('call_date', { ascending: false }).limit(10),
+      supabase.from('calls').select('*, properties(title)').eq('customer_id', customerId).order('call_date', { ascending: false }).limit(20),
       supabase.from('follow_ups').select('*').eq('customer_id', customerId).order('due_date', { ascending: false }).limit(10),
       supabase.from('activities').select('*').eq('entity_type', 'customer').eq('entity_id', customerId).order('created_at', { ascending: false }).limit(10),
       supabase.from('property_matches').select('*, properties(id, title, transaction_type, category, sale_price, deposit_price, monthly_rent, land_area, building_area, bedrooms, parking, elevator)').eq('customer_id', customerId).order('score', { ascending: false }).limit(5),
@@ -499,23 +500,9 @@ function CustomerDetail({ customerId, onBack, onEdit }: { customerId: string; on
       )}
 
       {activeTab === 'calls' && (
-        <div className="card overflow-hidden">
-          {calls.length > 0 ? (
-            <div className="divide-y divide-slate-100">
-              {calls.map((call) => (
-                <div key={call.id} className="px-5 py-3">
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-sm font-medium text-slate-700">{call.result ?? 'تماس'}</span>
-                    <span className="text-xs text-slate-400">{timeAgo(call.call_date)}</span>
-                  </div>
-                  {call.notes && <p className="text-xs text-slate-500">{call.notes}</p>}
-                </div>
-              ))}
-            </div>
-          ) : (
-            <EmptyState icon={<Phone size={36} />} title="تماسی ثبت نشده" />
-          )}
-        </div>
+        calls.length > 0 ? (
+          <div className="space-y-3">{calls.map((call) => <CallRecordCard key={call.id} call={call} targetName={customer.name} />)}</div>
+        ) : <EmptyState icon={<Phone size={36} />} title="تماسی ثبت نشده" />
       )}
 
       {activeTab === 'followups' && (
@@ -582,7 +569,7 @@ function CustomerDetail({ customerId, onBack, onEdit }: { customerId: string; on
 
       {/* Modals */}
       {showCallModal && (
-        <CallModal customerId={customerId} customerName={customer.name} onClose={() => setShowCallModal(false)} onSaved={loadDetail} />
+        <CallFormModal customerId={customerId} customerName={customer.name} allowPropertySelection onClose={() => setShowCallModal(false)} onSaved={loadDetail} />
       )}
       {showFollowupModal && (
         <FollowupModal customerId={customerId} onClose={() => setShowFollowupModal(false)} onSaved={loadDetail} />
@@ -678,84 +665,6 @@ function CustomerPrefsDisplay({ prefs, category, propertyTypes, role, transactio
         );
       })}
     </div>
-  );
-}
-
-// Call Modal
-function CallModal({ customerId, customerName, onClose, onSaved }: { customerId: string; customerName: string; onClose: () => void; onSaved: () => void }) {
-  const { user } = useAuth();
-  const [result, setResult] = useState('');
-  const [notes, setNotes] = useState('');
-  const [nextAction, setNextAction] = useState('');
-  const [nextFollowup, setNextFollowup] = useState('');
-  const [saving, setSaving] = useState(false);
-
-  const handleSave = async () => {
-    setSaving(true);
-    await supabase.from('calls').insert({
-      customer_id: customerId,
-      consultant_id: user?.id,
-      call_date: new Date().toISOString(),
-      result: result || null,
-      notes,
-      next_action: nextAction || null,
-      next_followup: nextFollowup || null,
-    });
-    if (nextFollowup) {
-      await supabase.from('customers').update({ last_contact: new Date().toISOString(), next_followup: nextFollowup }).eq('id', customerId);
-    } else {
-      await supabase.from('customers').update({ last_contact: new Date().toISOString() }).eq('id', customerId);
-    }
-    await supabase.from('activities').insert({
-      user_id: user?.id,
-      entity_type: 'customer',
-      entity_id: customerId,
-      action: 'call_recorded',
-      description: `تماس با ${customerName} - ${result || 'ثبت شد'}`,
-    });
-    setSaving(false);
-    onSaved();
-    onClose();
-  };
-
-  return (
-    <Modal open={true} onClose={onClose} title={`ثبت تماس با ${customerName}`}>
-      <div className="space-y-4">
-        <div>
-          <label className="label">نتیجه تماس</label>
-          <select className="input" value={result} onChange={(e) => setResult(e.target.value)}>
-            <option value="">انتخاب کنید...</option>
-            {[
-              { value: 'answered', label: 'پاسخ داد' },
-              { value: 'no_answer', label: 'پاسخ نداد' },
-              { value: 'interested', label: 'علاقه‌مند است' },
-              { value: 'needs_review', label: 'نیاز به بررسی دارد' },
-              { value: 'introduced', label: 'فایل مناسب معرفی شد' },
-              { value: 'viewing_scheduled', label: 'بازدید تعیین شد' },
-              { value: 'deal_done', label: 'معامله انجام شد' },
-              { value: 'disinterested', label: 'فعلاً منصرف شد' },
-              { value: 'wrong_number', label: 'شماره اشتباه' },
-              { value: 'needs_followup', label: 'نیازمند پیگیری' },
-            ].map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
-          </select>
-        </div>
-        <div>
-          <label className="label">یادداشت</label>
-          <textarea className="input min-h-[80px]" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="جزئیات تماس..." />
-        </div>
-        <div>
-          <label className="label">اقدام بعدی</label>
-          <input className="input" value={nextAction} onChange={(e) => setNextAction(e.target.value)} placeholder="مثلا: ارسال پیامک فایل" />
-        </div>
-        <div>
-          <label className="label">زمان پیگیری بعدی</label>
-          <input type="date" className="input" value={nextFollowup} onChange={(e) => setNextFollowup(e.target.value)} />
-        </div>
-        <button onClick={handleSave} disabled={saving} className="btn-primary w-full">
-          {saving ? 'در حال ذخیره...' : 'ذخیره'}
-        </button>
-      </div>
-    </Modal>
   );
 }
 

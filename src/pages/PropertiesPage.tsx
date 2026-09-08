@@ -32,6 +32,7 @@ import { Badge, EmptyState, Spinner, Modal, MoneyInput, PageHeader, Pagination, 
 import { useActiveCounties, useCountyNeighborhoods } from '@/lib/geo';
 import type { Property, Owner, Colleague } from '@/lib/types';
 import { ownerToColleague, useColleagues } from '@/lib/colleagues';
+import { CallFormModal, CallRecordCard } from '@/components/calls';
 import propertyPlaceholder from '@/assets/property-placeholder.jpg';
 import {
   MAX_PROPERTY_IMAGES,
@@ -625,13 +626,14 @@ function PropertyDetail({ propertyId, onBack, onEdit }: { propertyId: string; on
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'info' | 'matches' | 'calls' | 'followups'>('info');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showCallModal, setShowCallModal] = useState(false);
   const [selectedImageIndex, setSelectedImageIndex] = useState<number | null>(null);
 
   const loadDetail = useCallback(async () => {
     setLoading(true);
     const [richPropRes, callsRes, fuRes, matchRes] = await Promise.all([
       supabase.from('properties').select('*, owners(name, phone), counties(name), neighborhoods(name)').eq('id', propertyId).maybeSingle(),
-      supabase.from('calls').select('*').eq('property_id', propertyId).order('call_date', { ascending: false }).limit(10),
+      supabase.from('calls').select('*, customers(first_name, last_name), owners(name), properties(title)').eq('property_id', propertyId).order('call_date', { ascending: false }).limit(20),
       supabase.from('follow_ups').select('*').eq('property_id', propertyId).order('due_date', { ascending: false }).limit(10),
       supabase.from('property_matches').select('*, customers(id, first_name, last_name, mobile, temperature)').eq('property_id', propertyId).order('score', { ascending: false }).limit(5),
     ]);
@@ -734,6 +736,7 @@ function PropertyDetail({ propertyId, onBack, onEdit }: { propertyId: string; on
               <Phone size={16} /> تماس با مالک
             </a>
           ) : null}
+          {owner && <button type="button" onClick={() => setShowCallModal(true)} className="btn-secondary"><Phone size={16} /> ثبت تماس</button>}
           <button onClick={onEdit} className="btn-secondary">
             <Pencil size={16} /> ویرایش آگهی
           </button>
@@ -916,23 +919,9 @@ function PropertyDetail({ propertyId, onBack, onEdit }: { propertyId: string; on
       )}
 
       {activeTab === 'calls' && (
-        <div className="card overflow-hidden">
-          {calls.length > 0 ? (
-            <div className="divide-y divide-slate-100">
-              {calls.map((call) => (
-                <div key={call.id} className="px-5 py-3">
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-sm font-medium text-slate-700">{call.result ?? 'تماس'}</span>
-                    <span className="text-xs text-slate-400">{formatDate(call.call_date)}</span>
-                  </div>
-                  {call.notes && <p className="text-xs text-slate-500">{call.notes}</p>}
-                </div>
-              ))}
-            </div>
-          ) : (
-            <EmptyState icon={<Phone size={36} />} title="تماسی ثبت نشده" />
-          )}
-        </div>
+        calls.length > 0 ? (
+          <div className="space-y-3">{calls.map((call) => <CallRecordCard key={call.id} call={call} targetName={owner?.name} />)}</div>
+        ) : <EmptyState icon={<Phone size={36} />} title="تماسی ثبت نشده" />
       )}
 
       {activeTab === 'followups' && (
@@ -1013,6 +1002,16 @@ function PropertyDetail({ propertyId, onBack, onEdit }: { propertyId: string; on
         </div>
       )}
 
+      {showCallModal && owner && (
+        <CallFormModal
+          ownerId={owner.id}
+          ownerName={owner.name}
+          propertyId={property.id}
+          propertyTitle={property.title}
+          onClose={() => setShowCallModal(false)}
+          onSaved={loadDetail}
+        />
+      )}
       <ConfirmDialog
         open={showDeleteConfirm}
         onClose={() => setShowDeleteConfirm(false)}
