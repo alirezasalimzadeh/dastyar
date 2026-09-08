@@ -1204,9 +1204,15 @@ function PropertyForm({ propertyId, onBack, onSaved }: { propertyId?: string; on
     if (step === 2 && !form.county_id) errs.county_id = 'شهرستان الزامی است';
     if (step === 2 && !form.address.trim()) errs.address = 'آدرس کامل الزامی است';
     if (step === 3 && !form.title.trim()) errs.title = 'عنوان الزامی است';
-    if (step === 4 && form.transaction_type === 'rent' && form.transaction_role === 'applicant' && form.rent_budget_mode === 'range') {
-      if (numericValue(form.deposit_price_min) > numericValue(form.deposit_price)) errs.rent_budget = 'حداقل پول پیش نباید از حداکثر بیشتر باشد';
-      else if (numericValue(form.monthly_rent_min) > numericValue(form.monthly_rent)) errs.rent_budget = 'حداقل اجاره نباید از حداکثر بیشتر باشد';
+    if (form.transaction_type === 'rent' && form.transaction_role === 'applicant' && form.rent_budget_mode === 'range') {
+      const minDeposit = numericValue(form.deposit_price_min);
+      const maxDeposit = numericValue(form.deposit_price);
+      const minRent = numericValue(form.monthly_rent_min);
+      const maxRent = numericValue(form.monthly_rent);
+      if (Boolean(form.deposit_price_min) !== Boolean(form.deposit_price)) errs.rent_budget = 'برای بازه پول پیش، هر دو مبلغ «از» و «تا» را وارد کنید';
+      else if (form.deposit_price_min && form.deposit_price && minDeposit >= maxDeposit) errs.rent_budget = 'مبلغ «از» پول پیش باید از مبلغ «تا» کمتر باشد';
+      else if (Boolean(form.monthly_rent_min) !== Boolean(form.monthly_rent)) errs.rent_budget = 'برای بازه اجاره، هر دو مبلغ «از» و «تا» را وارد کنید';
+      else if (form.monthly_rent_min && form.monthly_rent && minRent >= maxRent) errs.rent_budget = 'مبلغ «از» اجاره باید از مبلغ «تا» کمتر باشد';
     }
     if (step === 5 && form.contact_type === 'owner' && addingNewOwner && !form.owner_name.trim()) errs.owner_name = 'نام مالک الزامی است';
     if (step === 5 && form.contact_type === 'owner' && addingNewOwner && !form.owner_phone.trim()) errs.owner_phone = 'تلفن مالک الزامی است';
@@ -1214,6 +1220,7 @@ function PropertyForm({ propertyId, onBack, onSaved }: { propertyId?: string; on
     if (step === 5 && form.contact_type === 'owner' && !addingNewOwner && !form.owner_id) errs.owner_id = 'انتخاب مالک الزامی است';
     if (step === 5 && form.contact_type === 'colleague' && !form.colleague_id) errs.colleague_id = 'انتخاب همکار الزامی است';
     setErrors(errs);
+    if (errs.rent_budget && step !== 4) setStep(4);
     return Object.keys(errs).length === 0;
   };
 
