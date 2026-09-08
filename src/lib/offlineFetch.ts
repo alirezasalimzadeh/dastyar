@@ -1,7 +1,7 @@
 import { openDB } from 'idb';
 
-const CACHE_NAME = 'dastyar-data-v1';
-const DB_NAME = 'dastyar-offline-v1';
+const CACHE_NAME = 'dastyar-data-v2';
+const DB_NAME = 'dastyar-offline-v2';
 const nativeFetch = globalThis.fetch.bind(globalThis);
 let latestRestRequest: Request | null = null;
 
