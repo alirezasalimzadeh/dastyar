@@ -20,12 +20,14 @@ export function MoneyInput({
   placeholder,
   className = '',
   wordsTone = 'emerald',
+  showWords = true,
 }: {
   value: string;
   onChange: (value: string) => void;
   placeholder?: string;
   className?: string;
   wordsTone?: 'emerald' | 'amber' | 'indigo';
+  showWords?: boolean;
 }) {
   const words = moneyToPersianWords(value);
   const wordsToneClass = {
@@ -44,7 +46,7 @@ export function MoneyInput({
         onChange={(event) => onChange(normalizeMoneyInput(event.target.value))}
         placeholder={formatMoneyInput(placeholder ?? '')}
       />
-      {words && (
+      {showWords && words && (
         <p className={`mt-1.5 min-h-5 rounded-md px-2.5 py-1 text-right text-[11px] leading-5 ${wordsToneClass}`}>
           {words}
         </p>
