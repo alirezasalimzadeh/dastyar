@@ -1209,10 +1209,10 @@ function PropertyForm({ propertyId, onBack, onSaved }: { propertyId?: string; on
       const maxDeposit = numericValue(form.deposit_price);
       const minRent = numericValue(form.monthly_rent_min);
       const maxRent = numericValue(form.monthly_rent);
-      if (Boolean(form.deposit_price_min) !== Boolean(form.deposit_price)) errs.rent_budget = 'برای بازه پول پیش، هر دو مبلغ «از» و «تا» را وارد کنید';
-      else if (form.deposit_price_min && form.deposit_price && minDeposit >= maxDeposit) errs.rent_budget = 'مبلغ «از» پول پیش باید از مبلغ «تا» کمتر باشد';
-      else if (Boolean(form.monthly_rent_min) !== Boolean(form.monthly_rent)) errs.rent_budget = 'برای بازه اجاره، هر دو مبلغ «از» و «تا» را وارد کنید';
-      else if (form.monthly_rent_min && form.monthly_rent && minRent >= maxRent) errs.rent_budget = 'مبلغ «از» اجاره باید از مبلغ «تا» کمتر باشد';
+      if (Boolean(form.deposit_price_min) !== Boolean(form.deposit_price)) errs.rent_budget = 'لطفاً حداقل و حداکثر بودجه پول پیش را کامل وارد کنید.';
+      else if (form.deposit_price_min && form.deposit_price && minDeposit >= maxDeposit) errs.rent_budget = 'حداقل بودجه پول پیش باید کمتر از حداکثر بودجه باشد.';
+      else if (Boolean(form.monthly_rent_min) !== Boolean(form.monthly_rent)) errs.rent_budget = 'لطفاً حداقل و حداکثر بودجه اجاره ماهانه را کامل وارد کنید.';
+      else if (form.monthly_rent_min && form.monthly_rent && minRent >= maxRent) errs.rent_budget = 'حداقل بودجه اجاره ماهانه باید کمتر از حداکثر بودجه باشد.';
     }
     if (step === 5 && form.contact_type === 'owner' && addingNewOwner && !form.owner_name.trim()) errs.owner_name = 'نام مالک الزامی است';
     if (step === 5 && form.contact_type === 'owner' && addingNewOwner && !form.owner_phone.trim()) errs.owner_phone = 'تلفن مالک الزامی است';
