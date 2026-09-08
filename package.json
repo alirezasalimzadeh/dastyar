@@ -10,7 +10,8 @@
     "preview": "npm run build && vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.app.json",
     "deploy:pwa": "npm run build && gh-pages -d dist",
-    "backup:postgres": "bash scripts/postgres-backup.sh"
+    "backup:postgres": "bash scripts/postgres-backup.sh",
+    "reset:database": "node scripts/reset-database.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.57.4",
