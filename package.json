@@ -8,15 +8,21 @@
     "build": "vite build",
     "lint": "eslint .",
     "preview": "npm run build && vite preview",
-    "typecheck": "tsc --noEmit -p tsconfig.app.json"
+    "typecheck": "tsc --noEmit -p tsconfig.app.json",
+    "android:sync": "node scripts/check-mobile-env.mjs && npm run build && cap sync android",
+    "android:open": "npm run android:sync && cap open android",
+    "android:apk": "npm run android:sync && cd android && ./gradlew assembleDebug"
   },
   "dependencies": {
+    "@capacitor/android": "^8.5.1",
+    "@capacitor/core": "^8.5.1",
     "@supabase/supabase-js": "^2.57.4",
     "lucide-react": "^0.446.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },
   "devDependencies": {
+    "@capacitor/cli": "^8.5.1",
     "@eslint/js": "^9.9.1",
     "@types/react": "^18.3.5",
     "@types/react-dom": "^18.3.0",

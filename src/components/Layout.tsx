@@ -1,4 +1,4 @@
-import { ReactNode, useState } from 'react';
+import { ReactNode, useEffect, useState } from 'react';
 import {
   LayoutDashboard,
   Users,
@@ -18,9 +18,15 @@ import {
   LogOut,
   Bell,
   Search,
+  Download,
 } from 'lucide-react';
 import { useAuth } from '@/lib/auth';
 import { getUserRoleLabel } from '@/lib/constants';
+
+interface BeforeInstallPromptEvent extends Event {
+  prompt: () => Promise<void>;
+  userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>;
+}
 
 interface NavItem {
   key: string;
@@ -58,6 +64,24 @@ export function Layout({
   const { profile, signOut } = useAuth();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
+  const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null);
+  const [installDismissed, setInstallDismissed] = useState(false);
+
+  useEffect(() => {
+    const onInstallPrompt = (event: Event) => {
+      event.preventDefault();
+      setInstallPrompt(event as BeforeInstallPromptEvent);
+    };
+    window.addEventListener('beforeinstallprompt', onInstallPrompt);
+    return () => window.removeEventListener('beforeinstallprompt', onInstallPrompt);
+  }, []);
+
+  const installApp = async () => {
+    if (!installPrompt) return;
+    await installPrompt.prompt();
+    await installPrompt.userChoice;
+    setInstallPrompt(null);
+  };
 
   const handleNav = (key: string) => {
     onNavigate(key);
@@ -184,6 +208,15 @@ export function Layout({
           {children}
         </main>
       </div>
+
+      {installPrompt && !installDismissed && (
+        <div className="fixed bottom-20 left-3 right-3 z-40 mx-auto flex max-w-md items-center gap-3 rounded-2xl border border-blue-200 bg-white p-3 shadow-xl lg:bottom-5 lg:left-5 lg:right-auto">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600"><Download size={19} /></div>
+          <div className="min-w-0 flex-1"><p className="text-sm font-bold text-slate-800">نصب دستیار روی گوشی</p><p className="text-[11px] text-slate-500">دسترسی سریع مثل یک اپلیکیشن</p></div>
+          <button type="button" onClick={installApp} className="rounded-lg bg-slate-900 px-3 py-2 text-xs font-bold text-white">نصب</button>
+          <button type="button" onClick={() => setInstallDismissed(true)} className="p-1 text-slate-400" aria-label="بستن"><X size={16} /></button>
+        </div>
+      )}
 
       {/* Mobile Bottom Nav */}
       <nav className="lg:hidden fixed bottom-0 inset-x-0 z-30 bg-white border-t border-slate-200 flex items-center justify-around px-2 py-1.5">
