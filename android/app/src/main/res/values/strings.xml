@@ -1,7 +1,0 @@
-<?xml version='1.0' encoding='utf-8'?>
-<resources>
-    <string name="app_name">دستیار مشاور</string>
-    <string name="title_activity_main">دستیار مشاور</string>
-    <string name="package_name">ir.dastyar.crm</string>
-    <string name="custom_url_scheme">ir.dastyar.crm</string>
-</resources>
