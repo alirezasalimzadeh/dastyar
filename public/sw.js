@@ -1,5 +1,7 @@
 const CACHE_NAME = 'dastyar-shell-v1';
-const APP_SHELL = ['/', '/index.html', '/manifest.webmanifest', '/icon-192.png', '/icon-512.png'];
+const baseUrl = new URL('./', self.registration.scope);
+const appUrl = (path = '') => new URL(path, baseUrl).href;
+const APP_SHELL = [appUrl(), appUrl('index.html'), appUrl('manifest.webmanifest'), appUrl('icon-192.png'), appUrl('icon-512.png')];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(APP_SHELL)));
@@ -20,7 +22,7 @@ self.addEventListener('fetch', (event) => {
   if (url.origin !== self.location.origin) return;
 
   if (request.mode === 'navigate') {
-    event.respondWith(fetch(request).catch(() => caches.match('/index.html')));
+    event.respondWith(fetch(request).catch(() => caches.match(appUrl('index.html'))));
     return;
   }
 
