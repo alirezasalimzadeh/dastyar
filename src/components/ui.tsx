@@ -146,13 +146,13 @@ export function SortSelect({
   onChange: (v: string) => void;
 }) {
   return (
-    <div className="mb-4 flex items-center gap-2">
+    <div className="mb-4 flex min-w-0 items-center gap-2">
       <span className="shrink-0 text-xs font-medium text-slate-500">مرتب‌سازی بر اساس</span>
-      <div className="relative min-w-0 sm:min-w-48">
+      <div className="relative min-w-0 flex-1 sm:flex-none">
         <ArrowUpDown size={15} className="pointer-events-none absolute right-3 top-1/2 z-10 -translate-y-1/2 text-slate-500" />
         <select
           aria-label="مرتب‌سازی"
-          className="h-9 max-w-full appearance-none rounded-xl border border-slate-200 bg-white py-1.5 pl-8 pr-9 text-xs font-bold text-slate-700 shadow-sm outline-none transition-colors hover:border-slate-300 focus:border-slate-500 focus:ring-2 focus:ring-slate-100"
+          className="h-9 w-full appearance-none truncate rounded-xl border border-slate-200 bg-white py-1.5 pl-8 pr-9 text-xs font-bold text-slate-700 shadow-sm outline-none transition-colors hover:border-slate-300 focus:border-slate-500 focus:ring-2 focus:ring-slate-100 sm:w-52"
           value={value}
           onChange={(e) => onChange(e.target.value)}
         >

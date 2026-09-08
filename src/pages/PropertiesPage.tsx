@@ -365,8 +365,6 @@ export function PropertiesPage({ initialId }: { initialId?: string }) {
         </div>
       )}
 
-      <SortSelect value={sortKey} options={PROPERTY_SORTS} onChange={(v) => { setSortKey(v); setPage(1); }} />
-
       {showFilters && (
         <div className="card mb-4 overflow-hidden animate-slide-up border-slate-200">
           <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50/70 px-4 py-3">
@@ -452,6 +450,8 @@ export function PropertiesPage({ initialId }: { initialId?: string }) {
           </div>
         </div>
       )}
+
+      <SortSelect value={sortKey} options={PROPERTY_SORTS} onChange={(v) => { setSortKey(v); setPage(1); }} />
 
       {loadError && !loading && (
         <div className="mb-4 flex items-center justify-between gap-3 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
