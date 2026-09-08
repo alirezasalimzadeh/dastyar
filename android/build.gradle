@@ -1,8 +1,9 @@
 // Top-level build file where you can add configuration options common to all sub-projects/modules.
 
 buildscript {
-
     repositories {
+        // Google Maven may be unavailable on some networks; keep a verified mirror first.
+        maven { url 'https://maven.aliyun.com/repository/google' }
         google()
         mavenCentral()
     }
@@ -19,6 +20,7 @@ apply from: "variables.gradle"
 
 allprojects {
     repositories {
+        maven { url 'https://maven.aliyun.com/repository/google' }
         google()
         mavenCentral()
     }
