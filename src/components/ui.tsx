@@ -1,5 +1,5 @@
 import { ReactNode, useState } from 'react';
-import { Loader2, Copy, Check, ArrowUpDown } from 'lucide-react';
+import { Loader2, Copy, Check, ArrowUpDown, ChevronDown } from 'lucide-react';
 import { copyText, formatMoneyInput, moneyToPersianWords, normalizeMoneyInput } from '@/lib/constants';
 
 export function Spinner({ size = 20 }: { size?: number }) {
@@ -146,17 +146,22 @@ export function SortSelect({
   onChange: (v: string) => void;
 }) {
   return (
-    <div className="flex items-center gap-2 mb-4">
-      <ArrowUpDown size={16} className="text-slate-400 shrink-0" />
-      <select
-        className="input flex-1"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-      >
-        {options.map((o) => (
-          <option key={o.value} value={o.value}>{o.label}</option>
-        ))}
-      </select>
+    <div className="mb-4 flex items-center gap-2">
+      <span className="shrink-0 text-xs font-medium text-slate-500">مرتب‌سازی بر اساس</span>
+      <div className="relative min-w-0 sm:min-w-48">
+        <ArrowUpDown size={15} className="pointer-events-none absolute right-3 top-1/2 z-10 -translate-y-1/2 text-slate-500" />
+        <select
+          aria-label="مرتب‌سازی"
+          className="h-9 max-w-full appearance-none rounded-xl border border-slate-200 bg-white py-1.5 pl-8 pr-9 text-xs font-bold text-slate-700 shadow-sm outline-none transition-colors hover:border-slate-300 focus:border-slate-500 focus:ring-2 focus:ring-slate-100"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+        >
+          {options.map((o) => (
+            <option key={o.value} value={o.value}>{o.label}</option>
+          ))}
+        </select>
+        <ChevronDown size={14} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+      </div>
     </div>
   );
 }
