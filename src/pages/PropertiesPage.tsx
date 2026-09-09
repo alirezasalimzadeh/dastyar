@@ -2300,14 +2300,13 @@ function PropertyForm({ propertyId, onBack, onSaved }: { propertyId?: string; on
                   ? [{ label: 'همکار', value: colleagues.find((colleague) => colleague.id === form.colleague_id)?.name ?? 'انتخاب شده' }]
                   : []),
             ]} />
-            {isEditing && (
-              <div>
-                <label className="label">مشاور مسئول فایل</label>
-                <select
-                  className="input"
-                  value={editingConsultantId ?? user?.id ?? ''}
-                  onChange={(event) => setEditingConsultantId(event.target.value || null)}
-                >
+            <div>
+              <label className="label">مشاور مسئول فایل</label>
+              <select
+                className="input"
+                value={editingConsultantId ?? user?.id ?? ''}
+                onChange={(event) => setEditingConsultantId(event.target.value || null)}
+              >
                   {(user?.id
                     ? [
                         ...consultants.filter((c) => c.id === user.id),
@@ -2332,7 +2331,6 @@ function PropertyForm({ propertyId, onBack, onSaved }: { propertyId?: string; on
                   فایل در «فایل‌های من» این مشاور دیده می‌شود؛ مدیر می‌تواند فایل را منتقل کند و گیرنده با «مال من است» آن را دریافت می‌کند.
                 </p>
               </div>
-            )}
             {isEditing && (
               <div>
                 <label className="label">وضعیت آگهی</label>
