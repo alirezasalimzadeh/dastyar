@@ -178,30 +178,12 @@ export const USER_ROLES = [
   { value: 'system_admin', label: 'ادمین سیستم' },
 ] as const;
 
-// Geographic scope: Tehran province only, limited to these counties (شهرستان)
-export const TEHRAN_PROVINCE_ID = 'f606df36-8387-4649-bdc1-94ca76d6774d';
-export const ACTIVE_COUNTY_NAMES = ['رباط کریم', 'شهریار', 'اسلامشهر', 'گلستان', 'ورامین', 'قرچک'];
+// Geographic scope: Tehran province (rows live in the database; the app only
+// reads them — no hard-coded list of counties)
 export const ROBAT_KARIM_COUNTY_NAME = 'رباط کریم';
 
 // Colleagues (همکاران) are stored as owner rows carrying this tag
 export const COLLEAGUE_TAG = 'همکار';
-
-// Neighborhoods (محله) — only for Robat Karim county
-export const ROBAT_KARIM_NEIGHBORHOODS = [
-  'رباط کریم',
-  'نصیرشهر',
-  'پرند',
-  'آبشناسان',
-  'پرندک',
-  'آلارد',
-  'وهن آباد',
-  'حصارمهتر',
-  'انجم آباد',
-  'شهرآباد',
-  'یقه',
-  'منجیل آباد',
-  'امام زاده ابوطالب',
-];
 
 // Streets (خیابان) — only for the neighborhood رباط کریم
 export const ROBAT_KARIM_STREETS = [

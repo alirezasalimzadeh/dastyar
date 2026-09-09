@@ -22,10 +22,7 @@ import {
   normalizePhone,
   validatePhone,
   toEnglishDigits,
-  TEHRAN_PROVINCE_ID,
-  ACTIVE_COUNTY_NAMES,
   ROBAT_KARIM_COUNTY_NAME,
-  ROBAT_KARIM_NEIGHBORHOODS,
 } from '@/lib/constants';
 import { Badge, EmptyState, Spinner, Modal, MoneyInput, PageHeader, Pagination, ConfirmDialog, CopyButton, SortSelect } from '@/components/ui';
 import { useActiveCounties, useCountyNeighborhoods } from '@/lib/geo';
@@ -634,7 +631,6 @@ function CustomerPrefsDisplay({ prefs, category, propertyTypes, role, transactio
   const { counties: allCounties } = useActiveCounties();
   const { neighborhoods: rkNeighborhoods } = useCountyNeighborhoods(
     allCounties.find((c) => c.name === ROBAT_KARIM_COUNTY_NAME)?.id ?? null,
-    ROBAT_KARIM_NEIGHBORHOODS,
   );
   const countyName = (id?: string) => allCounties.find((c) => c.id === id)?.name;
   const nbhName = (id?: string) => rkNeighborhoods.find((n) => n.id === id)?.name;
@@ -700,10 +696,7 @@ function LocationSelector({ value, onChange }: { value: { county_id: string; nei
   const { counties } = useActiveCounties();
   const selectedCounty = counties.find((c) => c.id === value.county_id);
   const isRobatKarim = selectedCounty?.name === ROBAT_KARIM_COUNTY_NAME;
-  const { neighborhoods } = useCountyNeighborhoods(
-    isRobatKarim ? value.county_id : null,
-    isRobatKarim ? ROBAT_KARIM_NEIGHBORHOODS : [],
-  );
+  const { neighborhoods } = useCountyNeighborhoods(isRobatKarim ? value.county_id : null);
 
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">

@@ -23,9 +23,7 @@ import {
   toEnglishDigits,
   toPersianDigits,
   timeAgo,
-  ACTIVE_COUNTY_NAMES,
   ROBAT_KARIM_COUNTY_NAME,
-  ROBAT_KARIM_NEIGHBORHOODS,
   ROBAT_KARIM_STREETS,
   COLLEAGUE_TAG,
 } from '@/lib/constants';
@@ -1609,10 +1607,7 @@ function PropertyForm({ propertyId, onBack, onSaved }: { propertyId?: string; on
 
   const selectedCounty = counties.find((c) => c.id === form.county_id);
   const isRobatKarim = selectedCounty?.name === ROBAT_KARIM_COUNTY_NAME;
-  const { neighborhoods } = useCountyNeighborhoods(
-    isRobatKarim ? form.county_id : null,
-    isRobatKarim ? ROBAT_KARIM_NEIGHBORHOODS : [],
-  );
+  const { neighborhoods } = useCountyNeighborhoods(isRobatKarim ? form.county_id : null);
   const showStreet = isRobatKarim && form.neighborhood_id === neighborhoods.find((n) => n.name === ROBAT_KARIM_COUNTY_NAME)?.id;
 
   const wholeArea = (value: string) =>

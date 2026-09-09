@@ -1,10 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
-import {
-  ACTIVE_COUNTY_NAMES,
-  ROBAT_KARIM_COUNTY_NAME,
-  ROBAT_KARIM_NEIGHBORHOODS,
-} from '@/lib/constants';
 import type { Province, County, District, City, Neighborhood } from '@/lib/types';
 
 // Resolve Tehran dynamically. Database seeds generate UUIDs, so a hard-coded ID
@@ -26,114 +21,92 @@ export function getTehranProvinceId(): Promise<string | null> {
   return tehranProvinceIdPromise;
 }
 
-// One-time idempotent seeding of the geographic rows the app relies on.
-let geoSeedPromise: Promise<void> | null = null;
+// شهرستان‌ها مقدارهای ثابت دیتابیس هستند؛ مرجع واحد، یک بار در هر نشست و
+// در دسترس همه بخش‌های برنامه (آفلاین: از کش دادهٔ سرویس‌ورکر)
+let countiesRows: County[] | null = null;
+let countiesPromise: Promise<County[]> | null = null;
 
-export function ensureActiveGeo(): Promise<void> {
-  if (geoSeedPromise) return geoSeedPromise;
-  geoSeedPromise = (async () => {
-    const tehranProvinceId = await getTehranProvinceId();
-    if (!tehranProvinceId) {
-      geoSeedPromise = null;
-      return;
-    }
-
-    // ۱) شهرستان‌های جاافتاده استان تهران
-    const { data: existingCounties } = await supabase
-      .from('counties')
-      .select('id, name, active')
-      .eq('province_id', tehranProvinceId)
-      .in('name', ACTIVE_COUNTY_NAMES);
-    const have = new Set((existingCounties ?? []).map((c) => c.name));
-    const missing = ACTIVE_COUNTY_NAMES.filter((n) => !have.has(n));
-    for (const county of existingCounties ?? []) {
-      if (!county.active) await supabase.from('counties').update({ active: true }).eq('id', county.id);
-    }
-    for (const name of missing) {
-      await supabase
-        .from('counties')
-        .insert({ province_id: tehranProvinceId, name, slug: `auto-${name.replace(/\s+/g, '-')}`, active: true });
-    }
-
-    // ۲) شهر انکر برای محله‌های رباط کریم
-    const { data: rkCounty } = await supabase
-      .from('counties')
-      .select('id')
-      .eq('province_id', tehranProvinceId)
-      .eq('name', ROBAT_KARIM_COUNTY_NAME)
-      .maybeSingle();
-    if (!rkCounty) return;
-    let { data: city } = await supabase
-      .from('cities')
-      .select('id')
-      .eq('county_id', rkCounty.id)
-      .eq('name', ROBAT_KARIM_COUNTY_NAME)
-      .maybeSingle();
-    if (!city) {
-      const { data: created } = await supabase
-        .from('cities')
-        .insert({ province_id: tehranProvinceId, county_id: rkCounty.id, name: ROBAT_KARIM_COUNTY_NAME, slug: 'robat-karim-city', active: true })
-        .select()
-        .maybeSingle();
-      city = created;
-    }
-    if (!city) return;
-
-    // ۳) محله‌های رباط کریم
-    const { data: nbhs } = await supabase.from('neighborhoods').select('name').eq('city_id', city.id);
-    const haveN = new Set((nbhs ?? []).map((n) => n.name));
-    const missingN = ROBAT_KARIM_NEIGHBORHOODS.filter((n) => !haveN.has(n));
-    if (missingN.length) {
-      await supabase
-        .from('neighborhoods')
-        .insert(missingN.map((n) => ({ city_id: city.id, name: n, slug: `rk-${n.replace(/\s+/g, '-')}`, active: true })));
-    }
-  })().catch(() => {
-    // اگر کاربر لاگین نیست یا خطای شبکه پیش آمد، دفعه بعد دوباره تلاش شود
-    geoSeedPromise = null;
+export function loadActiveCounties(): Promise<County[]> {
+  if (countiesRows) return Promise.resolve(countiesRows);
+  if (countiesPromise) return countiesPromise;
+  countiesPromise = (async () => {
+    const provinceId = await getTehranProvinceId();
+    let query = supabase.from('counties').select('*').eq('active', true).order('name');
+    if (provinceId) query = query.eq('province_id', provinceId);
+    const { data, error } = await query;
+    if (!error && (data?.length ?? 0) > 0) return data as County[];
+    // اگر استان تهران پیدا نشد یا خالی بود، به همهٔ شهرستان‌های فعال بسط می‌یابد
+    const fallback = await supabase.from('counties').select('*').eq('active', true).order('name');
+    if (fallback.error || !fallback.data) throw new Error(fallback.error?.message ?? 'دریافت شهرستان‌ها انجام نشد.');
+    return fallback.data as County[];
+  })().catch((error) => {
+    countiesPromise = null;
+    throw error;
   });
-  return geoSeedPromise;
+  countiesPromise.then((rows) => { countiesRows = rows; }).catch(() => { countiesPromise = null; });
+  return countiesPromise;
 }
 
-// شهرستان‌های مورد استفاده را فوراً از داده موجود می‌گیرد. Seed در پس‌زمینه
-// انجام می‌شود و شکست آن مانع نمایش گزینه‌های موجود نخواهد شد.
+// خواندن شهرستان‌های فعال: یک‌بار از دیتابیس، بقیهٔ نشست از حافظه
 export function useActiveCounties() {
-  const [counties, setCounties] = useState<County[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [counties, setCounties] = useState<County[]>(countiesRows ?? []);
+  const [loading, setLoading] = useState(countiesRows === null);
   const [error, setError] = useState('');
 
   useEffect(() => {
+    if (countiesRows) return;
     let active = true;
-    const load = async () => {
-      const provinceId = await getTehranProvinceId();
-      let query = supabase.from('counties').select('*').in('name', ACTIVE_COUNTY_NAMES).order('name');
-      if (provinceId) query = query.eq('province_id', provinceId);
-      let result = await query;
-      if (!result.error && (result.data?.length ?? 0) === 0) {
-        let fallbackQuery = supabase.from('counties').select('*').eq('active', true).order('name');
-        if (provinceId) fallbackQuery = fallbackQuery.eq('province_id', provinceId);
-        result = await fallbackQuery;
-      }
-      if (!active) return;
-      if (result.error) {
-        setError(result.error.message || 'دریافت شهرستان‌ها انجام نشد.');
-      } else {
-        setCounties((result.data as County[]) ?? []);
-        setError('');
-      }
-      setLoading(false);
-    };
-
-    void (async () => {
-      // Existing rows are shown first; adding any missing rows happens afterwards.
-      await load();
-      await ensureActiveGeo();
-      await load();
-    })();
+    loadActiveCounties()
+      .then((rows) => {
+        if (active) {
+          setCounties(rows);
+          setError('');
+        }
+      })
+      .catch(() => {
+        if (active) setError('دریافت شهرستان‌ها انجام نشد.');
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
     return () => { active = false; };
   }, []);
 
   return { counties, loading, error };
+}
+
+// محله‌های یک شهرستان — یک‌بار برای هر شهرستان و با کش؛ بدون await seed
+const neighborhoodsByCounty = new Map<string, Neighborhood[]>();
+
+export function useCountyNeighborhoods(countyId: string | null) {
+  const [neighborhoods, setNeighborhoods] = useState<Neighborhood[]>(countyId ? neighborhoodsByCounty.get(countyId) ?? [] : []);
+
+  useEffect(() => {
+    if (!countyId) {
+      setNeighborhoods([]);
+      return;
+    }
+    if (neighborhoodsByCounty.has(countyId)) {
+      setNeighborhoods(neighborhoodsByCounty.get(countyId)!);
+      return;
+    }
+    let active = true;
+    (async () => {
+      const { data } = await supabase
+        .from('neighborhoods')
+        .select('*, cities!inner(county_id)')
+        .eq('cities.county_id', countyId)
+        .eq('active', true)
+        .order('name');
+      if (!active) return;
+      const rows = (data as Neighborhood[]) ?? [];
+      neighborhoodsByCounty.set(countyId, rows);
+      setNeighborhoods(rows);
+    })();
+    return () => { active = false; };
+  }, [countyId]);
+
+  return { neighborhoods };
 }
 
 // Cache for geographic data
@@ -292,33 +265,6 @@ export function useNeighborhoods(cityId: string | null) {
   }, [cityId]);
 
   return { neighborhoods, loading };
-}
-
-// Neighborhoods of a county (via its cities), optionally limited to allowed names
-export function useCountyNeighborhoods(countyId: string | null, allowedNames?: string[]) {
-  const [neighborhoods, setNeighborhoods] = useState<Neighborhood[]>([]);
-  const namesKey = allowedNames ? allowedNames.join('|') : '';
-
-  useEffect(() => {
-    if (!countyId) { setNeighborhoods([]); return; }
-    let active = true;
-    (async () => {
-      await ensureActiveGeo();
-      let query = supabase
-        .from('neighborhoods')
-        .select('*, cities!inner(county_id)')
-        .eq('cities.county_id', countyId)
-        .eq('active', true)
-        .order('name');
-      if (allowedNames && allowedNames.length) query = query.in('name', allowedNames);
-      const { data } = await query;
-      if (active) setNeighborhoods((data as Neighborhood[]) ?? []);
-    })();
-    return () => { active = false; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [countyId, namesKey]);
-
-  return { neighborhoods };
 }
 
 // Search locations by name (for global search)
