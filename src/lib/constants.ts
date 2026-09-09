@@ -73,6 +73,16 @@ export const PROPERTY_STATUSES = [
   { value: 'inactive', label: 'غیرفعال', color: 'gray' },
 ] as const;
 
+// دلایل بایگانی آگهی (منقضی شدن فایل) — متن انتخابی در مارکر بایگانی ذخیره می‌شود
+export const ARCHIVE_REASONS = [
+  { value: 'rented_to_customer', label: 'اجاره شد با یکی از مشتریان' },
+  { value: 'rented_elsewhere', label: 'اجاره شد به متقاضی دیگر' },
+  { value: 'owner_changed_mind', label: 'مالک پشیمان / منصرف شده' },
+  { value: 'sold_elsewhere', label: 'فروخته شد' },
+  { value: 'expired', label: 'آگهی منقضی شده' },
+  { value: 'custom', label: 'سایر' },
+] as const;
+
 // Customer temperature
 export const TEMPERATURES = [
   { value: 'hot', label: 'داغ', color: 'red', icon: '🔥' },

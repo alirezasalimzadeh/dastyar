@@ -8,6 +8,7 @@ import type { Owner } from '@/lib/types';
 import { getColleagueRef, useColleagues, visibleOwnerTags, withColleagueRef } from '@/lib/colleagues';
 import { CallFormModal, CallRecordCard } from '@/components/calls';
 import { FollowupFormModal, FollowupRecordCard } from '@/components/followups';
+import { getArchiveInfo } from '@/lib/propertyArchive';
 
 const PAGE_SIZE = 20;
 
@@ -178,7 +179,7 @@ function OwnerDetail({ ownerId, onBack, onPropertyOpen }: { ownerId: string; onB
     setLoading(true);
     const [ownerRes, propsRes, callsRes, followupsRes] = await Promise.all([
       supabase.from('owners').select('*').eq('id', ownerId).maybeSingle(),
-      supabase.from('properties').select('id, title, transaction_type, status, sale_price, deposit_price').eq('owner_id', ownerId).order('created_at', { ascending: false }),
+      supabase.from('properties').select('id, title, transaction_type, status, sale_price, deposit_price, owner_followup_status').eq('owner_id', ownerId).order('created_at', { ascending: false }),
       supabase.from('calls').select('*, properties(title)').eq('owner_id', ownerId).order('call_date', { ascending: false }).limit(20),
       supabase.from('follow_ups').select('*, properties(title)').eq('owner_id', ownerId).order('due_date', { ascending: false }).limit(20),
     ]);
@@ -239,11 +240,13 @@ function OwnerDetail({ ownerId, onBack, onPropertyOpen }: { ownerId: string; onB
                 className="w-full px-5 py-3 flex items-center justify-between gap-3 text-right hover:bg-slate-50 transition-colors group"
               >
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium text-slate-700 truncate group-hover:text-slate-900">{p.title}</p>
+                  <p className={`text-sm font-medium truncate group-hover:text-slate-900 ${getArchiveInfo(p.owner_followup_status) ? 'text-slate-400' : 'text-slate-700'}`}>{p.title}</p>
                   <p className="text-[11px] text-slate-400 mt-0.5">مشاهده جزئیات ملک</p>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
-                  <Badge color={p.status === 'active' ? 'green' : 'gray'}>{p.status === 'active' ? 'فعال' : p.status}</Badge>
+                  {getArchiveInfo(p.owner_followup_status)
+                    ? <Badge color="gray">بایگانی</Badge>
+                    : <Badge color={p.status === 'active' ? 'green' : 'gray'}>{p.status === 'active' ? 'فعال' : p.status}</Badge>}
                   <ArrowLeft size={16} className="text-slate-300 group-hover:text-slate-600 transition-colors" />
                 </div>
               </button>

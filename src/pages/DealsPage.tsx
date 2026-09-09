@@ -4,6 +4,7 @@ import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth';
 import { DEAL_STATUSES, TRANSACTION_TYPES, getDealStatusInfo, getTransactionLabel, formatPrice, moneyToPersianWords, rentToDepositEquivalent, commissionFromTransactionValue, formatDate, toEnglishDigits } from '@/lib/constants';
 import { Badge, EmptyState, Spinner, Modal, MoneyInput, PageHeader, ConfirmDialog } from '@/components/ui';
+import { isPropertyArchived } from '@/lib/propertyArchive';
 
 const RENT_TERMS = /(?:^|\n)\[rent_terms:(\d*),(\d*)\](?=\n|$)/;
 const readRentTerms = (notes?: string | null) => { const match = notes?.match(RENT_TERMS); return { deposit: match?.[1] ?? '', rent: match?.[2] ?? '' }; };
@@ -101,9 +102,10 @@ function DealModal({ deal, onClose, onSaved }: { deal?: any; onClose: () => void
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
-  useEffect(() => { Promise.all([supabase.from('customers').select('id, first_name, last_name, mobile').order('first_name').limit(200), supabase.from('properties').select('id, title, owner_id').order('created_at', { ascending: false }).limit(200)]).then(([c, p]) => {
+  useEffect(() => { Promise.all([supabase.from('customers').select('id, first_name, last_name, mobile').order('first_name').limit(200), supabase.from('properties').select('id, title, owner_id, owner_followup_status').order('created_at', { ascending: false }).limit(200)]).then(([c, p]) => {
     setCustomers(c.data ?? []);
-    setProperties(p.data ?? []);
+    // فایل‌های بایگانی‌شده در انتخاب فایل معامله نمایش داده نمی‌شوند
+    setProperties((p.data ?? []).filter((item) => !isPropertyArchived(item)));
     if (!ownerId && propertyId) setOwnerId(p.data?.find((item) => item.id === propertyId)?.owner_id ?? '');
   }); }, []);
   const numericMoney = (value: string) => value ? Number(toEnglishDigits(value)) : 0;

@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
-import { Plus, Search, Home, Phone, X, Filter, ArrowLeft, Trash2, Flame, Star, MapPin, Target, User, ImagePlus, Images, ChevronLeft, ChevronRight, Pencil, Maximize2, Handshake, Percent, Clock } from 'lucide-react';
+import { Plus, Search, Home, Phone, X, Filter, ArrowLeft, Trash2, Flame, Star, MapPin, Target, User, ImagePlus, Images, ChevronLeft, ChevronRight, Pencil, Maximize2, Handshake, Percent, Clock, Archive, ArchiveRestore } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth';
 import {
@@ -8,6 +8,7 @@ import {
   CATEGORIES,
   PROPERTY_TYPES,
   PROPERTY_STATUSES,
+  ARCHIVE_REASONS,
   formatPrice,
   moneyToPersianWords,
   rentToDepositEquivalent,
@@ -41,6 +42,7 @@ import {
   PROPERTY_IMAGE_TYPES,
   preparePropertyImages,
 } from '@/lib/propertyImages';
+import { getArchiveInfo, markPropertyArchived, clearPropertyArchive, type ArchiveInfo } from '@/lib/propertyArchive';
 
 const PAGE_SIZE = 20;
 
@@ -138,6 +140,8 @@ export function PropertiesPage({ initialId }: { initialId?: string }) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showFilters, setShowFilters] = useState(false);
   const [filters, setFilters] = useState<PropertyFilters>({ ...EMPTY_PROPERTY_FILTERS });
+  // نمای اصلی: فایل‌های فعال (بدون بایگانی) یا فایل‌های بایگانی‌شده
+  const [archiveView, setArchiveView] = useState<'active' | 'archived'>('active');
 
   useEffect(() => {
     if (initialId) {
@@ -180,9 +184,17 @@ export function PropertiesPage({ initialId }: { initialId?: string }) {
     loadProperties();
   }, [loadProperties]);
 
+  // فایل‌های بایگانی‌شده در فهرست اصلی نمایش داده نمی‌شوند؛ فقط در نمای «بایگانی»
+  const archivedCount = useMemo(
+    () => properties.filter((p) => getArchiveInfo(p.owner_followup_status) !== null).length,
+    [properties],
+  );
+
   const visibleProperties = useMemo(() => {
     const q = toEnglishDigits(search.trim()).toLowerCase();
-    let rows = properties;
+    let rows = archiveView === 'archived'
+      ? properties.filter((p) => getArchiveInfo(p.owner_followup_status) !== null)
+      : properties.filter((p) => getArchiveInfo(p.owner_followup_status) === null);
     if (q) {
       rows = rows.filter((p) =>
         (p.title ?? '').toLowerCase().includes(q) ||
@@ -243,7 +255,7 @@ export function PropertiesPage({ initialId }: { initialId?: string }) {
       default: rows = [...rows].sort((a, b) => (b.created_at ?? '').localeCompare(a.created_at ?? ''));
     }
     return rows;
-  }, [properties, search, filters, sortKey]);
+  }, [properties, search, filters, sortKey, archiveView]);
 
   if (view === 'create') {
     return <PropertyForm onBack={() => setView('list')} onSaved={() => { setView('list'); loadProperties(); }} />;
@@ -317,7 +329,7 @@ export function PropertiesPage({ initialId }: { initialId?: string }) {
     <div className="animate-fade-in">
       <PageHeader
         title="فایل‌ها"
-        subtitle={`${total} فایل`}
+        subtitle={`${toPersianDigits(archiveView === 'archived' ? archivedCount : properties.length - archivedCount)} فایل`}
         actions={
           <button onClick={() => setView('create')} className="btn-primary">
             <Plus size={18} />
@@ -338,6 +350,28 @@ export function PropertiesPage({ initialId }: { initialId?: string }) {
       </div>
 
       <div className="mb-3 flex gap-2 overflow-x-auto pb-1 no-scrollbar">
+        <div className="inline-flex shrink-0 rounded-xl border border-slate-200 bg-white p-0.5 text-xs font-medium" role="tablist" aria-label="نمایش فایل‌ها">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={archiveView === 'active'}
+            onClick={() => { setArchiveView('active'); setPage(1); }}
+            className={`rounded-lg px-3 py-1.5 transition-colors ${archiveView === 'active' ? 'bg-slate-900 text-white' : 'text-slate-500 hover:text-slate-800'}`}
+          >
+            فایل‌های فعال
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={archiveView === 'archived'}
+            onClick={() => { setArchiveView('archived'); setPage(1); }}
+            className={`flex items-center gap-1 rounded-lg px-3 py-1.5 transition-colors ${archiveView === 'archived' ? 'bg-slate-900 text-white' : 'text-slate-500 hover:text-slate-800'}`}
+          >
+            <Archive size={13} />
+            بایگانی
+            <span className="opacity-70">{toPersianDigits(archivedCount)}</span>
+          </button>
+        </div>
         <select className="shrink-0 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 outline-none focus:border-slate-400" value={filters.transaction_type} onChange={(e) => { setFilters((current) => ({ ...current, transaction_type: e.target.value, transaction_role: '', min_price: '', max_price: '', min_deposit: '', max_deposit: '', min_rent: '', max_rent: '' })); setPage(1); }}>
           <option value="">نوع معامله</option>
           {TRANSACTION_TYPES.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
@@ -466,16 +500,17 @@ export function PropertiesPage({ initialId }: { initialId?: string }) {
         <div className="flex justify-center py-16"><Spinner size={32} /></div>
       ) : loadError ? null : visibleProperties.length === 0 ? (
         <EmptyState
-          icon={<Home size={48} />}
-          title="فایلی یافت نشد"
-          description="فایل جدیدی ثبت کنید یا فیلترها را تغییر دهید"
-          action={<button onClick={() => setView('create')} className="btn-primary"><Plus size={18} /> فایل جدید</button>}
+          icon={archiveView === 'archived' ? <Archive size={48} /> : <Home size={48} />}
+          title={archiveView === 'archived' ? 'فایلی بایگانی نشده است' : 'فایلی یافت نشد'}
+          description={archiveView === 'archived' ? 'آگهی‌هایی که منقضی شده‌اند و بایگانی می‌کنید، اینجا نمایش داده می‌شوند.' : 'فایل جدیدی ثبت کنید یا فیلترها را تغییر دهید'}
+          action={archiveView === 'active' ? <button onClick={() => setView('create')} className="btn-primary"><Plus size={18} /> فایل جدید</button> : undefined}
         />
       ) : (
         <>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {pageItems.map((p) => {
               const status = getStatusInfo(PROPERTY_STATUSES, p.status);
+              const archive = getArchiveInfo(p.owner_followup_status);
               const rentBudget = getRentBudgetMins(p.owner_followup_status);
               const sourceColleague = colleagueOptions.find((colleague) => colleague.id === p.owner_relationship);
               const locationParts = [p.neighborhoods?.name, p.counties?.name].filter(Boolean) as string[];
@@ -507,7 +542,7 @@ export function PropertiesPage({ initialId }: { initialId?: string }) {
                 <div
                   key={p.id}
                   onClick={() => { setSelectedId(p.id); setView('detail'); }}
-                  className="card p-4 cursor-pointer hover:shadow-md hover:border-slate-300 transition-all overflow-hidden"
+                  className={`card p-4 cursor-pointer hover:shadow-md hover:border-slate-300 transition-all overflow-hidden ${archive ? 'opacity-70 hover:opacity-100' : ''}`}
                 >
                   <div className="relative -mx-4 -mt-4 mb-4 h-40 bg-slate-100 overflow-hidden">
                     <img
@@ -531,10 +566,19 @@ export function PropertiesPage({ initialId }: { initialId?: string }) {
                       {p.is_featured && <Star size={15} className="text-yellow-500 shrink-0" />}
                       {p.negotiable && <span className="badge bg-emerald-50 text-emerald-600">{p.transaction_type === 'rent' ? 'قابل تبدیل' : 'قابل مذاکره'}</span>}
                     </div>
-                    <Badge color={status.color}>{status.label}</Badge>
+                    {archive ? (
+                      <Badge color="gray"><Archive size={11} /> بایگانی‌شده</Badge>
+                    ) : (
+                      <Badge color={status.color}>{status.label}</Badge>
+                    )}
                   </div>
 
                   <h3 className="text-sm font-bold text-slate-800 mb-1 truncate">{p.title}</h3>
+                  {archive && (
+                    <p className="mb-1 truncate text-[11px] text-slate-400">
+                      دلیل بایگانی: {archive.reason}{archive.archivedAt ? ` • ${formatDate(new Date(archive.archivedAt))}` : ''}
+                    </p>
+                  )}
                   <p className="text-xs text-slate-400 mb-2 truncate">
                     {getCategoryLabel(p.category)} • {getPropertyTypeLabel(p.category, p.property_type)}
                     {roleLabel ? ` • ${roleLabel}` : ''}
@@ -618,6 +662,7 @@ export function PropertiesPage({ initialId }: { initialId?: string }) {
 
 // Property Detail
 function PropertyDetail({ propertyId, onBack, onEdit }: { propertyId: string; onBack: () => void; onEdit: () => void }) {
+  const { user } = useAuth();
   const [property, setProperty] = useState<(PropertyListItem) | null>(null);
   const [owner, setOwner] = useState<Owner | null>(null);
   const [colleague, setColleague] = useState<Pick<Colleague, 'id' | 'name' | 'phone' | 'agency_name'> | null>(null);
@@ -630,6 +675,10 @@ function PropertyDetail({ propertyId, onBack, onEdit }: { propertyId: string; on
   const [showCallModal, setShowCallModal] = useState(false);
   const [showFollowupModal, setShowFollowupModal] = useState(false);
   const [selectedImageIndex, setSelectedImageIndex] = useState<number | null>(null);
+  const [showArchiveModal, setShowArchiveModal] = useState(false);
+  const [archiveReason, setArchiveReason] = useState<string>(ARCHIVE_REASONS[0].value);
+  const [archiveCustom, setArchiveCustom] = useState('');
+  const [archiveBusy, setArchiveBusy] = useState(false);
 
   const loadDetail = useCallback(async () => {
     setLoading(true);
@@ -684,11 +733,71 @@ function PropertyDetail({ propertyId, onBack, onEdit }: { propertyId: string; on
     onBack();
   };
 
+  const openArchiveModal = () => {
+    setArchiveReason(ARCHIVE_REASONS[0].value);
+    setArchiveCustom('');
+    setShowArchiveModal(true);
+  };
+
+  const archiveReasonLabel = archiveReason === 'custom'
+    ? archiveCustom.trim() || 'سایر'
+    : ARCHIVE_REASONS.find((item) => item.value === archiveReason)?.label ?? 'سایر';
+
+  const handleArchive = async () => {
+    if (!property) return;
+    setArchiveBusy(true);
+    const metadata = markPropertyArchived(property.owner_followup_status ?? '', archiveReasonLabel);
+    const { error } = await supabase
+      .from('properties')
+      .update({ is_active: false, owner_followup_status: metadata || null })
+      .eq('id', propertyId);
+    if (error) {
+      setArchiveBusy(false);
+      alert(databaseErrorMessage(error, 'بایگانی انجام نشد. لطفاً دوباره تلاش کنید.'));
+      return;
+    }
+    await supabase.from('activities').insert({
+      user_id: user?.id,
+      entity_type: 'property',
+      entity_id: propertyId,
+      action: 'property_archived',
+      description: `آگهی «${property.title}» بایگانی شد (${archiveReasonLabel})`,
+    });
+    setShowArchiveModal(false);
+    setArchiveBusy(false);
+    loadDetail();
+  };
+
+  const handleRestore = async () => {
+    if (!property) return;
+    setArchiveBusy(true);
+    const metadata = clearPropertyArchive(property.owner_followup_status ?? '');
+    const { error } = await supabase
+      .from('properties')
+      .update({ is_active: true, owner_followup_status: metadata || null })
+      .eq('id', propertyId);
+    if (error) {
+      setArchiveBusy(false);
+      alert(databaseErrorMessage(error, 'بازگردانی انجام نشد. لطفاً دوباره تلاش کنید.'));
+      return;
+    }
+    await supabase.from('activities').insert({
+      user_id: user?.id,
+      entity_type: 'property',
+      entity_id: propertyId,
+      action: 'property_restored',
+      description: `آگهی «${property.title}» از بایگانی بازگردانی شد`,
+    });
+    setArchiveBusy(false);
+    loadDetail();
+  };
+
   if (loading || !property) {
     return <div className="flex justify-center py-16"><Spinner size={32} /></div>;
   }
 
   const status = getStatusInfo(PROPERTY_STATUSES, property.status);
+  const archive = getArchiveInfo(property.owner_followup_status);
   const detailRentBudget = getRentBudgetMins(property.owner_followup_status);
 
   return (
@@ -711,7 +820,11 @@ function PropertyDetail({ propertyId, onBack, onEdit }: { propertyId: string; on
               {getTransactionLabel(property.transaction_type)} • {getCategoryLabel(property.category)} • {getPropertyTypeLabel(property.category, property.property_type)}
             </p>
           </div>
-          <Badge color={status.color}>{status.label}</Badge>
+          {archive ? (
+            <Badge color="gray"><Archive size={12} /> بایگانی‌شده</Badge>
+          ) : (
+            <Badge color={status.color}>{status.label}</Badge>
+          )}
         </div>
 
         {property.neighborhoods?.name && (
@@ -743,11 +856,39 @@ function PropertyDetail({ propertyId, onBack, onEdit }: { propertyId: string; on
           <button onClick={onEdit} className="btn-secondary">
             <Pencil size={16} /> ویرایش آگهی
           </button>
+          {archive ? (
+            <button type="button" onClick={handleRestore} disabled={archiveBusy} className="btn-secondary">
+              <ArchiveRestore size={16} /> بازگردانی
+            </button>
+          ) : (
+            <button type="button" onClick={openArchiveModal} className="btn-secondary">
+              <Archive size={16} /> بایگانی
+            </button>
+          )}
           <button onClick={() => setShowDeleteConfirm(true)} className="btn-danger" aria-label="حذف آگهی">
             <Trash2 size={16} />
           </button>
         </div>
       </div>
+
+      {archive && (
+        <div className="card flex flex-col gap-3 border-slate-300 bg-slate-50 p-4 animate-fade-in sm:flex-row sm:items-center">
+          <div className="flex items-start gap-3">
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-slate-200 text-slate-500">
+              <Archive size={18} />
+            </span>
+            <div>
+              <p className="text-sm font-bold text-slate-700">این آگهی بایگانی شده است</p>
+              <p className="mt-0.5 text-xs text-slate-500">
+                {archive.reason}{archive.archivedAt ? ` • تاریخ بایگانی: ${formatDate(new Date(archive.archivedAt))}` : ''}
+              </p>
+            </div>
+          </div>
+          <button type="button" onClick={handleRestore} disabled={archiveBusy} className="btn-primary shrink-0 sm:mr-auto">
+            <ArchiveRestore size={16} /> بازگردانی از بایگانی
+          </button>
+        </div>
+      )}
 
       {property.images?.length > 0 ? (
         <section className="card p-3 sm:p-4 overflow-hidden" aria-label="آلبوم تصاویر فایل">
@@ -1009,12 +1150,59 @@ function PropertyDetail({ propertyId, onBack, onEdit }: { propertyId: string; on
           onSaved={loadDetail}
         />
       )}
+      <Modal open={showArchiveModal} onClose={() => setShowArchiveModal(false)} title="بایگانی آگهی" size="sm">
+        <div className="space-y-4">
+          <p className="text-sm leading-6 text-slate-600">
+            با بایگانی، این آگهی از فهرست فایل‌های فعال و پیشنهادهای مشتریان خارج می‌شود، اما تمام اطلاعاتش حفظ می‌ماند و هر وقت خواستید می‌توانید بازگردانش.
+          </p>
+          <div>
+            <label className="label">دلیل بایگانی</label>
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              {ARCHIVE_REASONS.map((item) => (
+                <button
+                  key={item.value}
+                  type="button"
+                  onClick={() => setArchiveReason(item.value)}
+                  className={`rounded-lg border-2 p-2.5 text-right text-sm font-medium transition-all ${
+                    archiveReason === item.value ? 'border-slate-900 bg-slate-50' : 'border-slate-200 hover:border-slate-300'
+                  }`}
+                >
+                  {item.label}
+                </button>
+              ))}
+            </div>
+            {archiveReason === 'custom' && (
+              <input
+                className="input mt-2"
+                value={archiveCustom}
+                onChange={(event) => setArchiveCustom(event.target.value)}
+                placeholder="دلیل را بنویسید..."
+                autoFocus
+              />
+            )}
+          </div>
+          <div className="flex justify-end gap-3">
+            <button type="button" onClick={() => setShowArchiveModal(false)} className="btn-secondary">
+              انصراف
+            </button>
+            <button
+              type="button"
+              onClick={handleArchive}
+              disabled={archiveBusy || (archiveReason === 'custom' && !archiveCustom.trim())}
+              className="btn-primary"
+            >
+              {archiveBusy ? 'در حال بایگانی...' : 'بایگانی آگهی'}
+            </button>
+          </div>
+        </div>
+      </Modal>
+
       <ConfirmDialog
         open={showDeleteConfirm}
         onClose={() => setShowDeleteConfirm(false)}
         onConfirm={handleDelete}
         title="حذف فایل"
-        message="آیا از حذف این فایل مطمئن هستید؟"
+        message="آیا از حذف این فایل مطمئن هستید؟ پس از حذف قابل بازیابی نیست. اگر آگهی فقط منقضی شده، از دکمه «بایگانی» استفاده کنید تا اطلاعاتش حفظ شود."
         confirmLabel="حذف"
         danger
       />
@@ -1147,6 +1335,8 @@ function PropertyForm({ propertyId, onBack, onSaved }: { propertyId?: string; on
   const [addingNewOwner, setAddingNewOwner] = useState(false);
   const [editingConsultantId, setEditingConsultantId] = useState<string | null>(null);
   const [editingStatus, setEditingStatus] = useState<Property['status']>('active');
+  // اگر آگهی بایگانی باشد، وضعیت بایگانی در طول ویرایش حفظ می‌شود مگر اینکه کاربر وضعیت را عوض کند
+  const [archiveInfo, setArchiveInfo] = useState<ArchiveInfo | null>(null);
   const [propertyMetadata, setPropertyMetadata] = useState('');
   const [saveError, setSaveError] = useState('');
   const [form, setForm] = useState({
@@ -1273,6 +1463,7 @@ function PropertyForm({ propertyId, onBack, onSaved }: { propertyId?: string; on
       });
       setExistingImages(Array.isArray(data.images) ? data.images : []);
       setPropertyMetadata(text(data.owner_followup_status));
+      setArchiveInfo(getArchiveInfo(data.owner_followup_status));
       setAddingNewOwner(!data.owner_id && !isUuid(data.owner_relationship));
       setEditingConsultantId(data.assigned_consultant_id ?? null);
       setEditingStatus((data.status as Property['status']) ?? 'active');
@@ -1453,7 +1644,8 @@ function PropertyForm({ propertyId, onBack, onSaved }: { propertyId?: string; on
       category: form.category,
       property_type: form.property_type,
       status: editingStatus,
-      is_active: editingStatus === 'active',
+      // آگهی بایگانی‌شده تا زمانی که کاربر وضعیتش را عوض نکند، از چرخه فعال خارج می‌ماند
+      is_active: archiveInfo ? false : editingStatus === 'active',
       owner_id: ownerId,
       owner_relationship: form.contact_type === 'colleague' ? form.colleague_id : null,
       assigned_consultant_id: editingConsultantId || user?.id,
@@ -2031,9 +2223,29 @@ function PropertyForm({ propertyId, onBack, onSaved }: { propertyId?: string; on
             {isEditing && (
               <div>
                 <label className="label">وضعیت آگهی</label>
-                <select className="input" value={editingStatus} onChange={(event) => setEditingStatus(event.target.value as Property['status'])}>
+                <select
+                  className="input"
+                  value={editingStatus}
+                  onChange={(event) => {
+                    setEditingStatus(event.target.value as Property['status']);
+                    if (archiveInfo) {
+                      // با تغییر وضعیت، آگهی به‌طور خودکار از بایگانی خارج می‌شود؛ وضعیت جدید مرجع اصلی است
+                      setArchiveInfo(null);
+                      setPropertyMetadata((current) => clearPropertyArchive(current));
+                    }
+                  }}
+                >
                   {PROPERTY_STATUSES.map((status) => <option key={status.value} value={status.value}>{status.label}</option>)}
                 </select>
+              </div>
+            )}
+            {isEditing && archiveInfo && (
+              <div className="flex items-start gap-2 rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs leading-6 text-slate-600">
+                <Archive size={15} className="mt-1 shrink-0 text-slate-400" />
+                <span>
+                  این آگهی <b>بایگانی</b> است ({archiveInfo.reason}). ذخیره بدون تغییر وضعیت، بایگانی را حفظ می‌کند؛
+                  تغییر وضعیت آگهی را به‌طور خودکار از بایگانی خارج می‌کند.
+                </span>
               </div>
             )}
             <PropertyImagePicker

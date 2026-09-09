@@ -6,8 +6,9 @@ import { COLLEAGUE_TAG, normalizePhone, validatePhone, toEnglishDigits, toPersia
 import { colleagueTags, ownerToColleague } from '@/lib/colleagues';
 import { Badge, ConfirmDialog, CopyButton, EmptyState, Modal, PageHeader, Spinner } from '@/components/ui';
 import type { Colleague, Owner } from '@/lib/types';
+import { getArchiveInfo } from '@/lib/propertyArchive';
 
-type ColleagueRow = Colleague & { properties?: { id: string; status: string; title: string }[] | null };
+type ColleagueRow = Colleague & { properties?: { id: string; status: string; title: string; owner_followup_status?: string | null }[] | null };
 
 export function ColleaguesPage({ onNavigate }: { onNavigate?: (page: string, params?: Record<string, unknown>) => void }) {
   const [colleagues, setColleagues] = useState<ColleagueRow[]>([]);
@@ -127,7 +128,7 @@ function ColleagueDetail({ colleagueId, onBack, onPropertyOpen }: { colleagueId:
     setLoading(true);
     const [colleagueRes, propertyRes] = await Promise.all([
       supabase.from('owners').select('*').eq('id', colleagueId).maybeSingle(),
-      supabase.from('properties').select('id, status, title').eq('owner_relationship', colleagueId).order('created_at', { ascending: false }),
+      supabase.from('properties').select('id, status, title, owner_followup_status').eq('owner_relationship', colleagueId).order('created_at', { ascending: false }),
     ]);
     setColleague(colleagueRes.data ? {
       ...ownerToColleague(colleagueRes.data as Owner),
@@ -201,7 +202,9 @@ function ColleagueDetail({ colleagueId, onBack, onPropertyOpen }: { colleagueId:
                   <p className="mt-0.5 text-[11px] text-slate-400">مشاهده جزئیات ملک</p>
                 </div>
                 <div className="flex shrink-0 items-center gap-2">
-                  <Badge color={property.status === 'active' ? 'green' : 'gray'}>{property.status === 'active' ? 'فعال' : 'غیرفعال'}</Badge>
+                  {getArchiveInfo(property.owner_followup_status)
+                    ? <Badge color="gray">بایگانی</Badge>
+                    : <Badge color={property.status === 'active' ? 'green' : 'gray'}>{property.status === 'active' ? 'فعال' : 'غیرفعال'}</Badge>}
                   <ArrowLeft size={16} className="text-slate-300 transition-colors group-hover:text-slate-600" />
                 </div>
               </button>
