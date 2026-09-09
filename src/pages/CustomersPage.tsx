@@ -1037,15 +1037,38 @@ function CustomerForm({ customerId, onBack, onSaved }: { customerId?: string; on
 
       <PageHeader title={isEditing ? 'ویرایش مشتری' : 'مشتری جدید'} subtitle={`مرحله ${step + 1} از ${steps.length}: ${steps[step].title}`} />
 
-      {/* Progress Bar */}
-      <div className="flex gap-1 mb-6">
-        {steps.map((_, i) => (
-          <div
-            key={i}
-            className={`h-1.5 flex-1 rounded-full transition-colors ${i <= step ? 'bg-slate-900' : 'bg-slate-200'}`}
-          />
-        ))}
-      </div>
+      {/* Progress Bar / step jump in edit mode */}
+      {isEditing ? (
+        <div className="mb-6">
+          <p className="mb-2 text-xs text-slate-500">برای ویرایش، مستقیماً بخش موردنظر را انتخاب کنید:</p>
+          <div className="flex gap-2 overflow-x-auto pb-2 no-scrollbar">
+            {steps.map((item, i) => (
+              <button
+                key={item.title}
+                type="button"
+                onClick={() => { setStep(i); setErrors({}); setSaveError(''); }}
+                aria-current={i === step ? 'step' : undefined}
+                className={`shrink-0 rounded-xl border px-3 py-2 text-xs font-medium transition-colors ${
+                  i === step
+                    ? 'border-slate-900 bg-slate-900 text-white shadow-sm'
+                    : 'border-slate-200 bg-white text-slate-600 hover:border-slate-400 hover:text-slate-800'
+                }`}
+              >
+                {item.title}
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : (
+        <div className="flex gap-1 mb-6">
+          {steps.map((_, i) => (
+            <div
+              key={i}
+              className={`h-1.5 flex-1 rounded-full transition-colors ${i <= step ? 'bg-slate-900' : 'bg-slate-200'}`}
+            />
+          ))}
+        </div>
+      )}
 
       <div className="card p-5 space-y-4">
         {step === 0 && (
@@ -1269,19 +1292,30 @@ function CustomerForm({ customerId, onBack, onSaved }: { customerId?: string; on
 
         {/* Navigation Buttons */}
         <div className="flex gap-2 pt-2">
-          {step > 0 && (
-            <button onClick={() => setStep(step - 1)} className="btn-secondary flex-1">
-              مرحله قبل
-            </button>
-          )}
-          {step < steps.length - 1 ? (
-            <button onClick={handleNext} className="btn-primary flex-1">
-              مرحله بعد
-            </button>
+          {isEditing ? (
+            <>
+              <button type="button" onClick={onBack} disabled={saving} className="btn-secondary flex-1">انصراف</button>
+              <button onClick={handleSave} disabled={saving} className="btn-primary flex-1">
+                {saving ? 'در حال ذخیره...' : 'ذخیره تغییرات'}
+              </button>
+            </>
           ) : (
-            <button onClick={handleSave} disabled={saving} className="btn-primary flex-1">
-              {saving ? 'در حال ذخیره...' : isEditing ? 'ذخیره تغییرات' : 'ثبت مشتری'}
-            </button>
+            <>
+              {step > 0 && (
+                <button onClick={() => setStep(step - 1)} className="btn-secondary flex-1">
+                  مرحله قبل
+                </button>
+              )}
+              {step < steps.length - 1 ? (
+                <button onClick={handleNext} className="btn-primary flex-1">
+                  مرحله بعد
+                </button>
+              ) : (
+                <button onClick={handleSave} disabled={saving} className="btn-primary flex-1">
+                  {saving ? 'در حال ذخیره...' : 'ثبت مشتری'}
+                </button>
+              )}
+            </>
           )}
         </div>
       </div>
