@@ -36,6 +36,14 @@ import { FollowupFormModal, FollowupRecordCard } from '@/components/followups';
 
 const PAGE_SIZE = 20;
 
+// رنگ مخصوص هر نوع معامله (عنوان بالای کارت)
+const TRANSACTION_STYLES: Record<string, { text: string; bar: string }> = {
+  buy: { text: 'text-emerald-600', bar: 'bg-emerald-400' },
+  rent: { text: 'text-blue-600', bar: 'bg-blue-400' },
+  sell: { text: 'text-amber-600', bar: 'bg-amber-400' },
+  partnership: { text: 'text-purple-600', bar: 'bg-purple-400' },
+};
+
 type CustomerRow = Customer & { calls?: { call_date: string }[] | null };
 
 
@@ -309,6 +317,7 @@ export function CustomersPage({ initialId, initialFilter }: { initialId?: string
                 const colleagueId = (c.property_preferences as Record<string, unknown> | null)?.colleague_id as string | undefined;
                 const referringColleague = colleagues.find((colleague) => colleague.id === colleagueId);
                 const transactionLabel = c.transaction_intention ? getTransactionLabel(c.transaction_intention) : null;
+                const txStyle = c.transaction_intention ? TRANSACTION_STYLES[c.transaction_intention] : undefined;
                 const categoryLabel = c.preferred_category ? getCategoryLabel(c.preferred_category) : null;
                 const typeLabels = c.preferred_property_types?.length
                   ? c.preferred_property_types.slice(0, 2).map((pt) => PROPERTY_TYPES[c.preferred_category!]?.find((p) => p.value === pt)?.label ?? pt).join('، ')
@@ -354,7 +363,8 @@ export function CustomersPage({ initialId, initialFilter }: { initialId?: string
                     onClick={() => { setSelectedId(c.id); setView('detail'); }}
                     className="card p-4 cursor-pointer transition-all hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md"
                   >
-                    <p className="text-lg font-extrabold text-slate-800">{transactionLabel ?? 'ثبت نشده'}</p>
+                    <p className={`text-lg font-extrabold ${txStyle?.text ?? 'text-slate-400'}`}>{transactionLabel ?? 'ثبت نشده'}</p>
+                    {txStyle && <span className={`mt-1 block h-1 w-10 rounded-full ${txStyle.bar}`} />}
 
                     <div className="mt-1.5 flex flex-wrap items-center gap-x-2.5 gap-y-1">
                       <p className="text-sm font-bold text-slate-700">{c.name}</p>
