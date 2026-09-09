@@ -138,6 +138,27 @@ const removeQueuedEntry = async (entry: QueuedRequest) => {
   writeMirror(readMirror().filter((item) => mirrorKey(item) !== mirrorKey(entry)));
 };
 
+// ——— راه‌حل موقت تا ساخت ستون street در دیتابیس ———
+// مسیر آنلاینِ ذخیرهٔ فایل (PropertiesPage) در نبود ستون street، فیلد را از
+// بدنه حذف و مقدار خیابان را در payment_conditions نگه می‌دارد. صف آفلاین و
+// بازپخش آن هم باید دقیقاً همین کار را کنند، وگرنه درخواست‌ها با PGRST204
+// برای همیشه در صف گیر می‌کنند. پس از ساخت ستون در دیتابیس این تابع را
+// (و شیم مشابه در PropertiesPage) حذف کنید.
+const normalizeForMissingStreetColumn = (method: string, body: string | null): string | null => {
+  if ((method !== 'POST' && method !== 'PATCH') || !body) return body;
+  try {
+    const parsed: unknown = JSON.parse(body);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return body;
+    const record = parsed as Record<string, unknown>;
+    if (!('street' in record)) return body;
+    const { street, ...rest } = record;
+    if (street) rest.payment_conditions = street;
+    return JSON.stringify(rest);
+  } catch {
+    return body;
+  }
+};
+
 type ReplayResult = { status: 'ok' | 'failed' | 'network'; message?: string };
 
 // تمام پردازش صف (همگام‌سازی خودکار با هر درخواست + دکمهٔ دستی) از پشت
@@ -154,12 +175,14 @@ const withSyncLock = <T>(fn: () => Promise<T>): Promise<T> => {
 const replayEntry = async (entry: QueuedRequest, authHeaders: Record<string, string>): Promise<ReplayResult> => {
   const headers = new Headers(entry.headers);
   for (const [key, value] of Object.entries(authHeaders)) headers.set(key, value);
+  // موارد قدیمیِ صف که بدنه‌شان هنوز street دارد، همین‌جا اصلاح می‌شوند
+  const body = normalizeForMissingStreetColumn(entry.method, entry.body);
   console.info(`[dastyar-sync] replay #${entry.id} ${entry.method} ${entry.url}`);
   try {
     const response = await nativeFetch(entry.url, {
       method: entry.method,
       headers,
-      body: entry.body,
+      body,
       signal: AbortSignal.timeout(30000),
     });
     // 409 یعنی رکورد قبلاً همگام شده (انتقال تکراری)؛ آن را هم موفقیت می‌شماریم
@@ -317,7 +340,9 @@ async function offlineMutation(request: Request, body: string | null) {
   const queuedBody = request.method === 'POST'
     ? JSON.stringify(Array.isArray(payload) ? records : records[0])
     : body;
-  await queueRequest(request, queuedBody);
+  // فقط بدنهٔ ارسالی به سرور اصلاح می‌شود؛ کش محلی نسخهٔ کامل (با street)
+  // نگه می‌دارد تا نمایش فوری درست بماند.
+  await queueRequest(request, normalizeForMissingStreetColumn(request.method, queuedBody));
   await patchCachedQueries(request, queuedBody);
   const wantsObject = request.headers.get('accept')?.includes('application/vnd.pgrst.object+json');
   return jsonResponse(wantsObject ? records[0] ?? null : records, request.method === 'POST' ? 201 : 200);

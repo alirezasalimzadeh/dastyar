@@ -124,7 +124,9 @@ const isUuid = (value: unknown): value is string =>
 const PROPERTY_LIST_COLUMNS = [
   'id', 'title', 'description', 'transaction_type', 'transaction_role', 'category', 'property_type',
   'status', 'is_hot', 'is_featured', 'is_active', 'owner_id', 'owner_relationship', 'assigned_consultant_id',
-  'province_id', 'county_id', 'district_id', 'city_id', 'neighborhood_id', 'street', 'address',
+  // street موقتاً در انتخاب نیست: ستون هنوز در دیتابیس ساخته نشده و مقدار
+  // خیابان در payment_conditions نگه داشته می‌شود (نمایش با getStreet درست است).
+  'province_id', 'county_id', 'district_id', 'city_id', 'neighborhood_id', 'address',
   'land_area', 'building_area', 'bedrooms', 'rooms', 'floor', 'total_floors', 'unit_number', 'building_age',
   'parking', 'storage', 'elevator', 'balcony', 'yard', 'garden', 'pool', 'security', 'heating', 'cooling',
   'sale_price', 'deposit_price', 'monthly_rent', 'price_per_meter', 'participation_price', 'negotiable',
@@ -658,7 +660,7 @@ export function PropertiesPage({ initialId }: { initialId?: string }) {
                     <MapPin size={12} className="shrink-0 text-slate-400" />
                     <span className="truncate font-medium">{locationLine}</span>
                   </p>
-                  {locationParts.length > 0 && (p.street || p.address) && (
+                  {locationParts.length > 0 && (getStreet(p) || p.address) && (
                     <p className="text-[11px] text-slate-400 truncate mb-2 pr-4">
                       {[getStreet(p), p.address].filter(Boolean).join('، ')}
                     </p>
