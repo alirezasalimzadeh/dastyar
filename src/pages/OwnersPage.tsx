@@ -2,10 +2,10 @@ import { useEffect, useState, useCallback, useMemo } from 'react';
 import { Plus, Search, Building2, Phone, Clock, ArrowLeft, Trash2, X, Pencil } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth';
-import { normalizePhone, validatePhone, formatDate, timeAgo, toEnglishDigits, toPersianDigits, COLLEAGUE_TAG } from '@/lib/constants';
+import { normalizePhone, validatePhone, formatDate, timeAgo, toEnglishDigits, toPersianDigits, COLLEAGUE_TAG, CONTACT_SOURCES, getContactSourceLabel } from '@/lib/constants';
 import { Badge, EmptyState, Spinner, Modal, PageHeader, Pagination, ConfirmDialog, CopyButton, SortSelect } from '@/components/ui';
 import type { Owner } from '@/lib/types';
-import { getColleagueRef, useColleagues, visibleOwnerTags, withColleagueRef } from '@/lib/colleagues';
+import { getColleagueRef, getOwnerSource, useColleagues, visibleOwnerTags, withColleagueRef, withOwnerSource } from '@/lib/colleagues';
 import { CallFormModal, CallRecordCard } from '@/components/calls';
 import { FollowupFormModal, FollowupRecordCard } from '@/components/followups';
 import { getArchiveInfo } from '@/lib/propertyArchive';
@@ -38,6 +38,8 @@ export function OwnersPage({ initialId, onNavigate }: { initialId?: string; onNa
   const [total, setTotal] = useState(0);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
+  // فیلتر منبع آشنایی — فقط در صورت نیاز استفاده می‌شود
+  const [sourceFilter, setSourceFilter] = useState('');
 
   useEffect(() => {
     if (initialId) { setSelectedId(initialId); setView('detail'); }
@@ -75,6 +77,7 @@ export function OwnersPage({ initialId, onNavigate }: { initialId?: string; onNa
         toEnglishDigits(o.secondary_phone ?? '').includes(q),
       );
     }
+    if (sourceFilter) rows = rows.filter((o) => getOwnerSource(o.tags) === sourceFilter);
     const byDateDesc = (a: string | null, b: string | null) => (b ?? '').localeCompare(a ?? '');
     switch (sortKey) {
       case 'oldest': rows.sort((a, b) => (a.created_at ?? '').localeCompare(b.created_at ?? '')); break;
@@ -85,7 +88,7 @@ export function OwnersPage({ initialId, onNavigate }: { initialId?: string; onNa
       default: rows.sort((a, b) => (b.created_at ?? '').localeCompare(a.created_at ?? ''));
     }
     return rows;
-  }, [owners, search, sortKey]);
+  }, [owners, search, sortKey, sourceFilter]);
 
   const colleagueOf = (owner: Owner) => colleagues.find((colleague) => colleague.id === getColleagueRef(owner.tags));
 
@@ -113,6 +116,10 @@ export function OwnersPage({ initialId, onNavigate }: { initialId?: string; onNa
           <Search size={18} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" />
           <input type="text" value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} className="input pr-10" placeholder="جستجو با نام یا تلفن..." />
         </div>
+        <select className="input w-auto shrink-0" value={sourceFilter} onChange={(e) => { setSourceFilter(e.target.value); setPage(1); }} title="فیلتر بر اساس منبع آشنایی">
+          <option value="">همه منابع</option>
+          {CONTACT_SOURCES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
+        </select>
       </div>
 
       <SortSelect value={sortKey} options={OWNER_SORTS} onChange={(v) => { setSortKey(v); setPage(1); }} />
@@ -209,6 +216,7 @@ function OwnerDetail({ ownerId, onBack, onPropertyOpen }: { ownerId: string; onB
             <h2 className="text-xl font-extrabold text-slate-800">{owner.name}</h2>
             <p className="text-sm text-slate-500" dir="ltr">{owner.phone}</p>
             {owner.secondary_phone && <p className="text-xs text-slate-400" dir="ltr">{owner.secondary_phone}</p>}
+            {getOwnerSource(owner.tags) && <p className="mt-1 text-xs text-slate-400">منبع: {getContactSourceLabel(getOwnerSource(owner.tags))}</p>}
           </div>
           <Badge color={owner.status === 'active' ? 'green' : 'red'}>{owner.status === 'active' ? 'فعال' : 'غیرفعال'}</Badge>
         </div>
@@ -295,6 +303,7 @@ function OwnerForm({ owner, onClose, onSaved }: { owner?: Owner; onClose: () => 
   const [notes, setNotes] = useState(owner?.notes ?? '');
   const [tags, setTags] = useState(visibleOwnerTags(owner?.tags).join('، '));
   const [colleagueId, setColleagueId] = useState(getColleagueRef(owner?.tags));
+  const [source, setSource] = useState(getOwnerSource(owner?.tags));
   const [status, setStatus] = useState<Owner['status']>(owner?.status ?? 'active');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -310,7 +319,7 @@ function OwnerForm({ owner, onClose, onSaved }: { owner?: Owner; onClose: () => 
       phone: normalizePhone(phone),
       secondary_phone: secondaryPhone ? normalizePhone(secondaryPhone) : null,
       notes: notes.trim() || null,
-      tags: withColleagueRef(tags ? tags.split('،').map((tag) => tag.trim()).filter(Boolean) : [], colleagueId),
+      tags: withColleagueRef(withOwnerSource(tags ? tags.split('،').map((tag) => tag.trim()).filter(Boolean) : [], source), colleagueId),
       status,
       ...(!isEditing ? { assigned_consultant_id: user?.id } : {}),
     };
@@ -349,6 +358,13 @@ function OwnerForm({ owner, onClose, onSaved }: { owner?: Owner; onClose: () => 
                 {colleague.name}{colleague.agency_name ? ` — ${colleague.agency_name}` : ''}{colleague.status === 'inactive' ? ' (غیرفعال)' : ''}
               </option>
             ))}
+          </select>
+        </div>
+        <div>
+          <label className="label">منبع آشنایی <span className="font-normal text-slate-400">(اختیاری)</span></label>
+          <select className="input" value={source} onChange={(e) => setSource(e.target.value)}>
+            <option value="">ثبت نشده</option>
+            {CONTACT_SOURCES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
           </select>
         </div>
         <div><label className="label">تگ‌ها (با ویرگول جدا کنید)</label><input className="input" value={tags} onChange={(e) => setTags(e.target.value)} placeholder="سرمایه‌گذار، فوری" /></div>

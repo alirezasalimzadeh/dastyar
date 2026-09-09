@@ -83,6 +83,22 @@ export const ARCHIVE_REASONS = [
   { value: 'custom', label: 'سایر' },
 ] as const;
 
+// منبع آشنایی مشتری/مالک (حضوری، تماس تلفنی، ...) — برای متمایز کردن در صورت نیاز
+export const CONTACT_SOURCES = [
+  { value: 'walk_in', label: 'حضوری (مغازه)' },
+  { value: 'phone', label: 'تماس تلفنی' },
+  { value: 'online', label: 'آنلاین / شبکه اجتماعی' },
+  { value: 'referral', label: 'معرفی' },
+  { value: 'other', label: 'سایر' },
+] as const;
+
+/** برچسب فارسی منبع؛ برای مقادیر متنی قدیمی، همان متن نمایش داده می‌شود */
+export function getContactSourceLabel(value?: string | null): string {
+  const found = CONTACT_SOURCES.find((s) => s.value === value);
+  if (found) return found.label;
+  return value?.trim() || 'ثبت نشده';
+}
+
 // Customer temperature
 export const TEMPERATURES = [
   { value: 'hot', label: 'داغ', color: 'red', icon: '🔥' },

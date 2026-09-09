@@ -9,6 +9,7 @@ import {
   TRANSACTION_TYPES,
   CATEGORIES,
   PROPERTY_TYPES,
+  CONTACT_SOURCES,
   formatPrice,
   formatDate,
   formatMoneyShort,
@@ -17,6 +18,7 @@ import {
   getStatusInfo,
   getTransactionLabel,
   getCategoryLabel,
+  getContactSourceLabel,
   normalizePhone,
   validatePhone,
   toEnglishDigits,
@@ -65,6 +67,7 @@ export function CustomersPage({ initialId, initialFilter }: { initialId?: string
     status: '',
     transaction_intention: '',
     urgency: '',
+    lead_source: '',
   });
 
   useEffect(() => {
@@ -111,6 +114,7 @@ export function CustomersPage({ initialId, initialFilter }: { initialId?: string
     if (filters.status) rows = rows.filter((c) => c.status === filters.status);
     if (filters.transaction_intention) rows = rows.filter((c) => c.transaction_intention === filters.transaction_intention);
     if (filters.urgency) rows = rows.filter((c) => c.urgency === filters.urgency);
+    if (filters.lead_source) rows = rows.filter((c) => c.lead_source === filters.lead_source);
 
     const byDateDesc = (a: string | null, b: string | null) => (b ?? '').localeCompare(a ?? '');
     const budgetOf = (c: CustomerRow) => c.budget_max ?? c.budget_min ?? -1;
@@ -238,10 +242,21 @@ export function CustomersPage({ initialId, initialFilter }: { initialId?: string
                 {URGENCY_LEVELS.map((u) => <option key={u.value} value={u.value}>{u.label}</option>)}
               </select>
             </div>
+            <div>
+              <label className="label">منبع آشنایی</label>
+              <select
+                className="input"
+                value={filters.lead_source}
+                onChange={(e) => { setFilters({ ...filters, lead_source: e.target.value }); setPage(1); }}
+              >
+                <option value="">همه</option>
+                {CONTACT_SOURCES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
+              </select>
+            </div>
           </div>
           {Object.values(filters).some(Boolean) && (
             <button
-              onClick={() => { setFilters({ temperature: '', status: '', transaction_intention: '', urgency: '' }); setPage(1); }}
+              onClick={() => { setFilters({ temperature: '', status: '', transaction_intention: '', urgency: '', lead_source: '' }); setPage(1); }}
               className="text-xs text-red-500 font-medium"
             >
               پاک کردن فیلترها
@@ -484,7 +499,7 @@ function CustomerDetail({ customerId, onBack, onEdit }: { customerId: string; on
               ? customer.preferred_property_types.map((pt) => PROPERTY_TYPES[customer.preferred_category!]?.find((p) => p.value === pt)?.label ?? pt).join('، ')
               : '-'} />
             <InfoField label="فوریت" value={URGENCY_LEVELS.find(u => u.value === customer.urgency)?.label ?? '-'} />
-            <InfoField label="منبع" value={customer.lead_source ?? '-'} />
+            <InfoField label="منبع" value={customer.lead_source ? getContactSourceLabel(customer.lead_source) : '-'} />
             <InfoField label="آخرین تماس" value={customer.last_contact ? timeAgo(customer.last_contact) : '-'} />
             <InfoField label="پیگیری بعدی" value={customer.next_followup ? formatDate(customer.next_followup) : '-'} />
           </div>
@@ -1189,8 +1204,14 @@ function CustomerForm({ customerId, onBack, onSaved }: { customerId?: string; on
                 </select>
               </div>
               <div>
-                <label className="label">منبع مشتری</label>
-                <input className="input" value={form.lead_source} onChange={(e) => setForm({ ...form, lead_source: e.target.value })} placeholder="مثلا: اینستاگرام، معرفی، تماس ورودی" />
+                <label className="label">منبع آشنایی</label>
+                <select className="input" value={form.lead_source} onChange={(e) => setForm({ ...form, lead_source: e.target.value })}>
+                  <option value="">ثبت نشده</option>
+                  {form.lead_source && !CONTACT_SOURCES.some((s) => s.value === form.lead_source) && (
+                    <option value={form.lead_source}>{form.lead_source}</option>
+                  )}
+                  {CONTACT_SOURCES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
+                </select>
               </div>
             </div>
             <div>

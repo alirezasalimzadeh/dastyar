@@ -6,6 +6,7 @@ import type { Colleague, Owner } from '@/lib/types';
 const AGENCY_PREFIX = 'آژانس:';
 const SPECIALIZATION_PREFIX = 'حوزه:';
 const COLLEAGUE_REF_PREFIX = 'همکار-معرف:';
+const OWNER_SOURCE_PREFIX = 'منبع:';
 
 export function getColleagueRef(tags: string[] | null | undefined) {
   return tags?.find((tag) => tag.startsWith(COLLEAGUE_REF_PREFIX))?.slice(COLLEAGUE_REF_PREFIX.length) ?? '';
@@ -16,8 +17,18 @@ export function withColleagueRef(tags: string[], colleagueId: string) {
   return colleagueId ? [...cleanTags, `${COLLEAGUE_REF_PREFIX}${colleagueId}`] : cleanTags;
 }
 
+/** منبع آشنایی مالک (walk_in / phone / ...) — مثل آژانس و حوزه، در تگ‌ها نگه‌داری می‌شود */
+export function getOwnerSource(tags: string[] | null | undefined) {
+  return tags?.find((tag) => tag.startsWith(OWNER_SOURCE_PREFIX))?.slice(OWNER_SOURCE_PREFIX.length) ?? '';
+}
+
+export function withOwnerSource(tags: string[], source: string) {
+  const cleanTags = tags.filter((tag) => !tag.startsWith(OWNER_SOURCE_PREFIX));
+  return source ? [...cleanTags, `${OWNER_SOURCE_PREFIX}${source}`] : cleanTags;
+}
+
 export function visibleOwnerTags(tags: string[] | null | undefined) {
-  return (tags ?? []).filter((tag) => !tag.startsWith(COLLEAGUE_REF_PREFIX));
+  return (tags ?? []).filter((tag) => !tag.startsWith(COLLEAGUE_REF_PREFIX) && !tag.startsWith(OWNER_SOURCE_PREFIX));
 }
 
 export function ownerToColleague(owner: Owner): Colleague {
