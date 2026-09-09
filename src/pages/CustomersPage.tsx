@@ -22,6 +22,7 @@ import {
   normalizePhone,
   validatePhone,
   toEnglishDigits,
+  toPersianDigits,
   stripPhoneSpaces,
   ROBAT_KARIM_COUNTY_NAME,
 } from '@/lib/constants';
@@ -51,6 +52,15 @@ const CUSTOMER_SORTS = [
 export function CustomersPage({ initialId, initialFilter }: { initialId?: string; initialFilter?: string }) {
   const { user } = useAuth();
   const colleagues = useColleagues();
+  // نقشهٔ id شهر → نام، برای نمایش شهرِ موردنظر در کارت‌های لیست
+  const [cityNames, setCityNames] = useState<Record<string, string>>({});
+  useEffect(() => {
+    let active = true;
+    supabase.from('cities').select('id, name').then(({ data }) => {
+      if (active && data) setCityNames(Object.fromEntries((data as { id: string; name: string }[]).map((c) => [c.id, c.name])));
+    });
+    return () => { active = false; };
+  }, []);
   const [view, setView] = useState<'list' | 'detail' | 'create' | 'edit'>('list');
   const [customers, setCustomers] = useState<CustomerRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -296,13 +306,14 @@ export function CustomersPage({ initialId, initialFilter }: { initialId?: string
         <>
           <div className="space-y-3">
               {pageItems.map((c) => {
-                const temp = getTemperatureInfo(c.temperature);
-                const status = getStatusInfo(CUSTOMER_STATUSES, c.status);
                 const colleagueId = (c.property_preferences as Record<string, unknown> | null)?.colleague_id as string | undefined;
                 const referringColleague = colleagues.find((colleague) => colleague.id === colleagueId);
+                const transactionLabel = c.transaction_intention ? getTransactionLabel(c.transaction_intention) : null;
+                const categoryLabel = c.preferred_category ? getCategoryLabel(c.preferred_category) : null;
                 const typeLabels = c.preferred_property_types?.length
                   ? c.preferred_property_types.slice(0, 2).map((pt) => PROPERTY_TYPES[c.preferred_category!]?.find((p) => p.value === pt)?.label ?? pt).join('، ')
                   : null;
+                const cityText = (c.preferred_city_ids ?? []).map((id) => cityNames[id]).filter(Boolean).join('، ');
                 const budgetText = c.budget_min != null && c.budget_max != null
                   ? `${formatMoneyShort(c.budget_min)} تا ${formatMoneyShort(c.budget_max)}`
                   : c.budget_max != null
@@ -310,57 +321,90 @@ export function CustomersPage({ initialId, initialFilter }: { initialId?: string
                     : c.budget_min != null
                       ? `از ${formatMoneyShort(c.budget_min)}`
                       : null;
+                const areaText = c.min_area != null && c.max_area != null
+                  ? `${toPersianDigits(c.min_area)} تا ${toPersianDigits(c.max_area)} متر`
+                  : c.max_area != null
+                    ? `تا ${toPersianDigits(c.max_area)} متر`
+                    : c.min_area != null
+                      ? `از ${toPersianDigits(c.min_area)} متر`
+                      : null;
+                const amenities: string[] = [];
+                for (const pt of c.preferred_property_types ?? []) {
+                  const prefs = (c.property_preferences?.[pt] ?? null) as unknown as Record<string, unknown> | null;
+                  if (!prefs) continue;
+                  const section = getFieldSections(pt, c.transaction_role ?? 'owner', c.transaction_intention ?? undefined).find((s) => s.title === 'امکانات');
+                  if (!section) continue;
+                  for (const f of section.fields) {
+                    const value = prefs[f.key];
+                    if (value === true) amenities.push(f.label);
+                    else if (typeof value === 'string' && value !== '') amenities.push(getFieldLabel(f.key, value));
+                  }
+                }
+                const amenitiesText = amenities.length > 0
+                  ? [...new Set(amenities)].slice(0, 4).join('، ') + (amenities.length > 4 ? ' …' : '')
+                  : null;
+                const sourceLabel = c.lead_source
+                  ? c.lead_source === 'colleague_transfer' && referringColleague
+                    ? `${getContactSourceLabel(c.lead_source)} — ${referringColleague.name}`
+                    : getContactSourceLabel(c.lead_source)
+                  : null;
                 return (
                   <div
                     key={c.id}
                     onClick={() => { setSelectedId(c.id); setView('detail'); }}
                     className="card p-4 cursor-pointer transition-all hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md"
                   >
-                    <div className="flex items-start gap-3">
-                      <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-sm font-extrabold ${
-                        c.temperature === 'hot' ? 'bg-red-50 text-red-600' :
-                        c.temperature === 'warm' ? 'bg-orange-50 text-orange-600' :
-                        'bg-blue-50 text-blue-600'
-                      }`}>
-                        {c.name?.[0] ?? '؟'}
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="min-w-0">
-                            <div className="flex items-center gap-2">
-                              <p className="truncate text-sm font-bold text-slate-800">{c.name}</p>
-                              {c.urgency === 'critical' && <span className="text-[11px] font-bold text-red-500">فوری</span>}
-                            </div>
-                            <div className="mt-1 flex items-center gap-1 text-xs text-slate-400">
-                              <span dir="ltr">{c.mobile}</span>
-                              <CopyButton text={c.mobile} />
-                            </div>
-                          </div>
-                          <div className="shrink-0 text-left">
-                            <p className={`text-[11px] font-medium ${c.temperature === 'hot' ? 'text-red-500' : c.temperature === 'warm' ? 'text-orange-500' : 'text-blue-500'}`}>{temp.label}</p>
-                            <p className="mt-1 text-[10px] text-slate-400">{status.label}</p>
-                          </div>
-                        </div>
+                    <p className="text-lg font-extrabold text-slate-800">{transactionLabel ?? 'ثبت نشده'}</p>
 
-                        <div className="mt-3 grid grid-cols-1 gap-2 rounded-xl bg-slate-50 px-3 py-2.5 sm:grid-cols-2">
-                          <div className="min-w-0">
-                            <p className="text-[10px] font-medium text-slate-400">نیاز مشتری</p>
-                            <p className="mt-1 truncate text-xs font-semibold text-slate-700">
-                              {[c.transaction_intention ? getTransactionLabel(c.transaction_intention) : '', c.preferred_category ? getCategoryLabel(c.preferred_category) : '', typeLabels ?? ''].filter(Boolean).join(' • ') || 'ثبت نشده'}
-                            </p>
-                          </div>
-                          <div>
-                            <p className="text-[10px] font-medium text-slate-400">بودجه</p>
-                            <p className="mt-1 text-xs font-semibold text-slate-700">{budgetText ?? 'ثبت نشده'}</p>
-                          </div>
-                        </div>
+                    <div className="mt-1.5 flex flex-wrap items-center gap-x-2.5 gap-y-1">
+                      <p className="text-sm font-bold text-slate-700">{c.name}</p>
+                      <span className="text-xs text-slate-500" dir="ltr">{c.mobile}</span>
+                      <CopyButton text={c.mobile} />
+                      {c.secondary_phone && (
+                        <>
+                          <span className="text-xs text-slate-500" dir="ltr">{c.secondary_phone}</span>
+                          <CopyButton text={c.secondary_phone} />
+                        </>
+                      )}
+                    </div>
 
-                        <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-slate-400">
-                          <span>آخرین تماس: {c.lastContact ? timeAgo(c.lastContact) : 'بدون تماس'}</span>
-                          {c.next_followup && <span className="font-medium text-amber-600">پیگیری: {formatDate(c.next_followup)}</span>}
-                          {referringColleague && <span className="text-indigo-500">معرف: {referringColleague.name}</span>}
-                        </div>
+                    {(categoryLabel || typeLabels) && (
+                      <p className="mt-1 text-xs font-medium text-slate-600">{[categoryLabel, typeLabels].filter(Boolean).join(' • ')}</p>
+                    )}
+                    {cityText && <p className="mt-0.5 text-xs text-slate-500">شهر: {cityText}</p>}
+
+                    <div className="mt-2.5 grid grid-cols-2 gap-x-4 gap-y-1.5 rounded-xl bg-slate-50 px-3 py-2.5 sm:grid-cols-4">
+                      <div className="min-w-0">
+                        <p className="text-[10px] font-medium text-slate-400">بودجه</p>
+                        <p className="mt-0.5 truncate text-xs font-semibold text-slate-700">{budgetText ?? 'ثبت نشده'}</p>
                       </div>
+                      <div className="min-w-0">
+                        <p className="text-[10px] font-medium text-slate-400">متراژ</p>
+                        <p className="mt-0.5 text-xs font-semibold text-slate-700">{areaText ?? 'ثبت نشده'}</p>
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-[10px] font-medium text-slate-400">اتاق</p>
+                        <p className="mt-0.5 text-xs font-semibold text-slate-700">{c.bedrooms != null ? `${toPersianDigits(c.bedrooms)} اتاق` : 'ثبت نشده'}</p>
+                      </div>
+                      <div className="col-span-2 min-w-0 sm:col-span-1">
+                        <p className="text-[10px] font-medium text-slate-400">امکانات</p>
+                        <p className="mt-0.5 truncate text-xs font-semibold text-slate-700">{amenitiesText ?? 'ثبت نشده'}</p>
+                      </div>
+                    </div>
+
+                    <p className="mt-2 text-xs text-slate-500">
+                      <span className="text-slate-400">منبع آشنایی:</span> {sourceLabel ?? 'ثبت نشده'}
+                    </p>
+                    {c.notes && (
+                      <p className="mt-1 truncate text-xs text-slate-400">
+                        <span className="text-slate-300">یادداشت:</span> {c.notes}
+                      </p>
+                    )}
+
+                    <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-slate-400">
+                      {referringColleague && <span className="font-medium text-indigo-500">همکار معرف: {referringColleague.name}</span>}
+                      <span>آخرین تماس: {c.lastContact ? timeAgo(c.lastContact) : 'بدون تماس'}</span>
+                      {c.next_followup && <span className="font-medium text-amber-600">پیگیری: {formatDate(c.next_followup)}</span>}
                     </div>
                   </div>
                 );
