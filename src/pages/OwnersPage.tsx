@@ -211,7 +211,11 @@ function OwnerDetail({ ownerId, onBack, onPropertyOpen }: { ownerId: string; onB
     setClaiming(true);
     const { error } = await supabase
       .from('owners')
-      .update({ assigned_consultant_id: user.id })
+      .update({
+        assigned_consultant_id: user.id,
+        // با دریافت مالک، منبع آشنایی هم «انتقال از مدیر / همکار» می‌شود
+        tags: withOwnerSource(owner.tags ?? [], 'transferred'),
+      })
       .eq('id', ownerId);
     if (error) {
       setClaiming(false);
