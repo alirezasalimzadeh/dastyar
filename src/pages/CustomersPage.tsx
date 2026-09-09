@@ -516,7 +516,14 @@ function CustomerDetail({ customerId, onBack, onEdit }: { customerId: string; on
               ? customer.preferred_property_types.map((pt) => PROPERTY_TYPES[customer.preferred_category!]?.find((p) => p.value === pt)?.label ?? pt).join('، ')
               : '-'} />
             <InfoField label="فوریت" value={URGENCY_LEVELS.find(u => u.value === customer.urgency)?.label ?? '-'} />
-            <InfoField label="منبع" value={customer.lead_source ? getContactSourceLabel(customer.lead_source) : '-'} />
+            <InfoField
+              label="منبع"
+              value={customer.lead_source
+                ? customer.lead_source === 'colleague_transfer' && referringColleague
+                  ? `${getContactSourceLabel(customer.lead_source)} — ${referringColleague.name}`
+                  : getContactSourceLabel(customer.lead_source)
+                : '-'}
+            />
             <InfoField label="آخرین تماس" value={customer.last_contact ? timeAgo(customer.last_contact) : '-'} />
             <InfoField label="پیگیری بعدی" value={customer.next_followup ? formatDate(customer.next_followup) : '-'} />
           </div>
@@ -946,6 +953,10 @@ function CustomerForm({ customerId, onBack, onSaved }: { customerId?: string; on
 
   const handleSave = async () => {
     if (!validateStep()) return;
+    if (form.lead_source === 'colleague_transfer' && !colleagueId) {
+      setSaveError('منبع «انتقال از همکار» انتخاب شده؛ لطفاً همکار را مشخص کنید.');
+      return;
+    }
     setSaving(true);
     setSaveError('');
 
@@ -1261,9 +1272,13 @@ function CustomerForm({ customerId, onBack, onSaved }: { customerId?: string; on
               <textarea className="input min-h-[80px]" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} placeholder="توضیحات اضافی..." />
             </div>
             <div>
-              <label className="label">همکار معرف <span className="font-normal text-slate-400">(اختیاری)</span></label>
+              <label className="label">
+                {form.lead_source === 'colleague_transfer'
+                  ? 'کدام همکار؟ *'
+                  : <><span>همکار معرف</span> <span className="font-normal text-slate-400">(اختیاری)</span></>}
+              </label>
               <select className="input" value={colleagueId} onChange={(e) => setColleagueId(e.target.value)}>
-                <option value="">این مشتری متعلق به خودم است</option>
+                <option value="">{form.lead_source === 'colleague_transfer' ? 'همکار را انتخاب کنید' : 'این مشتری متعلق به خودم است'}</option>
                 {colleagues.map((colleague) => (
                   <option key={colleague.id} value={colleague.id} disabled={colleague.status === 'inactive' && colleague.id !== colleagueId}>
                     {colleague.name}{colleague.agency_name ? ` — ${colleague.agency_name}` : ''}{colleague.status === 'inactive' ? ' (غیرفعال)' : ''}

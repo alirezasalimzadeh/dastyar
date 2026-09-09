@@ -89,14 +89,21 @@ export const CONTACT_SOURCES = [
   { value: 'phone', label: 'تماس تلفنی' },
   { value: 'online', label: 'آنلاین / شبکه اجتماعی' },
   { value: 'referral', label: 'معرفی' },
-  { value: 'transferred', label: 'انتقال از مدیر / همکار' },
+  { value: 'manager_transfer', label: 'انتقال از مدیر' },
+  { value: 'colleague_transfer', label: 'انتقال از همکار' },
   { value: 'other', label: 'سایر' },
 ] as const;
+
+// مقدار قدیمی پیش از تفکیک «مدیر/همکار» — فقط برای نمایش رکوردهای موجود
+const LEGACY_SOURCE_LABELS: Record<string, string> = {
+  transferred: 'انتقال از مدیر / همکار',
+};
 
 /** برچسب فارسی منبع؛ برای مقادیر متنی قدیمی، همان متن نمایش داده می‌شود */
 export function getContactSourceLabel(value?: string | null): string {
   const found = CONTACT_SOURCES.find((s) => s.value === value);
   if (found) return found.label;
+  if (value && LEGACY_SOURCE_LABELS[value]) return LEGACY_SOURCE_LABELS[value];
   return value?.trim() || 'ثبت نشده';
 }
 

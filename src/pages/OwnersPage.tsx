@@ -213,8 +213,8 @@ function OwnerDetail({ ownerId, onBack, onPropertyOpen }: { ownerId: string; onB
       .from('owners')
       .update({
         assigned_consultant_id: user.id,
-        // با دریافت مالک، منبع آشنایی هم «انتقال از مدیر / همکار» می‌شود
-        tags: withOwnerSource(owner.tags ?? [], 'transferred'),
+        // با دریافت مالک، منبع آشنایی هم «انتقال از مدیر» می‌شود
+        tags: withOwnerSource(owner.tags ?? [], 'manager_transfer'),
       })
       .eq('id', ownerId);
     if (error) {
@@ -251,7 +251,15 @@ function OwnerDetail({ ownerId, onBack, onPropertyOpen }: { ownerId: string; onB
             <h2 className="text-xl font-extrabold text-slate-800">{owner.name}</h2>
             <p className="text-sm text-slate-500" dir="ltr">{owner.phone}</p>
             {owner.secondary_phone && <p className="text-xs text-slate-400" dir="ltr">{owner.secondary_phone}</p>}
-            {getOwnerSource(owner.tags) && <p className="mt-1 text-xs text-slate-400">منبع: {getContactSourceLabel(getOwnerSource(owner.tags))}</p>}
+            {getOwnerSource(owner.tags) && (() => {
+              const src = getOwnerSource(owner.tags);
+              const refColleague = colleagues.find((c) => c.id === getColleagueRef(owner.tags));
+              return (
+                <p className="mt-1 text-xs text-slate-400">
+                  منبع: {src === 'colleague_transfer' && refColleague ? `${getContactSourceLabel(src)} — ${refColleague.name}` : getContactSourceLabel(src)}
+                </p>
+              );
+            })()}
           </div>
           <Badge color={owner.status === 'active' ? 'green' : 'red'}>{owner.status === 'active' ? 'فعال' : 'غیرفعال'}</Badge>
         </div>
@@ -370,6 +378,7 @@ function OwnerForm({ owner, onClose, onSaved }: { owner?: Owner; onClose: () => 
     if (!name.trim()) { setError('نام الزامی است'); return; }
     if (!phone.trim()) { setError('تلفن الزامی است'); return; }
     if (!validatePhone(phone)) { setError('فرمت تلفن صحیح نیست'); return; }
+    if (source === 'colleague_transfer' && !colleagueId) { setError('منبع «انتقال از همکار» انتخاب شده؛ لطفاً همکار را مشخص کنید.'); return; }
     setSaving(true);
     setError('');
     const payload = {
@@ -409,9 +418,13 @@ function OwnerForm({ owner, onClose, onSaved }: { owner?: Owner; onClose: () => 
         <div><label className="label">تلفن *</label><input className="input" value={phone} onChange={(e) => setPhone(stripPhoneSpaces(e.target.value))} placeholder="09123456789" dir="ltr" /></div>
         <div><label className="label">تلفن ثانویه</label><input className="input" value={secondaryPhone} onChange={(e) => setSecondaryPhone(stripPhoneSpaces(e.target.value))} placeholder="02112345678" dir="ltr" /></div>
         <div>
-          <label className="label">همکار معرف <span className="font-normal text-slate-400">(اختیاری)</span></label>
+          <label className="label">
+            {source === 'colleague_transfer'
+              ? 'کدام همکار؟ *'
+              : <><span>همکار معرف</span> <span className="font-normal text-slate-400">(اختیاری)</span></>}
+          </label>
           <select className="input" value={colleagueId} onChange={(e) => setColleagueId(e.target.value)}>
-            <option value="">این مالک متعلق به خودم است</option>
+            <option value="">{source === 'colleague_transfer' ? 'همکار را انتخاب کنید' : 'این مالک متعلق به خودم است'}</option>
             {colleagues.map((colleague) => (
               <option key={colleague.id} value={colleague.id} disabled={colleague.status === 'inactive' && colleague.id !== colleagueId}>
                 {colleague.name}{colleague.agency_name ? ` — ${colleague.agency_name}` : ''}{colleague.status === 'inactive' ? ' (غیرفعال)' : ''}
@@ -423,6 +436,9 @@ function OwnerForm({ owner, onClose, onSaved }: { owner?: Owner; onClose: () => 
           <label className="label">منبع آشنایی <span className="font-normal text-slate-400">(اختیاری)</span></label>
           <select className="input" value={source} onChange={(e) => setSource(e.target.value)}>
             <option value="">ثبت نشده</option>
+            {source && !CONTACT_SOURCES.some((s) => s.value === source) && (
+              <option value={source}>{getContactSourceLabel(source)}</option>
+            )}
             {CONTACT_SOURCES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
           </select>
         </div>
