@@ -91,6 +91,7 @@ export function Layout({
   const [offlineQueue, setOfflineQueue] = useState<OfflineQueueItem[]>([]);
   const [showQueue, setShowQueue] = useState(false);
   const [syncing, setSyncing] = useState(false);
+  const [syncMessage, setSyncMessage] = useState<{ ok: boolean; text: string } | null>(null);
 
   useEffect(() => {
     const updateConnection = () => setOnline(navigator.onLine);
@@ -121,10 +122,26 @@ export function Layout({
 
   const handleSync = async () => {
     setSyncing(true);
+    setSyncMessage(null);
     try {
       const { data } = await supabase.auth.getSession();
       const token = data.session?.access_token;
-      await syncOfflineQueue({ authorization: token ? `Bearer ${token}` : null });
+      const summary = await syncOfflineQueue({ authorization: token ? `Bearer ${token}` : null });
+      if (!summary) {
+        setSyncMessage({ ok: false, text: 'همگام‌سازی انجام نشد؛ اتصال اینترنت را بررسی کنید.' });
+      } else if (summary.total === 0) {
+        setSyncMessage({ ok: true, text: 'تغییری در صف نبود.' });
+      } else if (summary.remaining === 0) {
+        setSyncMessage({ ok: true, text: 'همهٔ تغییرات با موفقیت به سرور ارسال شد.' });
+      } else {
+        setSyncMessage({
+          ok: false,
+          text: `${toPersianDigits(summary.remaining)} از ${toPersianDigits(summary.total)} مورد ارسال نشد.${summary.lastError ? ` آخرین خطا: ${summary.lastError}` : ''}`,
+        });
+      }
+    } catch (err) {
+      console.error('[dastyar-sync] manual sync error', err);
+      setSyncMessage({ ok: false, text: 'همگام‌سازی به پایان نرسید؛ جزئیات در کنسول مرورگر (F12) ثبت شد.' });
     } finally {
       setSyncing(false);
       refreshQueue();
@@ -307,6 +324,11 @@ export function Layout({
           <p className="text-xs leading-6 text-slate-500">
             تغییراتی که در حالت آفلاین ثبت می‌کنید اینجا نگهداری می‌شوند و پس از اتصال اینترنت به سرور ارسال می‌شوند؛ تا آن زمان در همین دستگاه قابل مشاهده و ویرایش هستند.
           </p>
+          {syncMessage && (
+            <p className={`rounded-lg p-2.5 text-xs leading-6 break-words ${syncMessage.ok ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}>
+              {syncMessage.text}
+            </p>
+          )}
           {offlineQueue.length === 0 ? (
             <p className="rounded-lg bg-slate-50 p-3 text-center text-sm text-slate-500">تغییری در صف نیست.</p>
           ) : (
@@ -327,9 +349,12 @@ export function Layout({
                       <Trash2 size={14} />
                     </button>
                   </div>
-                  <p className="mt-0.5 text-[11px] text-slate-400">{timeAgo(item.createdAt)}</p>
-                  {item.failed && item.lastError && (
-                    <p className="mt-1 rounded bg-red-100/70 p-1.5 text-[11px] leading-5 text-red-700">{item.lastError}</p>
+                  <p className="mt-0.5 text-[11px] text-slate-400">
+                    {timeAgo(item.createdAt)}
+                    {item.lastAttempt ? ` — آخرین تلاش: ${timeAgo(item.lastAttempt)}` : ''}
+                  </p>
+                  {item.lastError && (
+                    <p className="mt-1 rounded bg-red-100/70 p-1.5 text-[11px] leading-5 text-red-700 break-words">{item.lastError}</p>
                   )}
                 </div>
               ))}

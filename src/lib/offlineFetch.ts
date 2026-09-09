@@ -14,6 +14,7 @@ type QueuedRequest = {
   createdAt: string;
   failed?: boolean;
   lastError?: string;
+  lastAttempt?: string;
 };
 
 const dbPromise = typeof indexedDB === 'undefined' ? null : openDB(DB_NAME, 1, {
@@ -139,33 +140,91 @@ const removeQueuedEntry = async (entry: QueuedRequest) => {
 
 type ReplayResult = { status: 'ok' | 'failed' | 'network'; message?: string };
 
-async function replayEntry(entry: QueuedRequest, authHeaders: Record<string, string>): Promise<ReplayResult> {
+// تمام پردازش صف (همگام‌سازی خودکار با هر درخواست + دکمهٔ دستی) از پشت
+// همین قفل عبور می‌کند تا دو گذر همزمان هرگز یک تغییر را دو بار ارسال
+// نکنند (که باعث رکورد تکراری و وضعیت خطای کهنه می‌شد) و تا دکمهٔ دستی
+// فقط بعد از پایان گذر جاری اجرا شود.
+let syncLockTail: Promise<void> = Promise.resolve();
+const withSyncLock = <T>(fn: () => Promise<T>): Promise<T> => {
+  const run = syncLockTail.then(fn);
+  syncLockTail = run.then(() => undefined, () => undefined);
+  return run;
+};
+
+const replayEntry = async (entry: QueuedRequest, authHeaders: Record<string, string>): Promise<ReplayResult> => {
   const headers = new Headers(entry.headers);
   for (const [key, value] of Object.entries(authHeaders)) headers.set(key, value);
+  console.info(`[dastyar-sync] replay #${entry.id} ${entry.method} ${entry.url}`);
   try {
-    const response = await nativeFetch(entry.url, { method: entry.method, headers, body: entry.body });
+    const response = await nativeFetch(entry.url, {
+      method: entry.method,
+      headers,
+      body: entry.body,
+      signal: AbortSignal.timeout(30000),
+    });
     // 409 یعنی رکورد قبلاً همگام شده (انتقال تکراری)؛ آن را هم موفقیت می‌شماریم
-    if (response.ok || response.status === 409) return { status: 'ok' };
+    if (response.ok || response.status === 409) {
+      console.info(`[dastyar-sync] #${entry.id} ok (${response.status})`);
+      return { status: 'ok' };
+    }
     let message = `کد پاسخ ${response.status}`;
     try {
       const text = await response.text();
-      if (text) message = text.slice(0, 200);
+      if (text) message = text.slice(0, 300);
     } catch {
       // پاسخ متنی ندارد
     }
+    console.warn(`[dastyar-sync] #${entry.id} failed (${response.status}): ${message}`);
     return { status: 'failed', message };
-  } catch {
-    return { status: 'network' };
+  } catch (err) {
+    console.warn(`[dastyar-sync] #${entry.id} network error`, err);
+    return { status: 'network', message: 'ارتباط با سرور برقرار نشد' };
   }
-}
+};
+
+export type SyncSummary = {
+  total: number;
+  synced: number;
+  remaining: number;
+  lastError?: string;
+};
 
 // همگام‌سازی صف آفلاین: هر مورد جداگانه پردازش می‌شود تا یک خطا کل صف را
 // برای همیشه از کار نیاندازد؛ موارد شکست‌خورده علامت‌گذاری می‌شوند و از
-// رابط کاربری قابل مشاهده و تکرار مجدد هستند.
-async function flushQueue(currentRequest: Request | null, includeFailed = false) {
-  if (!dbPromise || !navigator.onLine) return;
+// رابط کاربری قابل مشاهده و تکرار مجدد هستند. نتیجه برمی‌گردد تا UI دقیقاً
+// بگوید چه اتفاقی افتاده.
+const processQueue = async (authHeaders: Record<string, string>, includeFailed: boolean): Promise<SyncSummary> => {
+  const summary: SyncSummary = { total: 0, synced: 0, remaining: 0 };
+  if (!dbPromise || !navigator.onLine) return summary;
   await reconcileQueue();
   const db = await dbPromise;
+  const entries = (await db.getAll('requests')) as QueuedRequest[];
+  summary.total = entries.length;
+  for (const entry of entries) {
+    if (entry.failed && !includeFailed) continue;
+    const result = await replayEntry(entry, authHeaders);
+    if (result.status === 'ok') {
+      await removeQueuedEntry(entry);
+      summary.synced += 1;
+      continue;
+    }
+    // اگر مورد در مسیر دیگر همین حالا حذف شده، دوباره زنده‌اش نکن
+    const current = entry.id != null ? ((await db.get('requests', entry.id)) as QueuedRequest | undefined) : undefined;
+    if (!current) continue;
+    summary.remaining += 1;
+    summary.lastError = result.message;
+    if (result.status === 'failed') {
+      await db.put('requests', { ...current, failed: true, lastError: result.message, lastAttempt: new Date().toISOString() });
+    } else {
+      // شبکه در دسترس نیست؛ وضعیت را نشان بده و در فرصت بعدی امتحان می‌شود
+      await db.put('requests', { ...current, lastError: result.message, lastAttempt: new Date().toISOString() });
+      break;
+    }
+  }
+  return summary;
+};
+
+async function flushQueue(currentRequest: Request | null, includeFailed = false) {
   const authHeaders: Record<string, string> = {};
   if (currentRequest) {
     const authorization = currentRequest.headers.get('authorization');
@@ -173,18 +232,9 @@ async function flushQueue(currentRequest: Request | null, includeFailed = false)
     if (authorization) authHeaders.authorization = authorization;
     if (apiKey) authHeaders.apikey = apiKey;
   }
-  const entries = (await db.getAll('requests')) as QueuedRequest[];
-  for (const entry of entries) {
-    if (entry.failed && !includeFailed) continue;
-    const result = await replayEntry(entry, authHeaders);
-    if (result.status === 'ok') {
-      await removeQueuedEntry(entry);
-    } else if (result.status === 'failed') {
-      await db.put('requests', { ...entry, failed: true, lastError: result.message });
-    } else {
-      break; // شبکه در دسترس نیست؛ در فرصت بعدی امتحان می‌شود
-    }
-  }
+  await withSyncLock(() => processQueue(authHeaders, includeFailed)).catch((err) => {
+    console.warn('[dastyar-sync] flushQueue error', err);
+  });
 }
 
 async function patchCachedQueries(request: Request, body: string | null) {
@@ -319,6 +369,7 @@ export interface OfflineQueueItem {
   createdAt: string;
   failed: boolean;
   lastError?: string;
+  lastAttempt?: string;
 }
 
 /** فهرست تغییرات ثبت‌شده در آفلاین برای نمایش در رابط کاربری */
@@ -333,6 +384,7 @@ export async function getOfflineQueue(): Promise<OfflineQueueItem[]> {
     createdAt: entry.createdAt,
     failed: Boolean(entry.failed),
     lastError: entry.lastError,
+    lastAttempt: entry.lastAttempt,
   }));
 }
 
@@ -341,24 +393,17 @@ export async function getPendingOfflineCount() {
   return (await dbPromise).count('requests');
 }
 
-/** همگام‌سازی دستی از رابط کاربری (با توکن نشست جاری) */
-export async function syncOfflineQueue(auth: { authorization?: string | null; apikey?: string | null } = {}) {
-  if (!dbPromise || !navigator.onLine) return;
-  await reconcileQueue();
-  const db = await dbPromise;
+/** همگام‌سازی دستی از رابط کاربری (با توکن نشست جاری)؛ نتیجه برمی‌گردد تا UI نتیجه را نشان دهد */
+export async function syncOfflineQueue(auth: { authorization?: string | null; apikey?: string | null } = {}): Promise<SyncSummary | null> {
+  if (!dbPromise || !navigator.onLine) return null;
   const authHeaders: Record<string, string> = {};
   if (auth.authorization) authHeaders.authorization = auth.authorization;
   if (auth.apikey) authHeaders.apikey = auth.apikey;
-  const entries = (await db.getAll('requests')) as QueuedRequest[];
-  for (const entry of entries) {
-    const result = await replayEntry(entry, authHeaders);
-    if (result.status === 'ok') {
-      await removeQueuedEntry(entry);
-    } else if (result.status === 'failed') {
-      await db.put('requests', { ...entry, failed: true, lastError: result.message });
-    } else {
-      break;
-    }
+  try {
+    return await withSyncLock(() => processQueue(authHeaders, true));
+  } catch (err) {
+    console.error('[dastyar-sync] syncOfflineQueue error', err);
+    return { total: 0, synced: 0, remaining: 0, lastError: 'خطای داخلی در همگام‌سازی' };
   }
 }
 
