@@ -18,7 +18,7 @@ import { SettingsPage } from '@/pages/SettingsPage';
 import { FullPageSpinner } from '@/components/ui';
 
 function AppContent() {
-  const { user, loading } = useAuth();
+  const { user, profile, loading, signOut } = useAuth();
   const [page, setPage] = useState('dashboard');
   const [params, setParams] = useState<Record<string, unknown>>({});
 
@@ -29,6 +29,17 @@ function AppContent() {
 
   if (loading) return <FullPageSpinner />;
   if (!user) return <AuthPage />;
+  if (!profile) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-slate-50 p-4" dir="rtl">
+        <div className="card max-w-sm space-y-4 p-6 text-center">
+          <h1 className="text-lg font-bold text-slate-800">حساب فعال نیست</h1>
+          <p className="text-sm leading-6 text-slate-500">برای این حساب پروفایل فعال برنامه وجود ندارد.</p>
+          <button type="button" onClick={signOut} className="btn-secondary w-full">بازگشت به ورود</button>
+        </div>
+      </div>
+    );
+  }
 
   const renderPage = () => {
     switch (page) {
