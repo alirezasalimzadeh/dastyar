@@ -1,5 +1,5 @@
-import { useEffect, useState, useCallback, useMemo } from 'react';
-import { Plus, Search, Users, Phone, X, Filter, ArrowLeft, Trash2, Tag, Clock, Target, MapPin, Pencil } from 'lucide-react';
+import { useEffect, useState, useCallback, useMemo, type ReactNode } from 'react';
+import { Plus, Search, Users, Phone, X, Filter, ArrowLeft, Trash2, Tag, Clock, Target, MapPin, Pencil, Key, ShoppingBag, Handshake, Wallet, Ruler, BedDouble, Sparkles, StickyNote, UserPlus, CalendarClock, type LucideIcon } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth';
 import {
@@ -36,13 +36,28 @@ import { FollowupFormModal, FollowupRecordCard } from '@/components/followups';
 
 const PAGE_SIZE = 20;
 
-// رنگ مخصوص هر نوع معامله (عنوان بالای کارت)
-const TRANSACTION_STYLES: Record<string, { text: string; bar: string }> = {
-  buy: { text: 'text-emerald-600', bar: 'bg-emerald-400' },
-  rent: { text: 'text-blue-600', bar: 'bg-blue-400' },
-  sell: { text: 'text-amber-600', bar: 'bg-amber-400' },
-  partnership: { text: 'text-purple-600', bar: 'bg-purple-400' },
+// هویت بصری هر نوع معامله: بج رنگی + لبهٔ کارت + رنگ آیکون‌های آمار
+const TRANSACTION_STYLES: Record<string, { pill: string; accent: string; icon: string; Icon: LucideIcon }> = {
+  buy: { pill: 'bg-emerald-50 text-emerald-700', accent: 'bg-emerald-400', icon: 'text-emerald-500', Icon: ShoppingBag },
+  rent: { pill: 'bg-blue-50 text-blue-700', accent: 'bg-blue-400', icon: 'text-blue-500', Icon: Key },
+  sell: { pill: 'bg-amber-50 text-amber-700', accent: 'bg-amber-400', icon: 'text-amber-500', Icon: Tag },
+  partnership: { pill: 'bg-purple-50 text-purple-700', accent: 'bg-purple-400', icon: 'text-purple-500', Icon: Handshake },
 };
+
+// کاشی آماری کوچک در کارت مشتری
+function CardStat({ icon, label, value, tint }: { icon: ReactNode; label: string; value: string | null; tint?: string }) {
+  return (
+    <div className="min-w-0 rounded-xl bg-slate-50 px-2.5 py-2">
+      <p className="flex items-center gap-1 text-[10px] font-medium text-slate-400">
+        <span className={`shrink-0 ${tint ?? 'text-slate-400'}`}>{icon}</span>
+        <span>{label}</span>
+      </p>
+      <p className="mt-0.5 truncate text-xs font-semibold text-slate-700" title={value ?? undefined}>
+        {value ?? <span className="font-normal text-slate-300">ثبت نشده</span>}
+      </p>
+    </div>
+  );
+}
 
 type CustomerRow = Customer & { calls?: { call_date: string }[] | null };
 
@@ -357,64 +372,85 @@ export function CustomersPage({ initialId, initialFilter }: { initialId?: string
                     ? `${getContactSourceLabel(c.lead_source)} — ${referringColleague.name}`
                     : getContactSourceLabel(c.lead_source)
                   : null;
+                const TxIcon = txStyle?.Icon;
                 return (
                   <div
                     key={c.id}
                     onClick={() => { setSelectedId(c.id); setView('detail'); }}
-                    className="card p-4 cursor-pointer transition-all hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md"
+                    className="card relative overflow-hidden p-4 pr-5 cursor-pointer transition-all hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md"
                   >
-                    <p className={`text-lg font-extrabold ${txStyle?.text ?? 'text-slate-400'}`}>{transactionLabel ?? 'ثبت نشده'}</p>
-                    {txStyle && <span className={`mt-1 block h-1 w-10 rounded-full ${txStyle.bar}`} />}
+                    {/* لبهٔ رنگی سمت راست: هویت کارت */}
+                    <span className={`absolute inset-y-0 right-0 w-1 ${txStyle?.accent ?? 'bg-slate-200'}`} aria-hidden />
 
-                    <div className="mt-1.5 flex flex-wrap items-center gap-x-2.5 gap-y-1">
-                      <p className="text-sm font-bold text-slate-700">{c.name}</p>
-                      <span className="text-xs text-slate-500" dir="ltr">{c.mobile}</span>
+                    {/* ۱. نوع معامله — بج رنگی با آیکون */}
+                    <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-sm font-extrabold ${txStyle?.pill ?? 'bg-slate-100 text-slate-400'}`}>
+                      {TxIcon && <TxIcon size={14} />}
+                      {transactionLabel ?? 'ثبت نشده'}
+                    </span>
+
+                    {/* ۲. نام و شماره‌ها */}
+                    <div className="mt-2 flex flex-wrap items-center gap-x-2.5 gap-y-1">
+                      <p className="text-base font-extrabold text-slate-800">{c.name}</p>
+                      <span className="text-xs font-medium text-slate-500" dir="ltr">{c.mobile}</span>
                       <CopyButton text={c.mobile} />
                       {c.secondary_phone && (
                         <>
-                          <span className="text-xs text-slate-500" dir="ltr">{c.secondary_phone}</span>
+                          <span className="text-xs font-medium text-slate-500" dir="ltr">{c.secondary_phone}</span>
                           <CopyButton text={c.secondary_phone} />
                         </>
                       )}
                     </div>
 
+                    {/* ۳. دسته‌بندی و نوع ملک + ۴. شهر */}
                     {(categoryLabel || typeLabels) && (
-                      <p className="mt-1 text-xs font-medium text-slate-600">{[categoryLabel, typeLabels].filter(Boolean).join(' • ')}</p>
+                      <p className="mt-1.5 text-xs font-medium text-slate-600">{[categoryLabel, typeLabels].filter(Boolean).join(' • ')}</p>
                     )}
-                    {cityText && <p className="mt-0.5 text-xs text-slate-500">شهر: {cityText}</p>}
-
-                    <div className="mt-2.5 grid grid-cols-2 gap-x-4 gap-y-1.5 rounded-xl bg-slate-50 px-3 py-2.5 sm:grid-cols-4">
-                      <div className="min-w-0">
-                        <p className="text-[10px] font-medium text-slate-400">بودجه</p>
-                        <p className="mt-0.5 truncate text-xs font-semibold text-slate-700">{budgetText ?? 'ثبت نشده'}</p>
-                      </div>
-                      <div className="min-w-0">
-                        <p className="text-[10px] font-medium text-slate-400">متراژ</p>
-                        <p className="mt-0.5 text-xs font-semibold text-slate-700">{areaText ?? 'ثبت نشده'}</p>
-                      </div>
-                      <div className="min-w-0">
-                        <p className="text-[10px] font-medium text-slate-400">اتاق</p>
-                        <p className="mt-0.5 text-xs font-semibold text-slate-700">{c.bedrooms != null ? `${toPersianDigits(c.bedrooms)} اتاق` : 'ثبت نشده'}</p>
-                      </div>
-                      <div className="col-span-2 min-w-0 sm:col-span-1">
-                        <p className="text-[10px] font-medium text-slate-400">امکانات</p>
-                        <p className="mt-0.5 truncate text-xs font-semibold text-slate-700">{amenitiesText ?? 'ثبت نشده'}</p>
-                      </div>
-                    </div>
-
-                    <p className="mt-2 text-xs text-slate-500">
-                      <span className="text-slate-400">منبع آشنایی:</span> {sourceLabel ?? 'ثبت نشده'}
-                    </p>
-                    {c.notes && (
-                      <p className="mt-1 truncate text-xs text-slate-400">
-                        <span className="text-slate-300">یادداشت:</span> {c.notes}
+                    {cityText && (
+                      <p className="mt-1 flex items-center gap-1 text-xs text-slate-500">
+                        <MapPin size={12} className="text-slate-400" /> شهر: {cityText}
                       </p>
                     )}
 
-                    <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-slate-400">
-                      {referringColleague && <span className="font-medium text-indigo-500">همکار معرف: {referringColleague.name}</span>}
-                      <span>آخرین تماس: {c.lastContact ? timeAgo(c.lastContact) : 'بدون تماس'}</span>
-                      {c.next_followup && <span className="font-medium text-amber-600">پیگیری: {formatDate(c.next_followup)}</span>}
+                    {/* ۵ تا ۸. کاشی‌های آماری */}
+                    <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                      <CardStat icon={<Wallet size={13} />} label="بودجه" value={budgetText} tint={txStyle?.icon} />
+                      <CardStat icon={<Ruler size={13} />} label="متراژ" value={areaText} tint={txStyle?.icon} />
+                      <CardStat icon={<BedDouble size={13} />} label="اتاق" value={c.bedrooms != null ? `${toPersianDigits(c.bedrooms)} اتاق` : null} tint={txStyle?.icon} />
+                      <CardStat icon={<Sparkles size={13} />} label="امکانات" value={amenitiesText} tint={txStyle?.icon} />
+                    </div>
+
+                    {/* ۹. منبع آشنایی */}
+                    <p className="mt-3 flex items-center gap-1.5 text-xs text-slate-500">
+                      <Target size={12} className="shrink-0 text-slate-400" />
+                      <span>
+                        <span className="text-slate-400">منبع آشنایی:</span>{' '}
+                        {sourceLabel ?? <span className="text-slate-300">ثبت نشده</span>}
+                      </span>
+                    </p>
+
+                    {/* ۱۰. آخرین یادداشت */}
+                    {c.notes && (
+                      <p className="mt-1.5 flex items-center gap-1.5 text-xs text-slate-400">
+                        <StickyNote size={12} className="shrink-0 text-slate-300" />
+                        <span className="truncate">{c.notes}</span>
+                      </p>
+                    )}
+
+                    {/* ۱۱ و ۱۲. همکار معرف + آخرین تماس و پیگیری */}
+                    <div className="mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-slate-100 pt-2.5 text-[11px] text-slate-400">
+                      {referringColleague && (
+                        <span className="inline-flex items-center gap-1 font-medium text-indigo-500">
+                          <UserPlus size={12} /> همکار معرف: {referringColleague.name}
+                        </span>
+                      )}
+                      <span className="inline-flex items-center gap-1">
+                        <Phone size={11} className="text-slate-300" /> آخرین تماس: {c.lastContact ? timeAgo(c.lastContact) : 'بدون تماس'}
+                      </span>
+                      {c.next_followup && (
+                        <span className="inline-flex items-center gap-1 font-medium text-amber-600">
+                          <CalendarClock size={11} /> پیگیری: {formatDate(c.next_followup)}
+                        </span>
+                      )}
                     </div>
                   </div>
                 );
