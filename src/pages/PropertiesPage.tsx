@@ -21,6 +21,7 @@ import {
   normalizePhone,
   validatePhone,
   toEnglishDigits,
+  stripPhoneSpaces,
   toPersianDigits,
   timeAgo,
   ROBAT_KARIM_COUNTY_NAME,
@@ -2323,7 +2324,7 @@ function PropertyForm({ propertyId, onBack, onSaved }: { propertyId?: string; on
                     </div>
                     <div>
                       <label className="label">{form.contact_type === 'divar' ? 'تلفن مالک (اختیاری)' : 'تلفن مالک *'}</label>
-                      <input className={`input ${errors.owner_phone ? 'input-error' : ''}`} value={form.owner_phone} onChange={(e) => setForm({ ...form, owner_phone: e.target.value })} placeholder="09123456789" dir="ltr" />
+                      <input className={`input ${errors.owner_phone ? 'input-error' : ''}`} value={form.owner_phone} onChange={(e) => setForm({ ...form, owner_phone: stripPhoneSpaces(e.target.value) })} placeholder="09123456789" dir="ltr" />
                       {errors.owner_phone && <p className="mt-1 text-xs text-red-500">{errors.owner_phone}</p>}
                     </div>
                     <div>

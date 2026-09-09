@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ArrowLeft, Building2, FileText, Pencil, Phone, Plus, Search, Trash2, UserPlus } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth';
-import { COLLEAGUE_TAG, normalizePhone, validatePhone, toEnglishDigits, toPersianDigits } from '@/lib/constants';
+import { COLLEAGUE_TAG, normalizePhone, validatePhone, toEnglishDigits, toPersianDigits, stripPhoneSpaces } from '@/lib/constants';
 import { colleagueTags, ownerToColleague } from '@/lib/colleagues';
 import { Badge, ConfirmDialog, CopyButton, EmptyState, Modal, PageHeader, Spinner } from '@/components/ui';
 import type { Colleague, Owner } from '@/lib/types';
@@ -281,7 +281,7 @@ function ColleagueForm({ initial, onClose, onSaved }: { initial: Colleague | nul
       <div className="space-y-4">
         {error && <div className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-500">{error}</div>}
         <div><label className="label">نام و نام خانوادگی *</label><input className="input" value={name} onChange={(event) => setName(event.target.value)} placeholder="نام همکار" /></div>
-        <div><label className="label">موبایل *</label><input className="input" value={phone} onChange={(event) => setPhone(event.target.value)} placeholder="09123456789" dir="ltr" /></div>
+        <div><label className="label">موبایل *</label><input className="input" value={phone} onChange={(event) => setPhone(stripPhoneSpaces(event.target.value))} placeholder="09123456789" dir="ltr" /></div>
         <div><label className="label">تلفن ثانویه</label><input className="input" value={secondaryPhone} onChange={(event) => setSecondaryPhone(event.target.value)} placeholder="02112345678" dir="ltr" /></div>
         <div><label className="label">نام آژانس یا دفتر</label><input className="input" value={agencyName} onChange={(event) => setAgencyName(event.target.value)} placeholder="مثلاً املاک مرکزی" /></div>
         <div><label className="label">حوزه فعالیت</label><input className="input" value={specialization} onChange={(event) => setSpecialization(event.target.value)} placeholder="مثلاً آپارتمان مسکونی غرب تهران" /></div>

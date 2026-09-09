@@ -483,3 +483,9 @@ export function validatePhone(phone: string): boolean {
 export function normalizePhone(phone: string): string {
   return toEnglishDigits(phone).replace(/\s/g, '');
 }
+
+// When typing/pasting into a phone field (e.g. from contacts), remove the
+// spaces that phones add by default: "0912 836 9964" -> "09128369964"
+export function stripPhoneSpaces(phone: string): string {
+  return phone.replace(/\s+/g, '');
+}

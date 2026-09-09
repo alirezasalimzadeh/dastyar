@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback, useMemo } from 'react';
 import { Plus, Search, Building2, Phone, Clock, ArrowLeft, Trash2, X, Pencil, User, UserCheck } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth';
-import { normalizePhone, validatePhone, formatDate, timeAgo, toEnglishDigits, toPersianDigits, COLLEAGUE_TAG, CONTACT_SOURCES, getContactSourceLabel } from '@/lib/constants';
+import { normalizePhone, validatePhone, formatDate, timeAgo, toEnglishDigits, toPersianDigits, COLLEAGUE_TAG, CONTACT_SOURCES, getContactSourceLabel, stripPhoneSpaces } from '@/lib/constants';
 import { Badge, EmptyState, Spinner, Modal, PageHeader, Pagination, ConfirmDialog, CopyButton, SortSelect } from '@/components/ui';
 import type { Owner } from '@/lib/types';
 import { getColleagueRef, getOwnerSource, useColleagues, visibleOwnerTags, withColleagueRef, withOwnerSource } from '@/lib/colleagues';
@@ -406,7 +406,7 @@ function OwnerForm({ owner, onClose, onSaved }: { owner?: Owner; onClose: () => 
       <div className="space-y-4">
         {error && <div className="text-sm text-red-500 bg-red-50 px-3 py-2 rounded-lg">{error}</div>}
         <div><label className="label">نام *</label><input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="نام و نام خانوادگی" /></div>
-        <div><label className="label">تلفن *</label><input className="input" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="09123456789" dir="ltr" /></div>
+        <div><label className="label">تلفن *</label><input className="input" value={phone} onChange={(e) => setPhone(stripPhoneSpaces(e.target.value))} placeholder="09123456789" dir="ltr" /></div>
         <div><label className="label">تلفن ثانویه</label><input className="input" value={secondaryPhone} onChange={(e) => setSecondaryPhone(e.target.value)} placeholder="02112345678" dir="ltr" /></div>
         <div>
           <label className="label">همکار معرف <span className="font-normal text-slate-400">(اختیاری)</span></label>

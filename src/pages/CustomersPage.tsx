@@ -22,6 +22,7 @@ import {
   normalizePhone,
   validatePhone,
   toEnglishDigits,
+  stripPhoneSpaces,
   ROBAT_KARIM_COUNTY_NAME,
 } from '@/lib/constants';
 import { Badge, EmptyState, Spinner, Modal, MoneyInput, PageHeader, Pagination, ConfirmDialog, CopyButton, SortSelect } from '@/components/ui';
@@ -1073,12 +1074,12 @@ function CustomerForm({ customerId, onBack, onSaved }: { customerId?: string; on
             </div>
             <div>
               <label className="label">موبایل *</label>
-              <input className={`input ${errors.mobile ? 'input-error' : ''}`} value={form.mobile} onChange={(e) => setForm({ ...form, mobile: e.target.value })} placeholder="09123456789" dir="ltr" />
+              <input className={`input ${errors.mobile ? 'input-error' : ''}`} value={form.mobile} onChange={(e) => setForm({ ...form, mobile: stripPhoneSpaces(e.target.value) })} placeholder="09123456789" dir="ltr" />
               {errors.mobile && <p className="text-xs text-red-500 mt-1">{errors.mobile}</p>}
             </div>
             <div>
               <label className="label">تلفن ثانویه</label>
-              <input className="input" value={form.secondary_phone} onChange={(e) => setForm({ ...form, secondary_phone: e.target.value })} placeholder="02112345678" dir="ltr" />
+              <input className="input" value={form.secondary_phone} onChange={(e) => setForm({ ...form, secondary_phone: stripPhoneSpaces(e.target.value) })} placeholder="02112345678" dir="ltr" />
             </div>
             <div>
               <label className="label">آدرس کامل</label>
