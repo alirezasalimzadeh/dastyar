@@ -282,7 +282,7 @@ function ColleagueForm({ initial, onClose, onSaved }: { initial: Colleague | nul
         {error && <div className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-500">{error}</div>}
         <div><label className="label">نام و نام خانوادگی *</label><input className="input" value={name} onChange={(event) => setName(event.target.value)} placeholder="نام همکار" /></div>
         <div><label className="label">موبایل *</label><input className="input" value={phone} onChange={(event) => setPhone(stripPhoneSpaces(event.target.value))} placeholder="09123456789" dir="ltr" /></div>
-        <div><label className="label">تلفن ثانویه</label><input className="input" value={secondaryPhone} onChange={(event) => setSecondaryPhone(event.target.value)} placeholder="02112345678" dir="ltr" /></div>
+        <div><label className="label">تلفن ثانویه</label><input className="input" value={secondaryPhone} onChange={(event) => setSecondaryPhone(stripPhoneSpaces(event.target.value))} placeholder="02112345678" dir="ltr" /></div>
         <div><label className="label">نام آژانس یا دفتر</label><input className="input" value={agencyName} onChange={(event) => setAgencyName(event.target.value)} placeholder="مثلاً املاک مرکزی" /></div>
         <div><label className="label">حوزه فعالیت</label><input className="input" value={specialization} onChange={(event) => setSpecialization(event.target.value)} placeholder="مثلاً آپارتمان مسکونی غرب تهران" /></div>
         <div><label className="label">یادداشت</label><textarea className="input min-h-[70px]" value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="شرایط همکاری، نحوه تسویه و نکات مهم..." /></div>

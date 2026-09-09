@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { User, Phone, Mail, MapPin, Calendar, Briefcase, Edit, Save, X, Lock, Camera, TrendingUp, Award, Activity as ActivityIcon, Clock, CheckCircle2, Target, DollarSign } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth';
-import { getUserRoleLabel, formatDate, timeAgo, formatPrice } from '@/lib/constants';
+import { getUserRoleLabel, formatDate, timeAgo, formatPrice, stripPhoneSpaces } from '@/lib/constants';
 import { Spinner, PageHeader, StatCard, Modal } from '@/components/ui';
 
 type Tab = 'overview' | 'edit' | 'security' | 'activity';
@@ -304,7 +304,7 @@ export function ProfilePage() {
           <div className="grid grid-cols-2 gap-3">
             <div><label className="label">نام</label><input className="input" value={form.first_name} onChange={(e) => setForm({ ...form, first_name: e.target.value })} /></div>
             <div><label className="label">نام خانوادگی</label><input className="input" value={form.last_name} onChange={(e) => setForm({ ...form, last_name: e.target.value })} /></div>
-            <div><label className="label">موبایل</label><input className="input" value={form.mobile} onChange={(e) => setForm({ ...form, mobile: e.target.value })} dir="ltr" /></div>
+            <div><label className="label">موبایل</label><input className="input" value={form.mobile} onChange={(e) => setForm({ ...form, mobile: stripPhoneSpaces(e.target.value) })} dir="ltr" /></div>
             <div><label className="label">ایمیل</label><input className="input" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} dir="ltr" /></div>
             <div><label className="label">شهر</label><input className="input" value={form.city} onChange={(e) => setForm({ ...form, city: e.target.value })} /></div>
             <div><label className="label">سال‌های تجربه</label><input className="input" value={form.years_of_experience} onChange={(e) => setForm({ ...form, years_of_experience: e.target.value })} dir="ltr" type="number" /></div>

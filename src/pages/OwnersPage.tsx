@@ -407,7 +407,7 @@ function OwnerForm({ owner, onClose, onSaved }: { owner?: Owner; onClose: () => 
         {error && <div className="text-sm text-red-500 bg-red-50 px-3 py-2 rounded-lg">{error}</div>}
         <div><label className="label">نام *</label><input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="نام و نام خانوادگی" /></div>
         <div><label className="label">تلفن *</label><input className="input" value={phone} onChange={(e) => setPhone(stripPhoneSpaces(e.target.value))} placeholder="09123456789" dir="ltr" /></div>
-        <div><label className="label">تلفن ثانویه</label><input className="input" value={secondaryPhone} onChange={(e) => setSecondaryPhone(e.target.value)} placeholder="02112345678" dir="ltr" /></div>
+        <div><label className="label">تلفن ثانویه</label><input className="input" value={secondaryPhone} onChange={(e) => setSecondaryPhone(stripPhoneSpaces(e.target.value))} placeholder="02112345678" dir="ltr" /></div>
         <div>
           <label className="label">همکار معرف <span className="font-normal text-slate-400">(اختیاری)</span></label>
           <select className="input" value={colleagueId} onChange={(e) => setColleagueId(e.target.value)}>
