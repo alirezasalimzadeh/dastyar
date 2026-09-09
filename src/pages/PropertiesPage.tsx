@@ -1707,6 +1707,13 @@ function PropertyForm({ propertyId, onBack, onSaved }: { propertyId?: string; on
     else if (step === 5 && form.contact_type === 'owner' && addingNewOwner && !validatePhone(form.owner_phone)) errs.owner_phone = 'فرمت موبایل صحیح نیست (09123456789)';
     if (step === 5 && form.contact_type === 'owner' && !addingNewOwner && !form.owner_id) errs.owner_id = 'انتخاب مالک الزامی است';
     if (step === 5 && form.contact_type === 'colleague' && !form.colleague_id) errs.colleague_id = 'انتخاب همکار الزامی است';
+    // مالک در فایل دیوار/همکار اختیاری است؛ اما اگر شروع به پر کردن کرد، کامل و معتبر باشد
+    const optionalOwnerStarted = (form.contact_type === 'divar' || form.contact_type === 'colleague')
+      && addingNewOwner && (form.owner_name.trim() !== '' || form.owner_phone.trim() !== '');
+    if (step === 5 && optionalOwnerStarted) {
+      if (form.owner_name.trim() === '' || form.owner_phone.trim() === '') errs.owner_name = 'برای ثبت مالک، نام و تلفن را هر دو کامل وارد کنید یا هر دو را خالی بگذارید.';
+      else if (!validatePhone(form.owner_phone)) errs.owner_phone = 'فرمت موبایل صحیح نیست (09123456789)';
+    }
     setErrors(errs);
     if (errs.rent_budget && step !== 4) setStep(4);
     return Object.keys(errs).length === 0;
@@ -1728,8 +1735,8 @@ function PropertyForm({ propertyId, onBack, onSaved }: { propertyId?: string; on
       : { images: [] as string[], failedImages: [] as { fileName: string; message: string }[] };
 
     // Select an existing owner, or create one inline when they are not in the list.
-    // در فایل دیوار، مالک مستقیم اختیاری است.
-    const wantsOwner = form.contact_type === 'owner' || form.contact_type === 'divar';
+    // در فایل دیوار و فایل همکار، ثبت مالک اختیاری است.
+    const wantsOwner = form.contact_type === 'owner' || form.contact_type === 'divar' || form.contact_type === 'colleague';
     let ownerId: string | null = wantsOwner && !addingNewOwner ? form.owner_id || null : null;
     if (wantsOwner && addingNewOwner && form.owner_name && form.owner_phone) {
       const normalizedPhone = normalizePhone(form.owner_phone);
@@ -2254,17 +2261,42 @@ function PropertyForm({ propertyId, onBack, onSaved }: { propertyId?: string; on
               </div>
             </div>
 
-            {form.contact_type === 'owner' || form.contact_type === 'divar' ? (
-              <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-4 space-y-3">
+            {form.contact_type === 'owner' || form.contact_type === 'divar' || form.contact_type === 'colleague' ? (
+              <div className="space-y-3">
+                {form.contact_type === 'colleague' && (
+                  <div className="rounded-xl border border-indigo-100 bg-indigo-50/50 p-4">
+                    <label className="label">انتخاب همکار *</label>
+                    <select className={`input ${errors.colleague_id ? 'input-error' : ''}`} value={form.colleague_id} onChange={(e) => setForm({ ...form, colleague_id: e.target.value })}>
+                      <option value="">همکار را انتخاب کنید</option>
+                      {colleagues.map((colleague) => (
+                        <option key={colleague.id} value={colleague.id} disabled={colleague.status === 'inactive' && colleague.id !== form.colleague_id}>
+                          {colleague.name}{colleague.agency_name ? ` — ${colleague.agency_name}` : ''}{colleague.status === 'inactive' ? ' (غیرفعال)' : ''}
+                        </option>
+                      ))}
+                    </select>
+                    {errors.colleague_id && <p className="mt-1 text-xs text-red-500">{errors.colleague_id}</p>}
+                    {!colleagues.some((colleague) => colleague.status === 'active') && <p className="mt-2 text-xs text-amber-600">ابتدا از بخش «همکاران» یک همکار فعال ثبت کنید.</p>}
+                    {form.colleague_id && (() => {
+                      const selected = colleagues.find((colleague) => colleague.id === form.colleague_id);
+                      return selected ? <div className="mt-3 rounded-lg bg-white p-3 text-xs text-slate-600"><p className="font-bold text-slate-700">{selected.name}</p><p className="mt-1" dir="ltr">{selected.phone}</p></div> : null;
+                    })()}
+                  </div>
+                )}
+                <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-4 space-y-3">
                 {form.contact_type === 'divar' && (
                   <p className="rounded-lg bg-emerald-50 p-2.5 text-xs leading-5 text-emerald-700">
                     این فایل از دیوار است. اگر با مالک تماس مستقیم دارید، اطلاعاتش را ثبت کنید؛ در غیر این صورت این بخش را خالی بگذارید.
                   </p>
                 )}
+                {form.contact_type === 'colleague' && (
+                  <p className="rounded-lg bg-indigo-50 p-2.5 text-xs leading-5 text-indigo-700">
+                    اگر شماره مالک را دارید، در این بخش ثبت کنید (اختیاری).
+                  </p>
+                )}
                 {!addingNewOwner ? (
                   <>
                     <div>
-                      <label className="label">{form.contact_type === 'divar' ? 'انتخاب مالک (اختیاری)' : 'انتخاب مالک *'}</label>
+                      <label className="label">{form.contact_type === 'divar' || form.contact_type === 'colleague' ? 'انتخاب مالک (اختیاری)' : 'انتخاب مالک *'}</label>
                       <select
                         className={`input ${errors.owner_id ? 'input-error' : ''}`}
                         value={form.owner_id}
@@ -2318,12 +2350,12 @@ function PropertyForm({ propertyId, onBack, onSaved }: { propertyId?: string; on
                       )}
                     </div>
                     <div>
-                      <label className="label">{form.contact_type === 'divar' ? 'نام مالک (اختیاری)' : 'نام مالک *'}</label>
+                      <label className="label">{form.contact_type === 'divar' || form.contact_type === 'colleague' ? 'نام مالک (اختیاری)' : 'نام مالک *'}</label>
                       <input className={`input ${errors.owner_name ? 'input-error' : ''}`} value={form.owner_name} onChange={(e) => setForm({ ...form, owner_name: e.target.value })} placeholder="نام و نام خانوادگی مالک" />
                       {errors.owner_name && <p className="mt-1 text-xs text-red-500">{errors.owner_name}</p>}
                     </div>
                     <div>
-                      <label className="label">{form.contact_type === 'divar' ? 'تلفن مالک (اختیاری)' : 'تلفن مالک *'}</label>
+                      <label className="label">{form.contact_type === 'divar' || form.contact_type === 'colleague' ? 'تلفن مالک (اختیاری)' : 'تلفن مالک *'}</label>
                       <input className={`input ${errors.owner_phone ? 'input-error' : ''}`} value={form.owner_phone} onChange={(e) => setForm({ ...form, owner_phone: stripPhoneSpaces(e.target.value) })} placeholder="09123456789" dir="ltr" />
                       {errors.owner_phone && <p className="mt-1 text-xs text-red-500">{errors.owner_phone}</p>}
                     </div>
@@ -2333,26 +2365,9 @@ function PropertyForm({ propertyId, onBack, onSaved }: { propertyId?: string; on
                     </div>
                   </>
                 )}
+                </div>
               </div>
-            ) : (
-              <div className="rounded-xl border border-indigo-100 bg-indigo-50/50 p-4">
-                <label className="label">انتخاب همکار *</label>
-                <select className={`input ${errors.colleague_id ? 'input-error' : ''}`} value={form.colleague_id} onChange={(e) => setForm({ ...form, colleague_id: e.target.value })}>
-                  <option value="">همکار را انتخاب کنید</option>
-                  {colleagues.map((colleague) => (
-                    <option key={colleague.id} value={colleague.id} disabled={colleague.status === 'inactive' && colleague.id !== form.colleague_id}>
-                      {colleague.name}{colleague.agency_name ? ` — ${colleague.agency_name}` : ''}{colleague.status === 'inactive' ? ' (غیرفعال)' : ''}
-                    </option>
-                  ))}
-                </select>
-                {errors.colleague_id && <p className="mt-1 text-xs text-red-500">{errors.colleague_id}</p>}
-                {!colleagues.some((colleague) => colleague.status === 'active') && <p className="mt-2 text-xs text-amber-600">ابتدا از بخش «همکاران» یک همکار فعال ثبت کنید.</p>}
-                {form.colleague_id && (() => {
-                  const selected = colleagues.find((colleague) => colleague.id === form.colleague_id);
-                  return selected ? <div className="mt-3 rounded-lg bg-white p-3 text-xs text-slate-600"><p className="font-bold text-slate-700">{selected.name}</p><p className="mt-1" dir="ltr">{selected.phone}</p></div> : null;
-                })()}
-              </div>
-            )}
+            ) : null}
           </>
         )}
 
@@ -2362,9 +2377,13 @@ function PropertyForm({ propertyId, onBack, onSaved }: { propertyId?: string; on
               ...(form.title ? [{ label: 'عنوان', value: form.title }] : []),
               ...(form.contact_type === 'owner' && form.owner_name
                 ? [{ label: 'مالک', value: form.owner_name }]
-                : form.contact_type === 'colleague' && form.colleague_id
-                  ? [{ label: 'همکار', value: colleagues.find((colleague) => colleague.id === form.colleague_id)?.name ?? 'انتخاب شده' }]
-                  : []),
+                : []),
+              ...(form.contact_type === 'colleague' && form.colleague_id
+                ? [{ label: 'همکار', value: colleagues.find((colleague) => colleague.id === form.colleague_id)?.name ?? 'انتخاب شده' }]
+                : []),
+              ...(form.contact_type === 'colleague' && form.owner_name
+                ? [{ label: 'مالک', value: form.owner_name }]
+                : []),
             ]} />
             <div>
               <label className="label">مشاور مسئول فایل</label>
