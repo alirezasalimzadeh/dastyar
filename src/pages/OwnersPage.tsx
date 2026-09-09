@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
-import { Plus, Search, Building2, Phone, Clock, ArrowLeft, Trash2, X, Pencil } from 'lucide-react';
+import { Plus, Search, Building2, Phone, Clock, ArrowLeft, Trash2, X, Pencil, User, UserCheck } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth';
 import { normalizePhone, validatePhone, formatDate, timeAgo, toEnglishDigits, toPersianDigits, COLLEAGUE_TAG, CONTACT_SOURCES, getContactSourceLabel } from '@/lib/constants';
@@ -9,6 +9,7 @@ import { getColleagueRef, getOwnerSource, useColleagues, visibleOwnerTags, withC
 import { CallFormModal, CallRecordCard } from '@/components/calls';
 import { FollowupFormModal, FollowupRecordCard } from '@/components/followups';
 import { getArchiveInfo } from '@/lib/propertyArchive';
+import { useConsultants, consultantName } from '@/lib/consultants';
 
 const PAGE_SIZE = 20;
 
@@ -171,7 +172,10 @@ export function OwnersPage({ initialId, onNavigate }: { initialId?: string; onNa
 }
 
 function OwnerDetail({ ownerId, onBack, onPropertyOpen }: { ownerId: string; onBack: () => void; onPropertyOpen: (propertyId: string) => void }) {
+  const { user, profile } = useAuth();
   const colleagues = useColleagues();
+  const consultants = useConsultants();
+  const [claiming, setClaiming] = useState(false);
   const [owner, setOwner] = useState<Owner | null>(null);
   const [properties, setProperties] = useState<any[]>([]);
   const [calls, setCalls] = useState<any[]>([]);
@@ -201,9 +205,36 @@ function OwnerDetail({ ownerId, onBack, onPropertyOpen }: { ownerId: string; onB
 
   const handleDelete = async () => { await supabase.from('owners').delete().eq('id', ownerId); onBack(); };
 
+  // دریافت مالک از هم‌تیمی (مثلاً انتقال مدیر): مسئولیت مالک به کاربر جاری می‌رسد
+  const handleClaim = async () => {
+    if (!owner || !user) return;
+    setClaiming(true);
+    const { error } = await supabase
+      .from('owners')
+      .update({ assigned_consultant_id: user.id })
+      .eq('id', ownerId);
+    if (error) {
+      setClaiming(false);
+      alert(error.message ?? 'انتقال مالک انجام نشد. لطفاً دوباره تلاش کنید.');
+      return;
+    }
+    const myName = [profile?.first_name, profile?.last_name].filter(Boolean).join(' ') || 'من';
+    await supabase.from('activities').insert({
+      user_id: user.id,
+      entity_type: 'owner',
+      entity_id: ownerId,
+      action: 'owner_transferred',
+      description: `مسئولیت مالک «${owner.name}» به ${myName} منتقل شد`,
+    });
+    setClaiming(false);
+    loadDetail();
+  };
+
   if (loading || !owner) return <div className="flex justify-center py-16"><Spinner size={32} /></div>;
 
   const referringColleague = colleagues.find((colleague) => colleague.id === getColleagueRef(owner.tags));
+  const isMyOwner = owner.assigned_consultant_id === user?.id;
+  const ownerConsultantName = consultantName(consultants, owner.assigned_consultant_id, 'بدون انتساب');
 
   return (
     <div className="animate-fade-in space-y-4">
@@ -235,6 +266,27 @@ function OwnerDetail({ ownerId, onBack, onPropertyOpen }: { ownerId: string; onB
         {owner.notes && <p className="text-sm text-slate-600 bg-slate-50 p-3 rounded-lg mt-4">{owner.notes}</p>}
         {visibleOwnerTags(owner.tags).length > 0 && <div className="flex flex-wrap gap-1.5 mt-3">{visibleOwnerTags(owner.tags).map((t, i) => <Badge key={i} color="blue">{t}</Badge>)}</div>}
       </div>
+
+      {!isMyOwner && (
+        <div className="card flex flex-col gap-3 border-indigo-200 bg-indigo-50/60 p-4 animate-fade-in sm:flex-row sm:items-center">
+          <div className="flex items-start gap-3">
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-indigo-100 text-indigo-600">
+              <User size={18} />
+            </span>
+            <div>
+              <p className="text-sm font-bold text-indigo-900">
+                {owner.assigned_consultant_id ? `این مالک منتسب به «${ownerConsultantName}» است` : 'این مالک هنوز به کسی انتساب نشده است'}
+              </p>
+              <p className="mt-0.5 text-xs text-indigo-700/70">
+                اگر این مالک از سمت مدیر یا هم‌تیمی به شما داده شده، با «مال من است» مسئولیت آن را بر عهده بگیرید.
+              </p>
+            </div>
+          </div>
+          <button type="button" onClick={handleClaim} disabled={claiming} className="btn-primary shrink-0 sm:mr-auto">
+            <UserCheck size={16} /> {claiming ? 'در حال انتقال...' : 'مال من است — اختصاص به خودم'}
+          </button>
+        </div>
+      )}
 
       <div className="detail-section !p-0 overflow-hidden">
         <h3 className="detail-section-title !mb-0 px-5 py-4"><Building2 size={17} className="text-blue-500" /> املاک مالک <span className="mr-auto text-xs font-normal text-slate-400">{properties.length} ملک</span></h3>
@@ -294,8 +346,9 @@ function OwnerDetail({ ownerId, onBack, onPropertyOpen }: { ownerId: string; onB
 }
 
 function OwnerForm({ owner, onClose, onSaved }: { owner?: Owner; onClose: () => void; onSaved: () => void }) {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const colleagues = useColleagues();
+  const consultants = useConsultants();
   const isEditing = Boolean(owner);
   const [name, setName] = useState(owner?.name ?? '');
   const [phone, setPhone] = useState(owner?.phone ?? '');
@@ -305,6 +358,7 @@ function OwnerForm({ owner, onClose, onSaved }: { owner?: Owner; onClose: () => 
   const [colleagueId, setColleagueId] = useState(getColleagueRef(owner?.tags));
   const [source, setSource] = useState(getOwnerSource(owner?.tags));
   const [status, setStatus] = useState<Owner['status']>(owner?.status ?? 'active');
+  const [editingConsultantId, setEditingConsultantId] = useState<string | null>(owner?.assigned_consultant_id ?? null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
@@ -321,7 +375,8 @@ function OwnerForm({ owner, onClose, onSaved }: { owner?: Owner; onClose: () => 
       notes: notes.trim() || null,
       tags: withColleagueRef(withOwnerSource(tags ? tags.split('،').map((tag) => tag.trim()).filter(Boolean) : [], source), colleagueId),
       status,
-      ...(!isEditing ? { assigned_consultant_id: user?.id } : {}),
+      // مالک جدید به ثبت‌کننده انتساب می‌شود؛ مالک موجود، به مشاور مسئول انتخابی
+      assigned_consultant_id: isEditing ? editingConsultantId || user?.id : user?.id,
     };
     const { data, error: saveError } = isEditing && owner
       ? await supabase.from('owners').update(payload).eq('id', owner.id).select().single()
@@ -369,6 +424,35 @@ function OwnerForm({ owner, onClose, onSaved }: { owner?: Owner; onClose: () => 
         </div>
         <div><label className="label">تگ‌ها (با ویرگول جدا کنید)</label><input className="input" value={tags} onChange={(e) => setTags(e.target.value)} placeholder="سرمایه‌گذار، فوری" /></div>
         <div><label className="label">یادداشت</label><textarea className="input min-h-[60px]" value={notes} onChange={(e) => setNotes(e.target.value)} /></div>
+        {isEditing && (
+          <div>
+            <label className="label">مشاور مسئول مالک</label>
+            <select className="input" value={editingConsultantId ?? user?.id ?? ''} onChange={(e) => setEditingConsultantId(e.target.value || null)}>
+              {(user?.id
+                ? [
+                    ...consultants.filter((c) => c.id === user.id),
+                    ...consultants.filter((c) => c.id !== user.id),
+                  ]
+                : consultants
+              ).map((consultant) => (
+                <option key={consultant.id} value={consultant.id}>
+                  {consultant.id === user?.id ? `${consultant.name} (من)` : consultant.name}
+                </option>
+              ))}
+              {user?.id && !consultants.some((c) => c.id === user.id) && (
+                <option value={user.id}>
+                  {[profile?.first_name, profile?.last_name].filter(Boolean).join(' ') || 'من'} (من)
+                </option>
+              )}
+              {editingConsultantId && editingConsultantId !== user?.id && !consultants.some((c) => c.id === editingConsultantId) && (
+                <option value={editingConsultantId}>مشاور ثبت‌نشده</option>
+              )}
+            </select>
+            <p className="mt-1 text-xs text-slate-400">
+              مالک به این منتقل شده یا باید منتقل شود؛ فایل‌های او در «فایل‌های من» این مشاور دیده می‌شوند.
+            </p>
+          </div>
+        )}
         {isEditing && (
           <div>
             <label className="label">وضعیت</label>

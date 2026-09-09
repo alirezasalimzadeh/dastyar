@@ -89,6 +89,7 @@ export const CONTACT_SOURCES = [
   { value: 'phone', label: 'تماس تلفنی' },
   { value: 'online', label: 'آنلاین / شبکه اجتماعی' },
   { value: 'referral', label: 'معرفی' },
+  { value: 'transferred', label: 'انتقال از مدیر / همکار' },
   { value: 'other', label: 'سایر' },
 ] as const;
 
