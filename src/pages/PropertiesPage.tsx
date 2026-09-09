@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
-import { Plus, Search, Home, Phone, X, Filter, ArrowLeft, Trash2, Flame, Star, MapPin, Target, User, UserCheck, ImagePlus, Images, ChevronLeft, ChevronRight, Pencil, Maximize2, Handshake, Percent, Clock, Archive, ArchiveRestore, Globe } from 'lucide-react';
+import { Plus, Search, Home, Phone, X, Filter, ArrowLeft, Trash2, Flame, Star, MapPin, Target, User, ImagePlus, Images, ChevronLeft, ChevronRight, Pencil, Maximize2, Handshake, Percent, Clock, Archive, ArchiveRestore, Globe, Briefcase } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth';
 import {
@@ -42,8 +42,8 @@ import {
   preparePropertyImages,
 } from '@/lib/propertyImages';
 import { getArchiveInfo, markPropertyArchived, clearPropertyArchive, type ArchiveInfo } from '@/lib/propertyArchive';
-import { getFileSource, hasDivarSource, markDivarSource, FILE_SOURCE_LABELS } from '@/lib/propertySource';
-import { useConsultants, consultantName } from '@/lib/consultants';
+import { getFileSource, hasDivarSource, hasManagerSource, markDivarSource, markManagerSource, FILE_SOURCE_LABELS } from '@/lib/propertySource';
+
 
 const PAGE_SIZE = 20;
 
@@ -261,9 +261,10 @@ export function PropertiesPage({ initialId }: { initialId?: string }) {
       });
     }
     if (filters.negotiable) rows = rows.filter((p) => (filters.negotiable === 'true') === !!p.negotiable);
-    if (filters.source === 'owner') rows = rows.filter((p) => Boolean(p.owner_id) && !isUuid(p.owner_relationship) && !hasDivarSource(p.owner_followup_status));
-    if (filters.source === 'colleague') rows = rows.filter((p) => isUuid(p.owner_relationship) && !hasDivarSource(p.owner_followup_status));
+    if (filters.source === 'owner') rows = rows.filter((p) => Boolean(p.owner_id) && !isUuid(p.owner_relationship) && !hasDivarSource(p.owner_followup_status) && !hasManagerSource(p.owner_followup_status));
+    if (filters.source === 'colleague') rows = rows.filter((p) => isUuid(p.owner_relationship) && !hasDivarSource(p.owner_followup_status) && !hasManagerSource(p.owner_followup_status));
     if (filters.source === 'divar') rows = rows.filter((p) => hasDivarSource(p.owner_followup_status));
+    if (filters.source === 'manager') rows = rows.filter((p) => hasManagerSource(p.owner_followup_status));
     if (filters.parking) rows = rows.filter((p) => Boolean(p.parking));
     if (filters.elevator) rows = rows.filter((p) => Boolean(p.elevator));
     if (filters.storage) rows = rows.filter((p) => Boolean(p.storage));
@@ -388,7 +389,7 @@ export function PropertiesPage({ initialId }: { initialId?: string }) {
   addChip('min_area', `متراژ از ${toPersianDigits(filters.min_area)}`);
   addChip('max_area', `متراژ تا ${toPersianDigits(filters.max_area)}`);
   addChip('min_bedrooms', `${toPersianDigits(filters.min_bedrooms)} خواب و بیشتر`);
-  addChip('source', filters.source === 'owner' ? 'مالک مستقیم' : filters.source === 'colleague' ? 'فایل همکار' : 'فایل دیوار');
+  addChip('source', filters.source === 'owner' ? 'مالک مستقیم' : filters.source === 'colleague' ? 'فایل همکار' : filters.source === 'manager' ? 'فایل مدیر' : 'فایل دیوار');
   addChip('is_hot', filters.is_hot === 'true' ? 'فقط داغ' : 'فقط عادی');
   addChip('has_images', filters.has_images === 'true' ? 'دارای عکس' : 'بدون عکس');
   addChip('negotiable', filters.negotiable === 'true' ? 'قابل تبدیل/مذاکره' : 'غیرقابل تبدیل/مذاکره');
@@ -543,7 +544,7 @@ export function PropertiesPage({ initialId }: { initialId?: string }) {
                 ] as const).map(([key, label]) => (
                   <button key={key} type="button" onClick={() => updateFilter(key, !filters[key])} className={`rounded-lg border px-3 py-2 text-xs font-medium transition-colors ${filters[key] ? 'border-slate-900 bg-slate-900 text-white' : 'border-slate-200 bg-white text-slate-600 hover:border-slate-400'}`}>{label}</button>
                 ))}
-                <select className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600 outline-none" value={filters.source} onChange={(e) => updateFilter('source', e.target.value)}><option value="">هر منبعی</option><option value="owner">مالک مستقیم</option><option value="colleague">فایل همکار</option><option value="divar">فایل دیوار</option></select>
+                <select className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600 outline-none" value={filters.source} onChange={(e) => updateFilter('source', e.target.value)}><option value="">هر منبعی</option><option value="owner">مالک مستقیم</option><option value="colleague">فایل همکار</option><option value="divar">فایل دیوار</option><option value="manager">فایل مدیر</option></select>
                 <select className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600 outline-none" value={filters.is_hot} onChange={(e) => updateFilter('is_hot', e.target.value)}><option value="">داغ یا عادی</option><option value="true">فقط فایل‌های داغ</option><option value="false">فقط فایل‌های عادی</option></select>
                 <select className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600 outline-none" value={filters.has_images} onChange={(e) => updateFilter('has_images', e.target.value)}><option value="">با عکس یا بدون عکس</option><option value="true">فقط دارای عکس</option><option value="false">فقط بدون عکس</option></select>
                 <select className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600 outline-none" value={filters.negotiable} onChange={(e) => updateFilter('negotiable', e.target.value)}><option value="">قابل تبدیل/مذاکره مهم نیست</option><option value="true">فقط قابل تبدیل/مذاکره</option><option value="false">غیرقابل تبدیل/مذاکره</option></select>
@@ -638,6 +639,7 @@ export function PropertiesPage({ initialId }: { initialId?: string }) {
                       {p.is_featured && <Star size={15} className="text-yellow-500 shrink-0" />}
                       {p.negotiable && <span className="badge bg-emerald-50 text-emerald-600">{p.transaction_type === 'rent' ? 'قابل تبدیل' : 'قابل مذاکره'}</span>}
                       {hasDivarSource(p.owner_followup_status) && <span className="badge bg-emerald-50 text-emerald-700"><Globe size={11} /> دیوار</span>}
+                      {hasManagerSource(p.owner_followup_status) && <span className="badge bg-amber-50 text-amber-700"><Briefcase size={11} /> مدیر</span>}
                     </div>
                     {archive ? (
                       <Badge color="gray"><Archive size={11} /> بایگانی‌شده</Badge>
@@ -715,9 +717,9 @@ export function PropertiesPage({ initialId }: { initialId?: string }) {
 
                   <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-100 text-xs">
                     <span className="flex items-center gap-1 text-slate-500 font-medium min-w-0">
-                      {hasDivarSource(p.owner_followup_status) ? <Globe size={12} className="shrink-0 text-emerald-500" /> : sourceColleague ? <Handshake size={12} className="shrink-0 text-indigo-400" /> : <User size={12} className="shrink-0 text-slate-400" />}
+                      {hasDivarSource(p.owner_followup_status) ? <Globe size={12} className="shrink-0 text-emerald-500" /> : hasManagerSource(p.owner_followup_status) ? <Briefcase size={12} className="shrink-0 text-amber-500" /> : sourceColleague ? <Handshake size={12} className="shrink-0 text-indigo-400" /> : <User size={12} className="shrink-0 text-slate-400" />}
                       <span className="truncate">
-                        {hasDivarSource(p.owner_followup_status) ? 'فایل دیوار' : sourceColleague ? `همکار: ${sourceColleague.name}` : p.owners?.name || 'بدون مالک'}
+                        {hasDivarSource(p.owner_followup_status) ? 'فایل دیوار' : hasManagerSource(p.owner_followup_status) ? 'فایل مدیر' : sourceColleague ? `همکار: ${sourceColleague.name}` : p.owners?.name || 'بدون مالک'}
                       </span>
                     </span>
                     <span className="text-slate-400 shrink-0">{timeAgo(p.created_at)}</span>
@@ -735,8 +737,7 @@ export function PropertiesPage({ initialId }: { initialId?: string }) {
 
 // Property Detail
 function PropertyDetail({ propertyId, onBack, onEdit }: { propertyId: string; onBack: () => void; onEdit: () => void }) {
-  const { user, profile } = useAuth();
-  const consultants = useConsultants();
+  const user = useAuth().user;
   const [property, setProperty] = useState<(PropertyListItem) | null>(null);
   const [owner, setOwner] = useState<Owner | null>(null);
   const [colleague, setColleague] = useState<Pick<Colleague, 'id' | 'name' | 'phone' | 'agency_name'> | null>(null);
@@ -753,7 +754,6 @@ function PropertyDetail({ propertyId, onBack, onEdit }: { propertyId: string; on
   const [archiveReason, setArchiveReason] = useState<string>(ARCHIVE_REASONS[0].value);
   const [archiveCustom, setArchiveCustom] = useState('');
   const [archiveBusy, setArchiveBusy] = useState(false);
-  const [claiming, setClaiming] = useState(false);
 
   const loadDetail = useCallback(async () => {
     setLoading(true);
@@ -868,30 +868,6 @@ function PropertyDetail({ propertyId, onBack, onEdit }: { propertyId: string; on
   };
 
   // دریافت فایل از هم‌تیمی (مثلاً انتقال مدیر): مالکیت فایل به کاربر جاری می‌رسد
-  const handleClaim = async () => {
-    if (!property || !user) return;
-    setClaiming(true);
-    const { error } = await supabase
-      .from('properties')
-      .update({ assigned_consultant_id: user.id })
-      .eq('id', propertyId);
-    if (error) {
-      setClaiming(false);
-      alert(databaseErrorMessage(error, 'انتقال فایل انجام نشد. لطفاً دوباره تلاش کنید.'));
-      return;
-    }
-    const myName = [profile?.first_name, profile?.last_name].filter(Boolean).join(' ') || 'من';
-    await supabase.from('activities').insert({
-      user_id: user.id,
-      entity_type: 'property',
-      entity_id: propertyId,
-      action: 'property_transferred',
-      description: `مالکیت فایل «${property.title}» به ${myName} منتقل شد`,
-    });
-    setClaiming(false);
-    loadDetail();
-  };
-
   if (loading || !property) {
     return <div className="flex justify-center py-16"><Spinner size={32} /></div>;
   }
@@ -900,9 +876,7 @@ function PropertyDetail({ propertyId, onBack, onEdit }: { propertyId: string; on
   const archive = getArchiveInfo(property.owner_followup_status);
   const detailRentBudget = getRentBudgetMins(property.owner_followup_status);
   const isDivar = hasDivarSource(property.owner_followup_status);
-  // فایل من است یا منتقل‌شده از هم‌تیمی؟
-  const isMyFile = property.assigned_consultant_id === user?.id;
-  const fileOwnerName = consultantName(consultants, property.assigned_consultant_id, 'بدون انتساب');
+  const isManager = hasManagerSource(property.owner_followup_status);
 
   return (
     <div className="animate-fade-in space-y-4">
@@ -920,6 +894,7 @@ function PropertyDetail({ propertyId, onBack, onEdit }: { propertyId: string; on
               <h2 className="text-xl font-extrabold leading-8 text-slate-800">{property.title}</h2>
               {colleague && <Badge color="purple"><Handshake size={12} /> فایل همکار</Badge>}
               {isDivar && <Badge color="teal"><Globe size={12} /> فایل دیوار</Badge>}
+              {isManager && <span className="badge bg-amber-50 text-amber-700"><Briefcase size={12} /> فایل مدیر</span>}
             </div>
             <p className="text-xs text-slate-400">
               {getTransactionLabel(property.transaction_type)} • {getCategoryLabel(property.category)} • {getPropertyTypeLabel(property.category, property.property_type)}
@@ -975,27 +950,6 @@ function PropertyDetail({ propertyId, onBack, onEdit }: { propertyId: string; on
           </button>
         </div>
       </div>
-
-      {!isMyFile && (
-        <div className="card flex flex-col gap-3 border-indigo-200 bg-indigo-50/60 p-4 animate-fade-in sm:flex-row sm:items-center">
-          <div className="flex items-start gap-3">
-            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-indigo-100 text-indigo-600">
-              <User size={18} />
-            </span>
-            <div>
-              <p className="text-sm font-bold text-indigo-900">
-                {property.assigned_consultant_id ? `این فایل منتسب به «${fileOwnerName}» است` : 'این فایل هنوز به کسی انتساب نشده است'}
-              </p>
-              <p className="mt-0.5 text-xs text-indigo-700/70">
-                اگر فایل از سمت مدیر یا هم‌تیمی برای شما ارسال شده، با «مال من است» آن را به نام خود اختصاص دهید.
-              </p>
-            </div>
-          </div>
-          <button type="button" onClick={handleClaim} disabled={claiming} className="btn-primary shrink-0 sm:mr-auto">
-            <UserCheck size={16} /> {claiming ? 'در حال انتقال...' : 'مال من است — اختصاص به خودم'}
-          </button>
-        </div>
-      )}
 
       {archive && (
         <div className="card flex flex-col gap-3 border-slate-300 bg-slate-50 p-4 animate-fade-in sm:flex-row sm:items-center">
@@ -1146,6 +1100,12 @@ function PropertyDetail({ propertyId, onBack, onEdit }: { propertyId: string; on
               {property.transaction_type === 'rent' && <InfoField label="قابل تبدیل" value={property.negotiable ? 'بله' : 'خیر'} />}
             </div>
           </div>
+          {isManager && (
+            <div className="border-t border-slate-100 pt-4">
+              <h4 className="flex items-center gap-2 text-sm font-bold text-amber-700 mb-2"><Briefcase size={16} /> منبع فایل: مدیر املاک</h4>
+              <p className="rounded-lg bg-amber-50 p-2.5 text-xs leading-6 text-amber-800/90">این فایل از سمت مدیر املاک به شما سپرده شده است.</p>
+            </div>
+          )}
           {colleague ? (
             <div className="border-t border-slate-100 pt-4">
               <h4 className="flex items-center gap-2 text-sm font-bold text-indigo-700 mb-3"><Handshake size={16} /> منبع فایل: همکار</h4>
@@ -1167,9 +1127,8 @@ function PropertyDetail({ propertyId, onBack, onEdit }: { propertyId: string; on
           ) : null}
 
           <div className="border-t border-slate-100 pt-4">
-            <h4 className="text-sm font-bold text-slate-700 mb-3">مالکیت و منبع فایل</h4>
+            <h4 className="text-sm font-bold text-slate-700 mb-3">منبع فایل</h4>
             <div className="grid grid-cols-2 gap-4">
-              <InfoField label="مشاور مسئول" value={isMyFile ? 'خودم' : fileOwnerName} />
               <InfoField label="منبع فایل" value={FILE_SOURCE_LABELS[getFileSource(property)]} />
             </div>
           </div>
@@ -1456,10 +1415,9 @@ function PropertyImagePicker({
 
 // Property create/edit form (Multi-step dynamic form)
 function PropertyForm({ propertyId, onBack, onSaved }: { propertyId?: string; onBack: () => void; onSaved: () => void }) {
-  const { user, profile } = useAuth();
+  const user = useAuth().user;
   const { counties, loading: countiesLoading, error: countiesError } = useActiveCounties();
   const colleagues = useColleagues();
-  const consultants = useConsultants();
   const isEditing = Boolean(propertyId);
   const [step, setStep] = useState(0);
   const [saving, setSaving] = useState(false);
@@ -1511,7 +1469,7 @@ function PropertyForm({ propertyId, onBack, onSaved }: { propertyId?: string; on
     rent_budget_mode: 'max' as 'max' | 'range',
     negotiable: false,
     commission: '',
-    contact_type: 'owner' as 'owner' | 'colleague' | 'divar',
+    contact_type: 'owner' as 'owner' | 'colleague' | 'divar' | 'manager',
     colleague_id: '',
     owner_id: '',
     owner_name: '',
@@ -1589,7 +1547,7 @@ function PropertyForm({ propertyId, onBack, onSaved }: { propertyId?: string; on
         rent_budget_mode: rentBudget.isRange ? 'range' : 'max',
         negotiable: Boolean(data.negotiable),
         commission: text(data.commission),
-        contact_type: isUuid(data.owner_relationship) ? 'colleague' : hasDivarSource(data.owner_followup_status) ? 'divar' : 'owner',
+        contact_type: isUuid(data.owner_relationship) ? 'colleague' : hasDivarSource(data.owner_followup_status) ? 'divar' : hasManagerSource(data.owner_followup_status) ? 'manager' : 'owner',
         colleague_id: isUuid(data.owner_relationship) ? data.owner_relationship : '',
         owner_id: text(data.owner_id),
         owner_name: text(ownerInfo?.name),
@@ -1708,7 +1666,7 @@ function PropertyForm({ propertyId, onBack, onSaved }: { propertyId?: string; on
     if (step === 5 && form.contact_type === 'owner' && !addingNewOwner && !form.owner_id) errs.owner_id = 'انتخاب مالک الزامی است';
     if (step === 5 && form.contact_type === 'colleague' && !form.colleague_id) errs.colleague_id = 'انتخاب همکار الزامی است';
     // مالک در فایل دیوار/همکار اختیاری است؛ اما اگر شروع به پر کردن کرد، کامل و معتبر باشد
-    const optionalOwnerStarted = (form.contact_type === 'divar' || form.contact_type === 'colleague')
+    const optionalOwnerStarted = (form.contact_type === 'divar' || form.contact_type === 'colleague' || form.contact_type === 'manager')
       && addingNewOwner && (form.owner_name.trim() !== '' || form.owner_phone.trim() !== '');
     if (step === 5 && optionalOwnerStarted) {
       if (form.owner_name.trim() === '' || form.owner_phone.trim() === '') errs.owner_name = 'برای ثبت مالک، نام و تلفن را هر دو کامل وارد کنید یا هر دو را خالی بگذارید.';
@@ -1735,8 +1693,8 @@ function PropertyForm({ propertyId, onBack, onSaved }: { propertyId?: string; on
       : { images: [] as string[], failedImages: [] as { fileName: string; message: string }[] };
 
     // Select an existing owner, or create one inline when they are not in the list.
-    // در فایل دیوار و فایل همکار، ثبت مالک اختیاری است.
-    const wantsOwner = form.contact_type === 'owner' || form.contact_type === 'divar' || form.contact_type === 'colleague';
+    // در فایل دیوار، همکار و مدیر، ثبت مالک اختیاری است.
+    const wantsOwner = form.contact_type === 'owner' || form.contact_type === 'divar' || form.contact_type === 'colleague' || form.contact_type === 'manager';
     let ownerId: string | null = wantsOwner && !addingNewOwner ? form.owner_id || null : null;
     if (wantsOwner && addingNewOwner && form.owner_name && form.owner_phone) {
       const normalizedPhone = normalizePhone(form.owner_phone);
@@ -1824,17 +1782,20 @@ function PropertyForm({ propertyId, onBack, onSaved }: { propertyId?: string; on
       negotiable: form.negotiable,
       commission: commissionBase > 0 ? commissionFromTransactionValue(commissionBase) : null,
       owner_notes: wantsOwner ? form.owner_notes || null : null,
-      owner_followup_status: markDivarSource(
-        setUnitsPerFloor(
-          setRentBudgetMins(
-            propertyMetadata,
-            form.deposit_price_min,
-            form.monthly_rent_min,
-            form.transaction_type === 'rent' && form.transaction_role === 'applicant' && form.rent_budget_mode === 'range',
+      owner_followup_status: markManagerSource(
+        markDivarSource(
+          setUnitsPerFloor(
+            setRentBudgetMins(
+              propertyMetadata,
+              form.deposit_price_min,
+              form.monthly_rent_min,
+              form.transaction_type === 'rent' && form.transaction_role === 'applicant' && form.rent_budget_mode === 'range',
+            ),
+            form.property_type === 'apartment' ? form.units_per_floor : '',
           ),
-          form.property_type === 'apartment' ? form.units_per_floor : '',
+          form.contact_type === 'divar',
         ),
-        form.contact_type === 'divar',
+        form.contact_type === 'manager',
       ),
       images: [...existingImages, ...preparedImages],
     };
@@ -2245,7 +2206,7 @@ function PropertyForm({ propertyId, onBack, onSaved }: { propertyId?: string; on
             ]} />
             <div>
               <label className="label">این فایل از چه منبعی است؟ *</label>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 <button type="button" onClick={() => setForm({ ...form, contact_type: 'owner', colleague_id: '' })} className={`rounded-xl border-2 p-3.5 text-right transition ${form.contact_type === 'owner' ? 'border-slate-900 bg-slate-50' : 'border-slate-200 hover:border-slate-300'}`}>
                   <span className="flex items-center gap-2 text-sm font-bold text-slate-800"><User size={18} /> شخصی (مالک مستقیم)</span>
                   <span className="mt-1 block text-xs text-slate-400">شماره مالک در اختیار من است</span>
@@ -2258,10 +2219,14 @@ function PropertyForm({ propertyId, onBack, onSaved }: { propertyId?: string; on
                   <span className="flex items-center gap-2 text-sm font-bold text-slate-800"><Globe size={18} /> فایل دیوار</span>
                   <span className="mt-1 block text-xs text-slate-400">آگهی از دیوار (مالک اختیاری)</span>
                 </button>
+                <button type="button" onClick={() => setForm({ ...form, contact_type: 'manager', colleague_id: '' })} className={`rounded-xl border-2 p-3.5 text-right transition ${form.contact_type === 'manager' ? 'border-amber-500 bg-amber-50' : 'border-slate-200 hover:border-slate-300'}`}>
+                  <span className="flex items-center gap-2 text-sm font-bold text-slate-800"><Briefcase size={18} /> فایل مدیر</span>
+                  <span className="mt-1 block text-xs text-slate-400">از سمت مدیر املاک به من سپرده شده (مالک اختیاری)</span>
+                </button>
               </div>
             </div>
 
-            {form.contact_type === 'owner' || form.contact_type === 'divar' || form.contact_type === 'colleague' ? (
+            {form.contact_type === 'owner' || form.contact_type === 'divar' || form.contact_type === 'colleague' || form.contact_type === 'manager' ? (
               <div className="space-y-3">
                 {form.contact_type === 'colleague' && (
                   <div className="rounded-xl border border-indigo-100 bg-indigo-50/50 p-4">
@@ -2293,10 +2258,15 @@ function PropertyForm({ propertyId, onBack, onSaved }: { propertyId?: string; on
                     اگر شماره مالک را دارید، در این بخش ثبت کنید (اختیاری).
                   </p>
                 )}
+                {form.contact_type === 'manager' && (
+                  <p className="rounded-lg bg-amber-50 p-2.5 text-xs leading-5 text-amber-700">
+                    این فایل از سمت مدیر املاک به شما سپرده شده است. اگر اطلاعات مالک را دارید، در این بخش ثبت کنید (اختیاری).
+                  </p>
+                )}
                 {!addingNewOwner ? (
                   <>
                     <div>
-                      <label className="label">{form.contact_type === 'divar' || form.contact_type === 'colleague' ? 'انتخاب مالک (اختیاری)' : 'انتخاب مالک *'}</label>
+                      <label className="label">{form.contact_type === 'divar' || form.contact_type === 'colleague' || form.contact_type === 'manager' ? 'انتخاب مالک (اختیاری)' : 'انتخاب مالک *'}</label>
                       <select
                         className={`input ${errors.owner_id ? 'input-error' : ''}`}
                         value={form.owner_id}
@@ -2350,12 +2320,12 @@ function PropertyForm({ propertyId, onBack, onSaved }: { propertyId?: string; on
                       )}
                     </div>
                     <div>
-                      <label className="label">{form.contact_type === 'divar' || form.contact_type === 'colleague' ? 'نام مالک (اختیاری)' : 'نام مالک *'}</label>
+                      <label className="label">{form.contact_type === 'divar' || form.contact_type === 'colleague' || form.contact_type === 'manager' ? 'نام مالک (اختیاری)' : 'نام مالک *'}</label>
                       <input className={`input ${errors.owner_name ? 'input-error' : ''}`} value={form.owner_name} onChange={(e) => setForm({ ...form, owner_name: e.target.value })} placeholder="نام و نام خانوادگی مالک" />
                       {errors.owner_name && <p className="mt-1 text-xs text-red-500">{errors.owner_name}</p>}
                     </div>
                     <div>
-                      <label className="label">{form.contact_type === 'divar' || form.contact_type === 'colleague' ? 'تلفن مالک (اختیاری)' : 'تلفن مالک *'}</label>
+                      <label className="label">{form.contact_type === 'divar' || form.contact_type === 'colleague' || form.contact_type === 'manager' ? 'تلفن مالک (اختیاری)' : 'تلفن مالک *'}</label>
                       <input className={`input ${errors.owner_phone ? 'input-error' : ''}`} value={form.owner_phone} onChange={(e) => setForm({ ...form, owner_phone: stripPhoneSpaces(e.target.value) })} placeholder="09123456789" dir="ltr" />
                       {errors.owner_phone && <p className="mt-1 text-xs text-red-500">{errors.owner_phone}</p>}
                     </div>
@@ -2384,38 +2354,13 @@ function PropertyForm({ propertyId, onBack, onSaved }: { propertyId?: string; on
               ...(form.contact_type === 'colleague' && form.owner_name
                 ? [{ label: 'مالک', value: form.owner_name }]
                 : []),
+              ...(form.contact_type === 'manager'
+                ? [{ label: 'منبع', value: 'فایل مدیر' }]
+                : []),
+              ...(form.contact_type === 'manager' && form.owner_name
+                ? [{ label: 'مالک', value: form.owner_name }]
+                : []),
             ]} />
-            <div>
-              <label className="label">مشاور مسئول فایل</label>
-              <select
-                className="input"
-                value={editingConsultantId ?? user?.id ?? ''}
-                onChange={(event) => setEditingConsultantId(event.target.value || null)}
-              >
-                  {(user?.id
-                    ? [
-                        ...consultants.filter((c) => c.id === user.id),
-                        ...consultants.filter((c) => c.id !== user.id),
-                      ]
-                    : consultants
-                  ).map((consultant) => (
-                    <option key={consultant.id} value={consultant.id}>
-                      {consultant.id === user?.id ? `${consultant.name} (من)` : consultant.name}
-                    </option>
-                  ))}
-                  {user?.id && !consultants.some((c) => c.id === user.id) && (
-                    <option value={user.id}>
-                      {[profile?.first_name, profile?.last_name].filter(Boolean).join(' ') || 'من'} (من)
-                    </option>
-                  )}
-                  {editingConsultantId && editingConsultantId !== user?.id && !consultants.some((c) => c.id === editingConsultantId) && (
-                    <option value={editingConsultantId}>مشاور ثبت‌نشده</option>
-                  )}
-                </select>
-                <p className="mt-1 text-xs text-slate-400">
-                  فایل در «فایل‌های من» این مشاور دیده می‌شود؛ مدیر می‌تواند فایل را منتقل کند و گیرنده با «مال من است» آن را دریافت می‌کند.
-                </p>
-              </div>
             {isEditing && (
               <div>
                 <label className="label">وضعیت آگهی</label>
