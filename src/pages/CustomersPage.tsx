@@ -68,6 +68,7 @@ export function CustomersPage({ initialId, initialFilter }: { initialId?: string
     transaction_intention: '',
     urgency: '',
     lead_source: '',
+    colleague: '',
   });
 
   useEffect(() => {
@@ -115,6 +116,12 @@ export function CustomersPage({ initialId, initialFilter }: { initialId?: string
     if (filters.transaction_intention) rows = rows.filter((c) => c.transaction_intention === filters.transaction_intention);
     if (filters.urgency) rows = rows.filter((c) => c.urgency === filters.urgency);
     if (filters.lead_source) rows = rows.filter((c) => c.lead_source === filters.lead_source);
+    if (filters.colleague) {
+      rows = rows.filter((c) => {
+        const referrerId = (c.property_preferences as Record<string, unknown> | null)?.colleague_id as string | undefined;
+        return filters.colleague === 'mine' ? !referrerId : referrerId === filters.colleague;
+      });
+    }
 
     const byDateDesc = (a: string | null, b: string | null) => (b ?? '').localeCompare(a ?? '');
     const budgetOf = (c: CustomerRow) => c.budget_max ?? c.budget_min ?? -1;
@@ -253,10 +260,22 @@ export function CustomersPage({ initialId, initialFilter }: { initialId?: string
                 {CONTACT_SOURCES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
               </select>
             </div>
+            <div>
+              <label className="label">همکار معرف</label>
+              <select
+                className="input"
+                value={filters.colleague}
+                onChange={(e) => { setFilters({ ...filters, colleague: e.target.value }); setPage(1); }}
+              >
+                <option value="">همه</option>
+                <option value="mine">بدون همکار (مشتری من)</option>
+                {colleagues.map((colleague) => <option key={colleague.id} value={colleague.id}>{colleague.name}</option>)}
+              </select>
+            </div>
           </div>
           {Object.values(filters).some(Boolean) && (
             <button
-              onClick={() => { setFilters({ temperature: '', status: '', transaction_intention: '', urgency: '', lead_source: '' }); setPage(1); }}
+              onClick={() => { setFilters({ temperature: '', status: '', transaction_intention: '', urgency: '', lead_source: '', colleague: '' }); setPage(1); }}
               className="text-xs text-red-500 font-medium"
             >
               پاک کردن فیلترها
