@@ -120,6 +120,19 @@ const setRentBudgetMins = (metadata: string, deposit: string, rent: string, enab
 const isUuid = (value: unknown): value is string =>
   typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 
+// ستون‌های «فهرست سبک»: عکس‌ها به‌صورت base64 در ستون images دیتابیس ذخیره می‌شوند،
+// بنابراین فرستادن آن‌ها برای همه فایل‌ها در هر بار لود، اصلی‌ترین دلیل سنگینی
+// بارگذاری است. عکس‌ها فقط برای صفحهٔ جاری جداگانه و سبک بارگذاری می‌شوند.
+const PROPERTY_LIST_COLUMNS = [
+  'id', 'title', 'description', 'transaction_type', 'transaction_role', 'category', 'property_type',
+  'status', 'is_hot', 'is_featured', 'is_active', 'owner_id', 'owner_relationship', 'assigned_consultant_id',
+  'province_id', 'county_id', 'district_id', 'city_id', 'neighborhood_id', 'street', 'address',
+  'land_area', 'building_area', 'bedrooms', 'rooms', 'floor', 'total_floors', 'unit_number', 'building_age',
+  'parking', 'storage', 'elevator', 'balcony', 'yard', 'garden', 'pool', 'security', 'heating', 'cooling',
+  'sale_price', 'deposit_price', 'monthly_rent', 'price_per_meter', 'participation_price', 'negotiable',
+  'payment_conditions', 'commission', 'owner_notes', 'owner_followup_status', 'created_at',
+].join(', ');
+
 const databaseErrorMessage = (error: unknown, fallback: string) => {
   if (error && typeof error === 'object' && 'message' in error && typeof error.message === 'string') {
     return error.message;
@@ -156,20 +169,25 @@ export function PropertiesPage({ initialId }: { initialId?: string }) {
     setLoading(true);
     setLoadError('');
     try {
-      // Optional embedded relations must never be able to hide the properties themselves.
+      // فهرست سبک: بدون ستون images تا حجم هر بار لود کم بماند (عکس‌ها بعداً
+      // فقط برای صفحهٔ جاری می‌آیند). اگر نصب فعلی ستون‌های متفاوتی داشته باشد،
+      // به انتخاب کامل بازمی‌گردد تا هیچ فایلی گم نشود.
       const richResult = await supabase
         .from('properties')
-        .select('*, owners(name, phone), provinces(name), counties(name), cities(name), neighborhoods(name)', { count: 'exact' });
+        .select(`${PROPERTY_LIST_COLUMNS}, owners(name, phone), counties(name), neighborhoods(name)`, { count: 'exact' });
 
       if (!richResult.error) {
-        setProperties((richResult.data as PropertyListItem[]) ?? []);
-        setTotal(richResult.count ?? richResult.data?.length ?? 0);
+        // رشتهٔ انتخاب ستون‌ها داینامیک است؛ TypeScript نمی‌تواند نوع آن را از قبل پارس کند
+        setProperties((richResult.data as unknown as PropertyListItem[]) ?? []);
+        setTotal(richResult.count ?? (richResult.data?.length ?? 0));
         return;
       }
 
       // Some installations do not expose every geographic relationship in the
-      // PostgREST schema cache. Retry without embeds so registered files remain visible.
-      const fallbackResult = await supabase.from('properties').select('*', { count: 'exact' });
+      // PostgREST schema cache. Retry with the full row so registered files remain visible.
+      const fallbackResult = await supabase
+        .from('properties')
+        .select('*, owners(name, phone), counties(name), neighborhoods(name)', { count: 'exact' });
       if (fallbackResult.error) throw fallbackResult.error;
       setProperties((fallbackResult.data as PropertyListItem[]) ?? []);
       setTotal(fallbackResult.count ?? fallbackResult.data?.length ?? 0);
@@ -191,6 +209,27 @@ export function PropertiesPage({ initialId }: { initialId?: string }) {
     () => properties.filter((p) => getArchiveInfo(p.owner_followup_status) !== null).length,
     [properties],
   );
+
+  // فیلتر «دارای عکس / بدون عکس» به ستون عکس نیاز دارد که در فهرست سبک نمی‌آید؛
+  // فقط وقتی این فیلتر فعال می‌شود، وضعیت عکس‌ها جداگانه (و یک‌بار) بارگذاری می‌شود
+  const [allImages, setAllImages] = useState<Record<string, string[]> | null>(null);
+  useEffect(() => {
+    if (!filters.has_images) {
+      setAllImages(null);
+      return;
+    }
+    let active = true;
+    supabase
+      .from('properties')
+      .select('id, images')
+      .then(({ data }) => {
+        if (!active || !data) return;
+        const map: Record<string, string[]> = {};
+        for (const row of data as { id: string; images: string[] | null }[]) map[row.id] = row.images ?? [];
+        setAllImages(map);
+      });
+    return () => { active = false; };
+  }, [filters.has_images]);
 
   const visibleProperties = useMemo(() => {
     const q = toEnglishDigits(search.trim()).toLowerCase();
@@ -214,7 +253,12 @@ export function PropertiesPage({ initialId }: { initialId?: string }) {
     if (filters.status) rows = rows.filter((p) => p.status === filters.status);
     if (filters.county_id) rows = rows.filter((p) => p.county_id === filters.county_id);
     if (filters.is_hot) rows = rows.filter((p) => (filters.is_hot === 'true') === !!p.is_hot);
-    if (filters.has_images) rows = rows.filter((p) => (filters.has_images === 'true') === Boolean(p.images?.length));
+    if (filters.has_images) {
+      rows = rows.filter((p) => {
+        const imageCount = allImages ? (allImages[p.id]?.length ?? 0) : (p.images?.length ?? 0);
+        return (filters.has_images === 'true') === imageCount > 0;
+      });
+    }
     if (filters.negotiable) rows = rows.filter((p) => (filters.negotiable === 'true') === !!p.negotiable);
     if (filters.source === 'owner') rows = rows.filter((p) => Boolean(p.owner_id) && !isUuid(p.owner_relationship) && !hasDivarSource(p.owner_followup_status));
     if (filters.source === 'colleague') rows = rows.filter((p) => isUuid(p.owner_relationship) && !hasDivarSource(p.owner_followup_status));
@@ -258,7 +302,32 @@ export function PropertiesPage({ initialId }: { initialId?: string }) {
       default: rows = [...rows].sort((a, b) => (b.created_at ?? '').localeCompare(a.created_at ?? ''));
     }
     return rows;
-  }, [properties, search, filters, sortKey, archiveView]);
+  }, [properties, search, filters, sortKey, archiveView, allImages]);
+
+  const totalPages = Math.ceil(visibleProperties.length / PAGE_SIZE);
+  const pageItems = visibleProperties.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+
+  // عکس‌های صفحهٔ جاری: فهرست سبک بدون عکس است، پس فقط ۲۰ فایل این صفحه عکس می‌گیرند
+  const [pageImages, setPageImages] = useState<Record<string, string[]>>({});
+  const pageIdsKey = useMemo(() => pageItems.map((p) => p.id).join(','), [pageItems]);
+  useEffect(() => {
+    if (!pageIdsKey) {
+      setPageImages({});
+      return;
+    }
+    let active = true;
+    supabase
+      .from('properties')
+      .select('id, images')
+      .in('id', pageIdsKey.split(','))
+      .then(({ data }) => {
+        if (!active || !data) return;
+        const map: Record<string, string[]> = {};
+        for (const row of data as { id: string; images: string[] | null }[]) map[row.id] = row.images ?? [];
+        setPageImages(map);
+      });
+    return () => { active = false; };
+  }, [pageIdsKey]);
 
   if (view === 'create') {
     return <PropertyForm onBack={() => setView('list')} onSaved={() => { setView('list'); loadProperties(); }} />;
@@ -284,8 +353,6 @@ export function PropertiesPage({ initialId }: { initialId?: string }) {
     );
   }
 
-  const totalPages = Math.ceil(visibleProperties.length / PAGE_SIZE);
-  const pageItems = visibleProperties.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
   const activeFilterCount = Object.values(filters).filter((value) => value === true || (typeof value === 'string' && value !== '')).length;
   const updateFilter = <K extends keyof PropertyFilters>(key: K, value: PropertyFilters[K]) => {
     setFilters((current) => ({ ...current, [key]: value }));
@@ -540,6 +607,7 @@ export function PropertiesPage({ initialId }: { initialId?: string }) {
               if (p.security) specs.push('امنیت');
 
               const hasRentPrice = p.deposit_price != null || p.monthly_rent != null;
+              const cardImages = pageImages[p.id] ?? p.images ?? [];
 
               return (
                 <div
@@ -549,14 +617,14 @@ export function PropertiesPage({ initialId }: { initialId?: string }) {
                 >
                   <div className="relative -mx-4 -mt-4 mb-4 h-40 bg-slate-100 overflow-hidden">
                     <img
-                      src={p.images?.[0] || propertyPlaceholder}
-                      alt={p.images?.[0] ? p.title : 'تصویر پیش‌فرض ملک'}
+                      src={cardImages[0] || propertyPlaceholder}
+                      alt={cardImages[0] ? p.title : 'تصویر پیش‌فرض ملک'}
                       className="w-full h-full object-cover"
                       loading="lazy"
                     />
-                    {p.images?.length > 1 && (
+                    {cardImages.length > 1 && (
                       <span className="absolute left-2 bottom-2 inline-flex items-center gap-1 rounded-md bg-black/65 px-2 py-1 text-[11px] font-medium text-white" dir="ltr">
-                        <Images size={13} /> {p.images.length}
+                        <Images size={13} /> {cardImages.length}
                       </span>
                     )}
                   </div>

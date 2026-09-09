@@ -77,16 +77,64 @@ const matchesFilters = (record: Record<string, unknown>, url: URL) => {
   return true;
 };
 
+// یک کپی از صف در localStorage نگهداری می‌شود تا اگر IndexedDB پاک/تغییر کرد
+// (به‌روزرسانی، فشار حافظه و ...)، تغییرات ثبت‌شده در آفلاین گم نشوند و
+// هنگام اولین فرصت به صف اصلی بازگردانده شوند.
+const QUEUE_MIRROR_KEY = 'dastyar-offline-queue-mirror-v1';
+
+const mirrorKey = (entry: { method: string; url: string; body: string | null; createdAt: string }) =>
+  `${entry.method}|${entry.url}|${entry.body ?? ''}|${entry.createdAt}`;
+
+const readMirror = (): QueuedRequest[] => {
+  try {
+    const raw = localStorage.getItem(QUEUE_MIRROR_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? (parsed as QueuedRequest[]) : [];
+  } catch {
+    return [];
+  }
+};
+
+const writeMirror = (entries: QueuedRequest[]) => {
+  try {
+    localStorage.setItem(QUEUE_MIRROR_KEY, JSON.stringify(entries));
+  } catch {
+    // سهمیه localStorage پر است؛ صف اصلی (IndexedDB) مرجع باقی می‌ماند
+  }
+};
+
 const queueRequest = async (request: Request, body: string | null) => {
   if (!dbPromise) return;
   const db = await dbPromise;
-  await db.add('requests', {
+  const entry: QueuedRequest = {
     url: request.url,
     method: request.method,
     headers: [...request.headers.entries()],
     body,
     createdAt: new Date().toISOString(),
-  } satisfies QueuedRequest);
+  };
+  await db.add('requests', entry);
+  writeMirror([...readMirror().filter((item) => mirrorKey(item) !== mirrorKey(entry)), entry]);
+};
+
+// مواردی که در کپی localStorage هست ولی در صف اصلی گم شده، دوباره اضافه شوند
+const reconcileQueue = async () => {
+  if (!dbPromise) return;
+  const db = await dbPromise;
+  const idbEntries = (await db.getAll('requests')) as QueuedRequest[];
+  const idbKeys = new Set(idbEntries.map(mirrorKey));
+  const missing = readMirror().filter((entry) => !idbKeys.has(mirrorKey(entry)) && Array.isArray(entry.headers));
+  if (missing.length === 0) return;
+  for (const entry of missing) {
+    // بدون id: کلید جدید خودکار ساخته شود
+    await db.add('requests', { url: entry.url, method: entry.method, headers: entry.headers, body: entry.body, createdAt: entry.createdAt });
+  }
+};
+
+const removeQueuedEntry = async (entry: QueuedRequest) => {
+  if (!dbPromise) return;
+  await (await dbPromise).delete('requests', entry.id!);
+  writeMirror(readMirror().filter((item) => mirrorKey(item) !== mirrorKey(entry)));
 };
 
 type ReplayResult = { status: 'ok' | 'failed' | 'network'; message?: string };
@@ -116,6 +164,7 @@ async function replayEntry(entry: QueuedRequest, authHeaders: Record<string, str
 // رابط کاربری قابل مشاهده و تکرار مجدد هستند.
 async function flushQueue(currentRequest: Request | null, includeFailed = false) {
   if (!dbPromise || !navigator.onLine) return;
+  await reconcileQueue();
   const db = await dbPromise;
   const authHeaders: Record<string, string> = {};
   if (currentRequest) {
@@ -129,7 +178,7 @@ async function flushQueue(currentRequest: Request | null, includeFailed = false)
     if (entry.failed && !includeFailed) continue;
     const result = await replayEntry(entry, authHeaders);
     if (result.status === 'ok') {
-      await db.delete('requests', entry.id!);
+      await removeQueuedEntry(entry);
     } else if (result.status === 'failed') {
       await db.put('requests', { ...entry, failed: true, lastError: result.message });
     } else {
@@ -295,6 +344,7 @@ export async function getPendingOfflineCount() {
 /** همگام‌سازی دستی از رابط کاربری (با توکن نشست جاری) */
 export async function syncOfflineQueue(auth: { authorization?: string | null; apikey?: string | null } = {}) {
   if (!dbPromise || !navigator.onLine) return;
+  await reconcileQueue();
   const db = await dbPromise;
   const authHeaders: Record<string, string> = {};
   if (auth.authorization) authHeaders.authorization = auth.authorization;
@@ -303,7 +353,7 @@ export async function syncOfflineQueue(auth: { authorization?: string | null; ap
   for (const entry of entries) {
     const result = await replayEntry(entry, authHeaders);
     if (result.status === 'ok') {
-      await db.delete('requests', entry.id!);
+      await removeQueuedEntry(entry);
     } else if (result.status === 'failed') {
       await db.put('requests', { ...entry, failed: true, lastError: result.message });
     } else {
@@ -314,7 +364,10 @@ export async function syncOfflineQueue(auth: { authorization?: string | null; ap
 
 export async function removeOfflineEntry(id: number) {
   if (!dbPromise) return;
-  await (await dbPromise).delete('requests', id);
+  const db = await dbPromise;
+  const entry = (await db.get('requests', id)) as QueuedRequest | undefined;
+  await db.delete('requests', id);
+  if (entry) writeMirror(readMirror().filter((item) => mirrorKey(item) !== mirrorKey(entry)));
 }
 
 export async function clearOfflineData() {
