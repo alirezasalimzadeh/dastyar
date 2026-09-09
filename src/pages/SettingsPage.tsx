@@ -216,13 +216,22 @@ export function SettingsPage() {
         if (error) throw error;
       }
       if (user?.id) {
-        const { error } = await supabase.from('profiles').delete().neq('id', user.id);
-        if (error) throw error;
+        const { error: deleteProfilesError } = await supabase.from('profiles').delete().neq('id', user.id);
+        if (deleteProfilesError) throw deleteProfilesError;
+        const { error: profileError } = await supabase.from('profiles').update({
+          first_name: 'علیرضا',
+          last_name: 'سلیم زاده',
+          mobile: '09379288776',
+          email: 'alireza.salim021@gmail.com',
+          role: 'system_admin',
+          account_status: 'active',
+        }).eq('id', user.id);
+        if (profileError) throw profileError;
       }
       setBackupMsg({
         type: 'success',
         text: navigator.onLine
-          ? 'تمام اطلاعات کاری و پروفایل سایر کاربران پاک شد. حساب فعال شما برای ورود باقی ماند.'
+          ? 'اطلاعات کاری پاک و حساب فعلی به نام علیرضا سلیم زاده تنظیم شد.'
           : 'حذف اطلاعات ثبت شد و پس از اتصال اینترنت با PostgreSQL همگام می‌شود.',
       });
     } catch (error) {
@@ -381,20 +390,18 @@ export function SettingsPage() {
             </label>
           </div>
 
-          {isAdmin && (
-            <div className="card space-y-4 border-red-200 bg-red-50/40 p-5">
-              <div className="flex items-center gap-2">
-                <AlertTriangle size={18} className="text-red-600" />
-                <h3 className="text-sm font-bold text-red-700">پاک‌سازی کامل اطلاعات کاری</h3>
-              </div>
-              <p className="text-xs leading-6 text-red-600">
-                مشتری‌ها، مالک‌ها، فایل‌ها، تماس‌ها، پیگیری‌ها، وظایف، معاملات، برچسب‌ها و پروفایل سایر کاربران حذف می‌شوند. اطلاعات جغرافیایی و حساب فعلی برای امکان ورود باقی می‌مانند. ابتدا فایل پشتیبان بگیرید.
-              </p>
-              <button type="button" disabled={resetting} onClick={() => setShowResetConfirm(true)} className="btn-danger text-sm">
-                {resetting ? <><Loader2 size={15} className="animate-spin" /> در حال پاک‌سازی...</> : 'پاک کردن اطلاعات کاری'}
-              </button>
+          <div className="card space-y-4 border-red-200 bg-red-50/40 p-5">
+            <div className="flex items-center gap-2">
+              <AlertTriangle size={18} className="text-red-600" />
+              <h3 className="text-sm font-bold text-red-700">شروع دوباره با حساب علیرضا</h3>
             </div>
-          )}
+            <p className="text-xs leading-6 text-red-600">
+              تمام اطلاعات کاری و پروفایل سایر کاربران حذف می‌شوند، حساب فعلی به نام علیرضا سلیم زاده تنظیم می‌شود و اطلاعات جغرافیایی باقی می‌مانند.
+            </p>
+            <button type="button" disabled={resetting} onClick={() => setShowResetConfirm(true)} className="btn-danger text-sm">
+              {resetting ? <><Loader2 size={15} className="animate-spin" /> در حال پاک‌سازی...</> : 'پاک‌سازی و شروع دوباره'}
+            </button>
+          </div>
 
           {backupMsg && (
             <div className={`card p-4 flex items-center gap-2 ${backupMsg.type === 'success' ? 'bg-green-50' : 'bg-red-50'}`}>
@@ -501,8 +508,8 @@ export function SettingsPage() {
         onClose={() => setShowResetConfirm(false)}
         onConfirm={handleResetData}
         title="پاک‌سازی اطلاعات کاری"
-        message="این عملیات قابل بازگشت نیست. آیا قبل از ادامه فایل پشتیبان را دانلود کرده‌اید؟"
-        confirmLabel="بله، اطلاعات پاک شود"
+        message="تمام اطلاعات کاری حذف و حساب فعلی به نام علیرضا سلیم زاده تنظیم می‌شود. ادامه می‌دهید؟"
+        confirmLabel="بله، شروع دوباره"
         danger
       />
 
