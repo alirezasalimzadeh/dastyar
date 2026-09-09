@@ -12,6 +12,8 @@ type QueuedRequest = {
   headers: [string, string][];
   body: string | null;
   createdAt: string;
+  failed?: boolean;
+  lastError?: string;
 };
 
 const dbPromise = typeof indexedDB === 'undefined' ? null : openDB(DB_NAME, 1, {
@@ -87,22 +89,51 @@ const queueRequest = async (request: Request, body: string | null) => {
   } satisfies QueuedRequest);
 };
 
-async function flushQueue(currentRequest: Request) {
+type ReplayResult = { status: 'ok' | 'failed' | 'network'; message?: string };
+
+async function replayEntry(entry: QueuedRequest, authHeaders: Record<string, string>): Promise<ReplayResult> {
+  const headers = new Headers(entry.headers);
+  for (const [key, value] of Object.entries(authHeaders)) headers.set(key, value);
+  try {
+    const response = await nativeFetch(entry.url, { method: entry.method, headers, body: entry.body });
+    // 409 یعنی رکورد قبلاً همگام شده (انتقال تکراری)؛ آن را هم موفقیت می‌شماریم
+    if (response.ok || response.status === 409) return { status: 'ok' };
+    let message = `کد پاسخ ${response.status}`;
+    try {
+      const text = await response.text();
+      if (text) message = text.slice(0, 200);
+    } catch {
+      // پاسخ متنی ندارد
+    }
+    return { status: 'failed', message };
+  } catch {
+    return { status: 'network' };
+  }
+}
+
+// همگام‌سازی صف آفلاین: هر مورد جداگانه پردازش می‌شود تا یک خطا کل صف را
+// برای همیشه از کار نیاندازد؛ موارد شکست‌خورده علامت‌گذاری می‌شوند و از
+// رابط کاربری قابل مشاهده و تکرار مجدد هستند.
+async function flushQueue(currentRequest: Request | null, includeFailed = false) {
   if (!dbPromise || !navigator.onLine) return;
   const db = await dbPromise;
-  const entries = await db.getAll('requests') as QueuedRequest[];
-  for (const entry of entries) {
-    const headers = new Headers(entry.headers);
+  const authHeaders: Record<string, string> = {};
+  if (currentRequest) {
     const authorization = currentRequest.headers.get('authorization');
     const apiKey = currentRequest.headers.get('apikey');
-    if (authorization) headers.set('authorization', authorization);
-    if (apiKey) headers.set('apikey', apiKey);
-    try {
-      const response = await nativeFetch(entry.url, { method: entry.method, headers, body: entry.body });
-      if (!response.ok) break;
+    if (authorization) authHeaders.authorization = authorization;
+    if (apiKey) authHeaders.apikey = apiKey;
+  }
+  const entries = (await db.getAll('requests')) as QueuedRequest[];
+  for (const entry of entries) {
+    if (entry.failed && !includeFailed) continue;
+    const result = await replayEntry(entry, authHeaders);
+    if (result.status === 'ok') {
       await db.delete('requests', entry.id!);
-    } catch {
-      break;
+    } else if (result.status === 'failed') {
+      await db.put('requests', { ...entry, failed: true, lastError: result.message });
+    } else {
+      break; // شبکه در دسترس نیست؛ در فرصت بعدی امتحان می‌شود
     }
   }
 }
@@ -227,13 +258,63 @@ export async function offlineFetch(input: RequestInfo | URL, init?: RequestInit)
 
 if (typeof window !== 'undefined') {
   window.addEventListener('online', () => {
-    if (latestRestRequest) void flushQueue(latestRestRequest);
+    // با بازگشت شبکه، صف (شامل موارد شکست‌خورده) را خودکار دوباره امتحان کن
+    if (latestRestRequest) void flushQueue(latestRestRequest, true);
   });
+}
+
+export interface OfflineQueueItem {
+  id: number;
+  table: string;
+  method: string;
+  createdAt: string;
+  failed: boolean;
+  lastError?: string;
+}
+
+/** فهرست تغییرات ثبت‌شده در آفلاین برای نمایش در رابط کاربری */
+export async function getOfflineQueue(): Promise<OfflineQueueItem[]> {
+  if (!dbPromise) return [];
+  const db = await dbPromise;
+  const entries = (await db.getAll('requests')) as QueuedRequest[];
+  return entries.map((entry) => ({
+    id: entry.id!,
+    table: tableFromUrl(new URL(entry.url)),
+    method: entry.method,
+    createdAt: entry.createdAt,
+    failed: Boolean(entry.failed),
+    lastError: entry.lastError,
+  }));
 }
 
 export async function getPendingOfflineCount() {
   if (!dbPromise) return 0;
   return (await dbPromise).count('requests');
+}
+
+/** همگام‌سازی دستی از رابط کاربری (با توکن نشست جاری) */
+export async function syncOfflineQueue(auth: { authorization?: string | null; apikey?: string | null } = {}) {
+  if (!dbPromise || !navigator.onLine) return;
+  const db = await dbPromise;
+  const authHeaders: Record<string, string> = {};
+  if (auth.authorization) authHeaders.authorization = auth.authorization;
+  if (auth.apikey) authHeaders.apikey = auth.apikey;
+  const entries = (await db.getAll('requests')) as QueuedRequest[];
+  for (const entry of entries) {
+    const result = await replayEntry(entry, authHeaders);
+    if (result.status === 'ok') {
+      await db.delete('requests', entry.id!);
+    } else if (result.status === 'failed') {
+      await db.put('requests', { ...entry, failed: true, lastError: result.message });
+    } else {
+      break;
+    }
+  }
+}
+
+export async function removeOfflineEntry(id: number) {
+  if (!dbPromise) return;
+  await (await dbPromise).delete('requests', id);
 }
 
 export async function clearOfflineData() {

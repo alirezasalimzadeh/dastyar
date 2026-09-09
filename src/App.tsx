@@ -1,21 +1,24 @@
-import { useState } from 'react';
+import { Suspense, lazy, useState } from 'react';
 import { AuthProvider, useAuth } from '@/lib/auth';
 import { AuthPage } from '@/pages/AuthPage';
 import { Layout } from '@/components/Layout';
-import { DashboardPage } from '@/pages/DashboardPage';
-import { CustomersPage } from '@/pages/CustomersPage';
-import { OwnersPage } from '@/pages/OwnersPage';
-import { ColleaguesPage } from '@/pages/ColleaguesPage';
-import { PropertiesPage } from '@/pages/PropertiesPage';
-import { MatchesPage } from '@/pages/MatchesPage';
-import { CallsPage } from '@/pages/CallsPage';
-import { FollowUpsPage } from '@/pages/FollowUpsPage';
-import { TasksPage } from '@/pages/TasksPage';
-import { DealsPage } from '@/pages/DealsPage';
-import { AnalyticsPage } from '@/pages/AnalyticsPage';
-import { ProfilePage } from '@/pages/ProfilePage';
-import { SettingsPage } from '@/pages/SettingsPage';
 import { FullPageSpinner } from '@/components/ui';
+
+// هر صفحه در یک فایل جدا بیلد می‌شود تا حجم بارگذاری اولیه کم شود
+// و سرویس‌ورکر بتواند آن‌ها را برای حالت آفلاین کش کند
+const DashboardPage = lazy(() => import('@/pages/DashboardPage').then((m) => ({ default: m.DashboardPage })));
+const CustomersPage = lazy(() => import('@/pages/CustomersPage').then((m) => ({ default: m.CustomersPage })));
+const OwnersPage = lazy(() => import('@/pages/OwnersPage').then((m) => ({ default: m.OwnersPage })));
+const ColleaguesPage = lazy(() => import('@/pages/ColleaguesPage').then((m) => ({ default: m.ColleaguesPage })));
+const PropertiesPage = lazy(() => import('@/pages/PropertiesPage').then((m) => ({ default: m.PropertiesPage })));
+const MatchesPage = lazy(() => import('@/pages/MatchesPage').then((m) => ({ default: m.MatchesPage })));
+const CallsPage = lazy(() => import('@/pages/CallsPage').then((m) => ({ default: m.CallsPage })));
+const FollowUpsPage = lazy(() => import('@/pages/FollowUpsPage').then((m) => ({ default: m.FollowUpsPage })));
+const TasksPage = lazy(() => import('@/pages/TasksPage').then((m) => ({ default: m.TasksPage })));
+const DealsPage = lazy(() => import('@/pages/DealsPage').then((m) => ({ default: m.DealsPage })));
+const AnalyticsPage = lazy(() => import('@/pages/AnalyticsPage').then((m) => ({ default: m.AnalyticsPage })));
+const ProfilePage = lazy(() => import('@/pages/ProfilePage').then((m) => ({ default: m.ProfilePage })));
+const SettingsPage = lazy(() => import('@/pages/SettingsPage').then((m) => ({ default: m.SettingsPage })));
 
 function AppContent() {
   const { user, profile, loading, signOut } = useAuth();
@@ -76,7 +79,9 @@ function AppContent() {
 
   return (
     <Layout currentPage={page} onNavigate={navigate}>
-      {renderPage()}
+      <Suspense fallback={<FullPageSpinner />}>
+        {renderPage()}
+      </Suspense>
     </Layout>
   );
 }
