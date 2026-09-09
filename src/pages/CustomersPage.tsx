@@ -955,8 +955,14 @@ function CustomerForm({ customerId, onBack, onSaved }: { customerId?: string; on
       if (Object.keys(cleaned).length > 0) propertyPreferences[type] = cleaned;
     }
 
+    // ستون‌های قدیمی first_name/last_name در دیتابیس NOT NULL هستند و رکوردهای
+    // تماس/پیگیری نام مشتری را از همین ستون‌ها می‌خوانند؛ برای جلوگیری از
+    // خطا و نمایش خالی، همیشه همگام با نام کامل نگه‌داشته می‌شوند.
+    const nameParts = form.name.trim().split(/\s+/).filter(Boolean);
     const payload = {
       name: form.name,
+      first_name: nameParts[0] ?? form.name.trim(),
+      last_name: nameParts.slice(1).join(' ') || null,
       mobile: normalizePhone(form.mobile),
       secondary_phone: form.secondary_phone ? normalizePhone(form.secondary_phone) : null,
       transaction_intention: form.transaction_intention || null,
