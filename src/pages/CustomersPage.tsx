@@ -511,18 +511,18 @@ export function CustomersPage({ initialId, initialFilter }: { initialId?: string
 
                     {/* ۳. دسته‌بندی و نوع ملک (بج رنگی) + ۴. شهر */}
                     {(categoryLabel || typeLabels) && (
-                      <span className={`mt-1.5 inline-flex items-center rounded-full px-2.5 py-1 text-xs font-bold ${txStyle?.pill ?? 'bg-slate-100 text-slate-700'}`}>
+                      <span className={`mt-2 inline-flex items-center rounded-full px-2.5 py-1 text-xs font-bold ${txStyle?.pill ?? 'bg-slate-100 text-slate-700'}`}>
                         {[categoryLabel, typeLabels].filter(Boolean).join(' • ')}
                       </span>
                     )}
                     {cityText && (
-                      <p className="mt-1 flex items-center gap-1 text-xs font-medium text-slate-600">
+                      <p className="mt-2 flex items-center gap-1 text-xs font-medium text-slate-600">
                         <MapPin size={12} className="text-slate-400" /> شهر: {cityText}
                       </p>
                     )}
 
-                    {/* ۵ تا ۸. کاشی‌های آماری */}
-                    <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                    {/* ۵ تا . کاشی‌های آماری — در موبایل همهٔ ردیف‌ها هم‌ارتفاع */}
+                    <div className="mt-3 grid auto-rows-fr grid-cols-2 gap-2 sm:grid-cols-4">
                       <CardStat
                         icon={<Wallet size={13} />}
                         label={c.transaction_intention === 'rent' ? 'ودیعه / اجاره' : 'بودجه'}
@@ -562,14 +562,14 @@ export function CustomersPage({ initialId, initialFilter }: { initialId?: string
 
                     {/* ۱۰. آخرین یادداشت */}
                     {c.notes && (
-                      <p className="mt-2.5 flex items-center gap-1.5 text-xs text-slate-600">
+                      <p className="mt-3 flex items-center gap-1.5 text-xs text-slate-600">
                         <StickyNote size={12} className="shrink-0 text-slate-400" />
                         <span className="truncate">{c.notes}</span>
                       </p>
                     )}
 
                     {/* ۱۱ و ۲. همکار معرف + آخرین تماس و پیگیری */}
-                    <div className="mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-slate-100 pt-2.5 text-[11px] font-medium text-slate-500">
+                    <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-slate-100 pt-2.5 text-[11px] font-medium text-slate-500">
                       {referringColleague && (
                         <span className="inline-flex items-center gap-1 font-semibold text-indigo-600">
                           <UserPlus size={12} /> همکار معرف: {referringColleague.name}
