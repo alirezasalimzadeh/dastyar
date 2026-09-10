@@ -36,23 +36,23 @@ import { FollowupFormModal, FollowupRecordCard } from '@/components/followups';
 
 const PAGE_SIZE = 20;
 
-// هویت بصری هر نوع معامله: بج رنگی + رنگ آیکون‌های آمار
-const TRANSACTION_STYLES: Record<string, { pill: string; icon: string; Icon: LucideIcon }> = {
-  buy: { pill: 'bg-emerald-50 text-emerald-700', icon: 'text-emerald-500', Icon: ShoppingBag },
-  rent: { pill: 'bg-blue-50 text-blue-700', icon: 'text-blue-500', Icon: Key },
-  sell: { pill: 'bg-amber-50 text-amber-700', icon: 'text-amber-500', Icon: Tag },
-  partnership: { pill: 'bg-purple-50 text-purple-700', icon: 'text-purple-500', Icon: Handshake },
+// هویت بصری هر نوع معامله: بج رنگی + رنگ متن بودجه + رنگ آیکون‌های آمار
+const TRANSACTION_STYLES: Record<string, { pill: string; value: string; icon: string; Icon: LucideIcon }> = {
+  buy: { pill: 'bg-emerald-50 text-emerald-700', value: 'text-emerald-700', icon: 'text-emerald-500', Icon: ShoppingBag },
+  rent: { pill: 'bg-blue-50 text-blue-700', value: 'text-blue-700', icon: 'text-blue-500', Icon: Key },
+  sell: { pill: 'bg-amber-50 text-amber-700', value: 'text-amber-700', icon: 'text-amber-500', Icon: Tag },
+  partnership: { pill: 'bg-purple-50 text-purple-700', value: 'text-purple-700', icon: 'text-purple-500', Icon: Handshake },
 };
 
 // کاشی آماری کوچک در کارت مشتری
-function CardStat({ icon, label, value, tint }: { icon: ReactNode; label: string; value: ReactNode; tint?: string }) {
+function CardStat({ icon, label, value, tint, valueClass }: { icon: ReactNode; label: string; value: ReactNode; tint?: string; valueClass?: string }) {
   return (
     <div className="min-w-0 rounded-xl bg-slate-50 px-2.5 py-2">
       <p className="flex items-center gap-1 text-[10px] font-medium text-slate-500">
         <span className={`shrink-0 ${tint ?? 'text-slate-400'}`}>{icon}</span>
         <span>{label}</span>
       </p>
-      <p className="mt-0.5 text-xs font-semibold leading-5 text-slate-800">
+      <p className={`mt-0.5 text-xs font-semibold leading-5 ${valueClass ?? 'text-slate-800'}`}>
         {value == null
           ? <span className="font-normal text-slate-300">ثبت نشده</span>
           : typeof value === 'string'
@@ -459,9 +459,11 @@ export function CustomersPage({ initialId, initialFilter }: { initialId?: string
                       )}
                     </div>
 
-                    {/* ۳. دسته‌بندی و نوع ملک + ۴. شهر */}
+                    {/* ۳. دسته‌بندی و نوع ملک (بج رنگی) + ۴. شهر */}
                     {(categoryLabel || typeLabels) && (
-                      <p className="mt-1.5 text-xs font-semibold text-slate-700">{[categoryLabel, typeLabels].filter(Boolean).join(' • ')}</p>
+                      <span className={`mt-1.5 inline-flex items-center rounded-full px-2.5 py-1 text-xs font-bold ${txStyle?.pill ?? 'bg-slate-100 text-slate-700'}`}>
+                        {[categoryLabel, typeLabels].filter(Boolean).join(' • ')}
+                      </span>
                     )}
                     {cityText && (
                       <p className="mt-1 flex items-center gap-1 text-xs font-medium text-slate-600">
@@ -485,6 +487,7 @@ export function CustomersPage({ initialId, initialFilter }: { initialId?: string
                             : budgetText
                         }
                         tint={txStyle?.icon}
+                        valueClass={txStyle?.value}
                       />
                       <CardStat icon={<Ruler size={13} />} label="متراژ" value={areaText} tint={txStyle?.icon} />
                       {specTile && (
