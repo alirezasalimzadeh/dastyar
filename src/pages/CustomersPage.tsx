@@ -342,30 +342,46 @@ export function CustomersPage({ initialId, initialFilter }: { initialId?: string
                   ? c.preferred_property_types.slice(0, 2).map((pt) => PROPERTY_TYPES[c.preferred_category!]?.find((p) => p.value === pt)?.label ?? pt).join('، ')
                   : null;
                 const cityText = (c.preferred_city_ids ?? []).map((id) => cityNames[id]).filter(Boolean).join('، ');
+                // داده‌های مالی/مشخصاتی مشتری (بودجه، متراژ، اتاق، امکانات) به‌ازای
+                // هر نوع ملک در property_preferences ذخیره می‌شوند — اولین مقدار
+                // غیرخالی را بین نوع‌های انتخابی می‌گیریم
+                const firstPref = (key: string): unknown => {
+                  for (const pt of c.preferred_property_types ?? []) {
+                    const prefs = c.property_preferences?.[pt] as unknown as Record<string, unknown> | undefined;
+                    const v = prefs?.[key];
+                    if (v != null && String(v).trim() !== '') return v;
+                  }
+                  return undefined;
+                };
+                const num = (v: unknown): number | null => {
+                  if (v == null || String(v).trim() === '') return null;
+                  const n = Number(toEnglishDigits(String(v)));
+                  return Number.isFinite(n) ? n : null;
+                };
                 const moneyRange = (min: unknown, max: unknown) => {
-                  const m = min != null && String(min).trim() !== '' ? Number(toEnglishDigits(String(min))) : null;
-                  const x = max != null && String(max).trim() !== '' ? Number(toEnglishDigits(String(max))) : null;
+                  const m = num(min);
+                  const x = num(max);
                   if (m == null && x == null) return null;
                   if (m != null && x != null) return `${formatMoneyShort(m)} تا ${formatMoneyShort(x)}`;
                   if (x != null) return `تا ${formatMoneyShort(x)}`;
                   return `از ${formatMoneyShort(m as number)}`;
                 };
-                // بودجهٔ اجاره: بازهٔ ودیعه + بازهٔ اجارهٔ ماهانه از تنظیمات نوع ملک
-                const finPrefs = c.preferred_property_types?.length
-                  ? (c.property_preferences?.[c.preferred_property_types[0]] ?? null) as unknown as Record<string, unknown> | null
-                  : null;
-                const depositRange = c.transaction_intention === 'rent' ? moneyRange(finPrefs?.deposit_min, finPrefs?.deposit_max) : null;
-                const rentRange = c.transaction_intention === 'rent' ? moneyRange(finPrefs?.rent_min, finPrefs?.rent_max) : null;
+                // بودجهٔ اجاره: بازهٔ ودیعه + بازهٔ اجارهٔ ماهانه
+                const depositRange = c.transaction_intention === 'rent' ? moneyRange(firstPref('deposit_min'), firstPref('deposit_max')) : null;
+                const rentRange = c.transaction_intention === 'rent' ? moneyRange(firstPref('rent_min'), firstPref('rent_max')) : null;
                 const budgetText = c.transaction_intention === 'rent'
                   ? null
-                  : moneyRange(c.budget_min, c.budget_max);
-                const areaText = c.min_area != null && c.max_area != null
-                  ? `${toPersianDigits(c.min_area)} تا ${toPersianDigits(c.max_area)} متری`
-                  : c.max_area != null
-                    ? `تا ${toPersianDigits(c.max_area)} متری`
-                    : c.min_area != null
-                      ? `از ${toPersianDigits(c.min_area)} متری`
-                      : null;
+                  : moneyRange(firstPref('budget_min'), firstPref('budget_max'));
+                const areaText = (() => {
+                  const a = num(firstPref('min_area') ?? c.min_area);
+                  const b = num(firstPref('max_area') ?? c.max_area);
+                  if (a == null && b == null) return null;
+                  if (a != null && b != null) return `${toPersianDigits(a)} تا ${toPersianDigits(b)} متری`;
+                  if (b != null) return `تا ${toPersianDigits(b)} متری`;
+                  return `از ${toPersianDigits(a as number)} متری`;
+                })();
+                const minRooms = num(firstPref('min_rooms') ?? c.bedrooms);
+                const roomsLabel = firstPref('min_rooms') != null ? 'حداقل اتاق' : 'اتاق';
                 const amenities: string[] = [];
                 for (const pt of c.preferred_property_types ?? []) {
                   const prefs = (c.property_preferences?.[pt] ?? null) as unknown as Record<string, unknown> | null;
@@ -374,8 +390,10 @@ export function CustomersPage({ initialId, initialFilter }: { initialId?: string
                   if (!section) continue;
                   for (const f of section.fields) {
                     const value = prefs[f.key];
-                    if (value === true) amenities.push(f.label);
-                    else if (typeof value === 'string' && value !== '') amenities.push(getFieldLabel(f.key, value));
+                    if (value === true) {
+                      // نمایش به‌صورت اسم؛ پسوند پرسشی فرم («می‌خواهد؟/دارد؟») حذف شود
+                      amenities.push(f.label.replace(/\s*(می‌خواهد|دارد)؟\s*$/, '').trim());
+                    } else if (typeof value === 'string' && value !== '') amenities.push(getFieldLabel(f.key, value));
                   }
                 }
                 const amenitiesText = amenities.length > 0
@@ -443,7 +461,14 @@ export function CustomersPage({ initialId, initialFilter }: { initialId?: string
                         tint={txStyle?.icon}
                       />
                       <CardStat icon={<Ruler size={13} />} label="متراژ" value={areaText} tint={txStyle?.icon} />
-                      <CardStat icon={<BedDouble size={13} />} label="اتاق" value={c.bedrooms != null ? `${toPersianDigits(c.bedrooms)} اتاق` : null} tint={txStyle?.icon} />
+                      <CardStat
+                        icon={<BedDouble size={13} />}
+                        label={roomsLabel}
+                        value={minRooms != null
+                          ? (roomsLabel === 'حداقل اتاق' ? toPersianDigits(minRooms) : `${toPersianDigits(minRooms)} اتاق`)
+                          : null}
+                        tint={txStyle?.icon}
+                      />
                       <CardStat icon={<Sparkles size={13} />} label="امکانات" value={amenitiesText} tint={txStyle?.icon} />
                     </div>
 
