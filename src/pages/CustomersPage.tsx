@@ -31,17 +31,28 @@ import { useActiveCounties, useCountyNeighborhoods } from '@/lib/geo';
 import type { Customer } from '@/lib/types';
 import { getFieldSections, getFieldLabel, type FieldDef } from '@/lib/propertyFields';
 import { useColleagues } from '@/lib/colleagues';
+import { useConsultants, consultantName } from '@/lib/consultants';
 import { CallFormModal, CallRecordCard } from '@/components/calls';
 import { FollowupFormModal, FollowupRecordCard } from '@/components/followups';
 
 const PAGE_SIZE = 20;
 
 // هویت بصری هر نوع معامله: بج رنگی + رنگ متن بودجه + رنگ آیکون‌های آمار
-const TRANSACTION_STYLES: Record<string, { pill: string; value: string; icon: string; Icon: LucideIcon }> = {
-  buy: { pill: 'bg-emerald-50 text-emerald-700', value: 'text-emerald-700', icon: 'text-emerald-500', Icon: ShoppingBag },
-  rent: { pill: 'bg-blue-50 text-blue-700', value: 'text-blue-700', icon: 'text-blue-500', Icon: Key },
-  sell: { pill: 'bg-amber-50 text-amber-700', value: 'text-amber-700', icon: 'text-amber-500', Icon: Tag },
-  partnership: { pill: 'bg-purple-50 text-purple-700', value: 'text-purple-700', icon: 'text-purple-500', Icon: Handshake },
+// + رنگ هدر پرونده مشتری در صفحهٔ جزئیات
+const TRANSACTION_STYLES: Record<string, { pill: string; value: string; icon: string; hero: string; text: string; Icon: LucideIcon }> = {
+  buy: { pill: 'bg-emerald-50 text-emerald-700', value: 'text-emerald-700', icon: 'text-emerald-500', hero: 'detail-hero-emerald', text: 'text-emerald-600', Icon: ShoppingBag },
+  rent: { pill: 'bg-blue-50 text-blue-700', value: 'text-blue-700', icon: 'text-blue-500', hero: 'detail-hero-blue', text: 'text-blue-600', Icon: Key },
+  sell: { pill: 'bg-amber-50 text-amber-700', value: 'text-amber-700', icon: 'text-amber-500', hero: 'detail-hero-amber', text: 'text-amber-600', Icon: Tag },
+  partnership: { pill: 'bg-purple-50 text-purple-700', value: 'text-purple-700', icon: 'text-purple-500', hero: 'detail-hero-purple', text: 'text-purple-600', Icon: Handshake },
+};
+
+// برچسب نقش در معامله برای نمایش
+const ROLE_LABELS: Record<string, string> = {
+  buyer: 'خریدار',
+  seller: 'فروشنده',
+  owner: 'مالک',
+  applicant: 'متقاضی',
+  builder: 'سازنده',
 };
 
 // کاشی آماری کوچک در کارت مشتری
@@ -598,6 +609,16 @@ export function CustomersPage({ initialId, initialFilter }: { initialId?: string
 // Customer Detail Page
 function CustomerDetail({ customerId, onBack, onEdit }: { customerId: string; onBack: () => void; onEdit: () => void }) {
   const colleagues = useColleagues();
+  const consultants = useConsultants();
+  // نقشهٔ id شهر → نام، برای نمایش شهرهای موردنظر
+  const [cityNames, setCityNames] = useState<Record<string, string>>({});
+  useEffect(() => {
+    let active = true;
+    supabase.from('cities').select('id, name').then(({ data }) => {
+      if (active && data) setCityNames(Object.fromEntries((data as { id: string; name: string }[]).map((c) => [c.id, c.name])));
+    });
+    return () => { active = false; };
+  }, []);
   const [customer, setCustomer] = useState<Customer | null>(null);
   const [calls, setCalls] = useState<any[]>([]);
   const [followups, setFollowups] = useState<any[]>([]);
@@ -645,6 +666,10 @@ function CustomerDetail({ customerId, onBack, onEdit }: { customerId: string; on
 
   const temp = getTemperatureInfo(customer.temperature);
   const status = getStatusInfo(CUSTOMER_STATUSES, customer.status);
+  // تم رنگی پرونده با نوع معامله یکی باشد
+  const txStyle = customer.transaction_intention ? TRANSACTION_STYLES[customer.transaction_intention] : undefined;
+  const TxIcon = txStyle?.Icon;
+  const cityText = (customer.preferred_city_ids ?? []).map((id) => cityNames[id]).filter(Boolean).join('، ');
 
   return (
     <div className="animate-fade-in space-y-4">
@@ -654,9 +679,9 @@ function CustomerDetail({ customerId, onBack, onEdit }: { customerId: string; on
         بازگشت
       </button>
 
-      {/* Customer Header */}
-      <div className="detail-hero detail-hero-orange">
-        <p className="mb-3 flex items-center gap-1.5 text-xs font-medium text-orange-600"><Users size={14} /> پرونده مشتری</p>
+      {/* Customer Header — رنگش با نوع معامله هماهنگ است */}
+      <div className={`detail-hero ${txStyle?.hero ?? 'detail-hero-orange'}`}>
+        <p className={`mb-3 flex items-center gap-1.5 text-xs font-medium ${txStyle?.text ?? 'text-orange-600'}`}><Users size={14} /> پرونده مشتری</p>
         <div className="flex items-start gap-4">
           <div className={`detail-avatar ${
             customer.temperature === 'hot' ? 'bg-red-100 text-red-600' :
@@ -668,6 +693,12 @@ function CustomerDetail({ customerId, onBack, onEdit }: { customerId: string; on
           <div className="flex-1">
             <div className="flex flex-wrap items-center gap-2 mb-1">
               <h2 className="text-xl font-extrabold text-slate-800">{customer.name}</h2>
+              {customer.transaction_intention && (
+                <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-bold ${txStyle?.pill ?? 'bg-slate-100 text-slate-500'}`}>
+                  {TxIcon && <TxIcon size={12} />}
+                  {getTransactionLabel(customer.transaction_intention)}
+                </span>
+              )}
               <Badge color={temp.color}>{temp.icon} {temp.label}</Badge>
               <Badge color={status.color}>{status.label}</Badge>
             </div>
@@ -733,21 +764,26 @@ function CustomerDetail({ customerId, onBack, onEdit }: { customerId: string; on
           <h3 className="detail-section-title"><Target size={17} className="text-orange-500" /> نیازها و ترجیحات مشتری</h3>
           <div className="detail-info-grid">
             <InfoField label="نوع معامله" value={customer.transaction_intention ? getTransactionLabel(customer.transaction_intention) : '-'} />
+            <InfoField label="نقش در معامله" value={customer.transaction_role ? (ROLE_LABELS[customer.transaction_role] ?? customer.transaction_role) : '-'} />
             <InfoField label="دسته‌بندی" value={customer.preferred_category ? getCategoryLabel(customer.preferred_category) : '-'} />
             <InfoField label="انواع ملک مورد نظر" value={customer.preferred_property_types?.length
               ? customer.preferred_property_types.map((pt) => PROPERTY_TYPES[customer.preferred_category!]?.find((p) => p.value === pt)?.label ?? pt).join('، ')
               : '-'} />
+            <InfoField label="شهرهای موردنظر" value={cityText || '-'} />
             <InfoField label="فوریت" value={URGENCY_LEVELS.find(u => u.value === customer.urgency)?.label ?? '-'} />
             <InfoField
-              label="منبع"
+              label="منبع آشنایی"
               value={customer.lead_source
                 ? customer.lead_source === 'colleague_transfer' && referringColleague
                   ? `${getContactSourceLabel(customer.lead_source)} — ${referringColleague.name}`
                   : getContactSourceLabel(customer.lead_source)
                 : '-'}
             />
-            <InfoField label="آخرین تماس" value={customer.last_contact ? timeAgo(customer.last_contact) : '-'} />
+            <InfoField label="مشاور مسئول" value={customer.assigned_consultant_id ? consultantName(consultants, customer.assigned_consultant_id) : 'انتساب نشده'} />
+            <InfoField label="آخرین تماس" value={customer.last_contact ? timeAgo(customer.last_contact) : 'بدون تماس'} />
             <InfoField label="پیگیری بعدی" value={customer.next_followup ? formatDate(customer.next_followup) : '-'} />
+            <InfoField label="تاریخ ثبت" value={customer.created_at ? formatDate(customer.created_at) : '-'} />
+            <InfoField label="آخرین به‌روزرسانی" value={customer.updated_at ? formatDate(customer.updated_at) : '-'} />
           </div>
 
           {/* Dynamic property preferences */}

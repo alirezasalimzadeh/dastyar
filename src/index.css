@@ -83,6 +83,15 @@
   .detail-hero-orange {
     @apply border-orange-100 bg-gradient-to-br from-white via-white to-orange-50;
   }
+  .detail-hero-emerald {
+    @apply border-emerald-100 bg-gradient-to-br from-white via-white to-emerald-50;
+  }
+  .detail-hero-amber {
+    @apply border-amber-100 bg-gradient-to-br from-white via-white to-amber-50;
+  }
+  .detail-hero-purple {
+    @apply border-purple-100 bg-gradient-to-br from-white via-white to-purple-50;
+  }
   .detail-back {
     @apply inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-sm font-medium text-slate-500 transition hover:bg-white hover:text-slate-800 hover:shadow-sm;
   }
