@@ -487,7 +487,7 @@ export function CustomersPage({ initialId, initialFilter }: { initialId?: string
                             : budgetText
                         }
                         tint={txStyle?.icon}
-                        valueClass={txStyle?.value}
+                        valueClass={c.transaction_intention === 'rent' ? undefined : txStyle?.value}
                       />
                       <CardStat icon={<Ruler size={13} />} label="متراژ" value={areaText} tint={txStyle?.icon} />
                       {specTile && (
