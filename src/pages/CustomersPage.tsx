@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useMemo, type ReactNode } from 'react';
-import { Plus, Search, Users, Phone, X, Filter, ArrowLeft, Trash2, Tag, Clock, Target, MapPin, Pencil, Key, ShoppingBag, Handshake, Wallet, Ruler, BedDouble, Building2, Landmark, Sparkles, StickyNote, UserPlus, CalendarClock, type LucideIcon } from 'lucide-react';
+import { Plus, Search, Users, Phone, X, Filter, ArrowLeft, ArrowUpDown, Trash2, Tag, Clock, Target, MapPin, Pencil, Key, ShoppingBag, Handshake, Wallet, Ruler, BedDouble, Building2, Landmark, Sparkles, StickyNote, UserPlus, CalendarClock, ChevronDown, type LucideIcon } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth';
 import {
@@ -26,7 +26,7 @@ import {
   stripPhoneSpaces,
   ROBAT_KARIM_COUNTY_NAME,
 } from '@/lib/constants';
-import { Badge, EmptyState, Spinner, Modal, MoneyInput, PageHeader, Pagination, ConfirmDialog, CopyButton, SortSelect } from '@/components/ui';
+import { Badge, EmptyState, Spinner, Modal, MoneyInput, PageHeader, Pagination, ConfirmDialog, CopyButton } from '@/components/ui';
 import { useActiveCounties, useCountyNeighborhoods } from '@/lib/geo';
 import type { Customer } from '@/lib/types';
 import { getFieldSections, getFieldLabel, type FieldDef } from '@/lib/propertyFields';
@@ -202,6 +202,7 @@ export function CustomersPage({ initialId, initialFilter }: { initialId?: string
     );
   }
 
+  const activeFilterCount = Object.values(filters).filter(Boolean).length;
   const totalPages = Math.ceil(visibleCustomers.length / PAGE_SIZE);
   const pageItems = visibleCustomers.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
@@ -218,27 +219,47 @@ export function CustomersPage({ initialId, initialFilter }: { initialId?: string
         }
       />
 
-      {/* Search & Filters */}
-      <div className="flex gap-2 mb-4">
-        <div className="relative flex-1">
-          <Search size={18} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" />
+      {/* نوار ابزار: جستجو + مرتب‌سازی + فیلتر در یک سطر */}
+      <div className="mb-4 flex items-center gap-2">
+        <div className="relative min-w-0 flex-1">
+          <Search size={17} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" />
           <input
             type="text"
             value={search}
             onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-            className="input pr-10"
+            className="input h-10 pr-10"
             placeholder="جستجو با نام یا شماره..."
           />
         </div>
+        <div className="relative w-36 shrink-0 sm:w-48">
+          <ArrowUpDown size={14} className="pointer-events-none absolute right-2.5 top-1/2 z-10 -translate-y-1/2 text-slate-500" />
+          <select
+            aria-label="مرتب‌سازی"
+            className="h-10 w-full appearance-none truncate rounded-lg border border-slate-300 bg-white py-2 pl-7 pr-8 text-xs font-bold text-slate-700 shadow-sm outline-none transition-all hover:border-slate-400 focus:border-transparent focus:ring-2 focus:ring-slate-400"
+            value={sortKey}
+            onChange={(e) => { setSortKey(e.target.value); setPage(1); }}
+          >
+            {CUSTOMER_SORTS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+          </select>
+          <ChevronDown size={14} className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-slate-400" />
+        </div>
         <button
           onClick={() => setShowFilters(!showFilters)}
-          className={`btn-secondary ${Object.values(filters).some(Boolean) ? 'bg-slate-200' : ''}`}
+          aria-label="فیلترها"
+          className={`relative flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border shadow-sm transition-all active:scale-95 ${
+            showFilters || activeFilterCount > 0
+              ? 'border-slate-900 bg-slate-900 text-white'
+              : 'border-slate-300 bg-white text-slate-700 hover:border-slate-400'
+          }`}
         >
-          <Filter size={18} />
+          <Filter size={17} />
+          {activeFilterCount > 0 && (
+            <span className="absolute -left-1.5 -top-1.5 flex h-5 min-w-[20px] items-center justify-center rounded-full bg-orange-500 px-1 text-[10px] font-bold text-white">
+              {toPersianDigits(activeFilterCount)}
+            </span>
+          )}
         </button>
       </div>
-
-      <SortSelect value={sortKey} options={CUSTOMER_SORTS} onChange={(v) => { setSortKey(v); setPage(1); }} />
 
       {/* Filter Panel */}
       {showFilters && (
