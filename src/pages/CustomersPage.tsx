@@ -562,7 +562,7 @@ export function CustomersPage({ initialId, initialFilter }: { initialId?: string
 
                     {/* ۱۰. آخرین یادداشت */}
                     {c.notes && (
-                      <p className="mt-1.5 flex items-center gap-1.5 text-xs text-slate-600">
+                      <p className="mt-2.5 flex items-center gap-1.5 text-xs text-slate-600">
                         <StickyNote size={12} className="shrink-0 text-slate-400" />
                         <span className="truncate">{c.notes}</span>
                       </p>
