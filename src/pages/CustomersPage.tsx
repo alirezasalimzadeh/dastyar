@@ -1158,6 +1158,7 @@ function CustomerForm({ customerId, onBack, onSaved }: { customerId?: string; on
       else if (!validatePhone(form.mobile)) errs.mobile = 'فرمت موبایل صحیح نیست (09123456789)';
     }
     if (step === 2 && !form.preferred_category) errs.preferred_category = 'دسته‌بندی الزامی است';
+    if (step === 4 && !form.lead_source) errs.lead_source = 'منبع آشنایی را انتخاب کنید';
     setErrors(errs);
     return Object.keys(errs).length === 0;
   };
@@ -1174,7 +1175,14 @@ function CustomerForm({ customerId, onBack, onSaved }: { customerId?: string; on
   };
 
   const handleSave = async () => {
-    if (!validateStep()) return;
+    // منبع آشنایی برای همهٔ مشتریان الزامی است — حتی اگر در حالت ویرایش
+    // کاربر از مرحلهٔ دیگری ذخیره کند، بدون منبع ذخیره نمی‌شود
+    const stepValid = validateStep();
+    if (!form.lead_source) setErrors((e) => ({ ...e, lead_source: 'منبع آشنایی را انتخاب کنید' }));
+    if (!stepValid || !form.lead_source) {
+      if (!form.lead_source) setStep(4);
+      return;
+    }
     if (form.lead_source === 'colleague_transfer' && !colleagueId) {
       setSaveError('منبع «انتقال از همکار» انتخاب شده؛ لطفاً همکار را مشخص کنید.');
       return;
@@ -1479,14 +1487,19 @@ function CustomerForm({ customerId, onBack, onSaved }: { customerId?: string; on
                 </select>
               </div>
               <div>
-                <label className="label">منبع آشنایی</label>
-                <select className="input" value={form.lead_source} onChange={(e) => setForm({ ...form, lead_source: e.target.value })}>
-                  <option value="">ثبت نشده</option>
+                <label className="label">منبع آشنایی *</label>
+                <select
+                  className={`input ${errors.lead_source ? 'input-error' : ''}`}
+                  value={form.lead_source}
+                  onChange={(e) => { setForm({ ...form, lead_source: e.target.value }); setErrors((er) => ({ ...er, lead_source: '' })); }}
+                >
+                  <option value="">انتخاب کنید</option>
                   {form.lead_source && !CONTACT_SOURCES.some((s) => s.value === form.lead_source) && (
-                    <option value={form.lead_source}>{form.lead_source}</option>
+                    <option value={form.lead_source}>{getContactSourceLabel(form.lead_source)}</option>
                   )}
                   {CONTACT_SOURCES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
                 </select>
+                {errors.lead_source && <p className="text-xs text-red-500 mt-1">{errors.lead_source}</p>}
               </div>
             </div>
             <div>
