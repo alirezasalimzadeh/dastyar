@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useMemo, type ReactNode } from 'react';
-import { Plus, Search, Users, Phone, X, Filter, ArrowLeft, Trash2, Tag, Clock, Target, MapPin, Pencil, Key, ShoppingBag, Handshake, Wallet, Ruler, BedDouble, Sparkles, StickyNote, UserPlus, CalendarClock, type LucideIcon } from 'lucide-react';
+import { Plus, Search, Users, Phone, X, Filter, ArrowLeft, Trash2, Tag, Clock, Target, MapPin, Pencil, Key, ShoppingBag, Handshake, Wallet, Ruler, BedDouble, Building2, Landmark, Sparkles, StickyNote, UserPlus, CalendarClock, type LucideIcon } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth';
 import {
@@ -36,12 +36,12 @@ import { FollowupFormModal, FollowupRecordCard } from '@/components/followups';
 
 const PAGE_SIZE = 20;
 
-// هویت بصری هر نوع معامله: بج رنگی + لبهٔ کارت + رنگ آیکون‌های آمار
-const TRANSACTION_STYLES: Record<string, { pill: string; accent: string; icon: string; Icon: LucideIcon }> = {
-  buy: { pill: 'bg-emerald-50 text-emerald-700', accent: 'bg-emerald-400', icon: 'text-emerald-500', Icon: ShoppingBag },
-  rent: { pill: 'bg-blue-50 text-blue-700', accent: 'bg-blue-400', icon: 'text-blue-500', Icon: Key },
-  sell: { pill: 'bg-amber-50 text-amber-700', accent: 'bg-amber-400', icon: 'text-amber-500', Icon: Tag },
-  partnership: { pill: 'bg-purple-50 text-purple-700', accent: 'bg-purple-400', icon: 'text-purple-500', Icon: Handshake },
+// هویت بصری هر نوع معامله: بج رنگی + رنگ آیکون‌های آمار
+const TRANSACTION_STYLES: Record<string, { pill: string; icon: string; Icon: LucideIcon }> = {
+  buy: { pill: 'bg-emerald-50 text-emerald-700', icon: 'text-emerald-500', Icon: ShoppingBag },
+  rent: { pill: 'bg-blue-50 text-blue-700', icon: 'text-blue-500', Icon: Key },
+  sell: { pill: 'bg-amber-50 text-amber-700', icon: 'text-amber-500', Icon: Tag },
+  partnership: { pill: 'bg-purple-50 text-purple-700', icon: 'text-purple-500', Icon: Handshake },
 };
 
 // کاشی آماری کوچک در کارت مشتری
@@ -380,8 +380,37 @@ export function CustomersPage({ initialId, initialFilter }: { initialId?: string
                   if (b != null) return `تا ${toPersianDigits(b)} متری`;
                   return `از ${toPersianDigits(a as number)} متری`;
                 })();
-                const minRooms = num(firstPref('min_rooms') ?? c.bedrooms);
-                const roomsLabel = firstPref('min_rooms') != null ? 'حداقل اتاق' : 'اتاق';
+                // کاشی چهارم: اولین فیلد مشخصاتِ خودِ نوع ملک (متراژ که جداست) —
+                // برای انواع مسکونی همان «حداقل اتاق» است، برای مغازه/زمین «حداقل بر/دهنه»،
+                // برای غرفه «طبقه مورد نظر» و ... یعنی هر دسته فیلد مناسب خودش را می‌بیند
+                const specTile = (() => {
+                  const pt = (c.preferred_property_types ?? [])[0];
+                  if (!pt) return null;
+                  const specs = getFieldSections(pt, c.transaction_role || 'buyer', c.transaction_intention ?? undefined)
+                    .find((s) => s.title === 'مشخصات ملک');
+                  const f = specs?.fields.find((fd) => fd.key !== 'min_area' && fd.key !== 'max_area');
+                  if (!f) return null;
+                  const raw = f.key === 'min_rooms' ? firstPref('min_rooms') ?? c.bedrooms : firstPref(f.key);
+                  let value: string | null = null;
+                  if (f.type === 'checkbox') value = raw === true ? 'بله' : raw === false ? 'خیر' : null;
+                  else if (f.type === 'select') {
+                    const s = String(raw ?? '').trim();
+                    value = s ? getFieldLabel(f.key, s) : null;
+                  } else {
+                    const n = num(raw);
+                    if (n != null) {
+                      const meters = ['frontage', 'land_area', 'building_area', 'min_land_area', 'min_hall_area', 'hall_area', 'road_width'].includes(f.key);
+                      value = meters ? `${toPersianDigits(n)} متر` : toPersianDigits(n);
+                    } else {
+                      const s = String(raw ?? '').trim();
+                      value = s || null;
+                    }
+                  }
+                  const Icon = f.key === 'min_rooms' ? BedDouble
+                    : ['floor', 'total_floors', 'units_per_floor'].includes(f.key) ? Building2
+                    : Landmark;
+                  return { label: f.label, value, icon: <Icon size={13} /> };
+                })();
                 const amenities: string[] = [];
                 for (const pt of c.preferred_property_types ?? []) {
                   const prefs = (c.property_preferences?.[pt] ?? null) as unknown as Record<string, unknown> | null;
@@ -409,11 +438,8 @@ export function CustomersPage({ initialId, initialFilter }: { initialId?: string
                   <div
                     key={c.id}
                     onClick={() => { setSelectedId(c.id); setView('detail'); }}
-                    className="card relative overflow-hidden p-4 pr-5 cursor-pointer transition-all hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md"
+                    className="card p-4 pr-5 cursor-pointer transition-all hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md"
                   >
-                    {/* لبهٔ رنگی سمت راست: هویت کارت */}
-                    <span className={`absolute inset-y-0 right-0 w-1 ${txStyle?.accent ?? 'bg-slate-200'}`} aria-hidden />
-
                     {/* ۱. نوع معامله — بج رنگی با آیکون */}
                     <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-sm font-extrabold ${txStyle?.pill ?? 'bg-slate-100 text-slate-400'}`}>
                       {TxIcon && <TxIcon size={14} />}
@@ -461,14 +487,14 @@ export function CustomersPage({ initialId, initialFilter }: { initialId?: string
                         tint={txStyle?.icon}
                       />
                       <CardStat icon={<Ruler size={13} />} label="متراژ" value={areaText} tint={txStyle?.icon} />
-                      <CardStat
-                        icon={<BedDouble size={13} />}
-                        label={roomsLabel}
-                        value={minRooms != null
-                          ? (roomsLabel === 'حداقل اتاق' ? toPersianDigits(minRooms) : `${toPersianDigits(minRooms)} اتاق`)
-                          : null}
-                        tint={txStyle?.icon}
-                      />
+                      {specTile && (
+                        <CardStat
+                          icon={specTile.icon}
+                          label={specTile.label}
+                          value={specTile.value}
+                          tint={txStyle?.icon}
+                        />
+                      )}
                       <CardStat icon={<Sparkles size={13} />} label="امکانات" value={amenitiesText} tint={txStyle?.icon} />
                     </div>
 
