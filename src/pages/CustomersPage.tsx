@@ -104,6 +104,8 @@ export function CustomersPage({ initialId, initialFilter }: { initialId?: string
     urgency: '',
     lead_source: '',
     colleague: '',
+    category: '',
+    property_type: '',
   });
 
   useEffect(() => {
@@ -149,6 +151,8 @@ export function CustomersPage({ initialId, initialFilter }: { initialId?: string
     if (filters.temperature) rows = rows.filter((c) => c.temperature === filters.temperature);
     if (filters.status) rows = rows.filter((c) => c.status === filters.status);
     if (filters.transaction_intention) rows = rows.filter((c) => c.transaction_intention === filters.transaction_intention);
+    if (filters.category) rows = rows.filter((c) => c.preferred_category === filters.category);
+    if (filters.property_type) rows = rows.filter((c) => (c.preferred_property_types ?? []).includes(filters.property_type));
     if (filters.urgency) rows = rows.filter((c) => c.urgency === filters.urgency);
     if (filters.lead_source) rows = rows.filter((c) => c.lead_source === filters.lead_source);
     if (filters.colleague) {
@@ -270,11 +274,36 @@ export function CustomersPage({ initialId, initialFilter }: { initialId?: string
                 onChange={(e) => { setFilters({ ...filters, transaction_intention: e.target.value }); setPage(1); }}
               >
                 <option value="">همه</option>
-                {TRANSACTION_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="label">فوریت</label>
+                  {TRANSACTION_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="label">دسته‌بندی</label>
+                <select
+                  className="input"
+                  value={filters.category}
+                  onChange={(e) => { setFilters({ ...filters, category: e.target.value, property_type: '' }); setPage(1); }}
+                >
+                  <option value="">همه</option>
+                  {CATEGORIES.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="label">نوع ملک</label>
+                <select
+                  className="input"
+                  value={filters.property_type}
+                  onChange={(e) => { setFilters({ ...filters, property_type: e.target.value }); setPage(1); }}
+                >
+                  <option value="">همه</option>
+                  {(filters.category
+                    ? (PROPERTY_TYPES[filters.category] ?? [])
+                    : Object.values(PROPERTY_TYPES).flat()
+                  ).map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="label">فوریت</label>
               <select
                 className="input"
                 value={filters.urgency}
@@ -310,7 +339,7 @@ export function CustomersPage({ initialId, initialFilter }: { initialId?: string
           </div>
           {Object.values(filters).some(Boolean) && (
             <button
-              onClick={() => { setFilters({ temperature: '', status: '', transaction_intention: '', urgency: '', lead_source: '', colleague: '' }); setPage(1); }}
+                onClick={() => { setFilters({ temperature: '', status: '', transaction_intention: '', urgency: '', lead_source: '', colleague: '', category: '', property_type: '' }); setPage(1); }}
               className="text-xs text-red-500 font-medium"
             >
               پاک کردن فیلترها
