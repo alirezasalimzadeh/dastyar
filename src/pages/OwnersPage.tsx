@@ -1,9 +1,9 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
-import { Plus, Search, Building2, Phone, Clock, ArrowLeft, Trash2, X, Pencil, User, UserCheck } from 'lucide-react';
+import { Plus, Search, Building2, Phone, Clock, ArrowLeft, ArrowUpDown, Trash2, X, Pencil, User, UserCheck, ChevronDown } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth';
 import { normalizePhone, validatePhone, formatDate, timeAgo, toEnglishDigits, toPersianDigits, COLLEAGUE_TAG, CONTACT_SOURCES, getContactSourceLabel, stripPhoneSpaces } from '@/lib/constants';
-import { Badge, EmptyState, Spinner, Modal, PageHeader, Pagination, ConfirmDialog, CopyButton, SortSelect } from '@/components/ui';
+import { Badge, EmptyState, Spinner, Modal, PageHeader, Pagination, ConfirmDialog, CopyButton } from '@/components/ui';
 import type { Owner } from '@/lib/types';
 import { getColleagueRef, getOwnerSource, useColleagues, visibleOwnerTags, withColleagueRef, withOwnerSource } from '@/lib/colleagues';
 import { CallFormModal, CallRecordCard } from '@/components/calls';
@@ -112,18 +112,29 @@ export function OwnersPage({ initialId, onNavigate }: { initialId?: string; onNa
         <button onClick={() => setShowCreate(true)} className="btn-primary"><Plus size={18} /><span className="hidden sm:inline">مالک جدید</span></button>
       } />
 
-      <div className="flex gap-2 mb-4">
-        <div className="relative flex-1">
-          <Search size={18} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" />
-          <input type="text" value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} className="input pr-10" placeholder="جستجو با نام یا تلفن..." />
+      {/* نوار ابزار: جستجو + فیلتر منبع + مرتب‌سازی در یک سطر */}
+      <div className="mb-4 flex items-center gap-2">
+        <div className="relative min-w-0 flex-1">
+          <Search size={17} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" />
+          <input type="text" value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} className="input h-10 pr-10" placeholder="جستجو با نام یا تلفن..." />
         </div>
-        <select className="input w-auto shrink-0" value={sourceFilter} onChange={(e) => { setSourceFilter(e.target.value); setPage(1); }} title="فیلتر بر اساس منبع آشنایی">
+        <select className="input h-10 w-auto shrink-0" value={sourceFilter} onChange={(e) => { setSourceFilter(e.target.value); setPage(1); }} title="فیلتر بر اساس منبع آشنایی">
           <option value="">همه منابع</option>
           {CONTACT_SOURCES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
         </select>
+        <div className="relative w-36 shrink-0 sm:w-44">
+          <ArrowUpDown size={14} className="pointer-events-none absolute right-2.5 top-1/2 z-10 -translate-y-1/2 text-slate-500" />
+          <select
+            aria-label="مرتب‌سازی"
+            className="h-10 w-full appearance-none truncate rounded-lg border border-slate-300 bg-white py-2 pl-7 pr-8 text-xs font-bold text-slate-700 shadow-sm outline-none transition-all hover:border-slate-400 focus:border-transparent focus:ring-2 focus:ring-slate-400"
+            value={sortKey}
+            onChange={(e) => { setSortKey(e.target.value); setPage(1); }}
+          >
+            {OWNER_SORTS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+          </select>
+          <ChevronDown size={14} className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-slate-400" />
+        </div>
       </div>
-
-      <SortSelect value={sortKey} options={OWNER_SORTS} onChange={(v) => { setSortKey(v); setPage(1); }} />
 
       {loading ? (
         <div className="flex justify-center py-16"><Spinner size={32} /></div>

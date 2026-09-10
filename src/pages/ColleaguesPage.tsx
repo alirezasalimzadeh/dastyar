@@ -68,7 +68,7 @@ export function ColleaguesPage({ onNavigate }: { onNavigate?: (page: string, par
 
       <div className="relative mb-4">
         <Search size={18} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" />
-        <input value={search} onChange={(event) => setSearch(event.target.value)} className="input pr-10" placeholder="جستجو با نام، موبایل یا آژانس..." />
+        <input value={search} onChange={(event) => setSearch(event.target.value)} className="input h-10 pr-10" placeholder="جستجو با نام، موبایل یا آژانس..." />
       </div>
 
       {loading ? (

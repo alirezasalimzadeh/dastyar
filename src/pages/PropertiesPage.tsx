@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
-import { Plus, Search, Home, Phone, X, Filter, ArrowLeft, Trash2, Flame, Star, MapPin, Target, User, ImagePlus, Images, ChevronLeft, ChevronRight, Pencil, Maximize2, Handshake, Percent, Clock, Archive, ArchiveRestore, Globe, Briefcase } from 'lucide-react';
+import { Plus, Search, Home, Phone, X, Filter, ArrowLeft, ArrowUpDown, Trash2, Flame, Star, MapPin, Target, User, ImagePlus, Images, ChevronLeft, ChevronRight, Pencil, Maximize2, Handshake, Percent, Clock, Archive, ArchiveRestore, Globe, Briefcase, ChevronDown } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth';
 import {
@@ -28,7 +28,7 @@ import {
   ROBAT_KARIM_STREETS,
   COLLEAGUE_TAG,
 } from '@/lib/constants';
-import { Badge, EmptyState, Spinner, Modal, MoneyInput, PageHeader, Pagination, ConfirmDialog, SortSelect } from '@/components/ui';
+import { Badge, EmptyState, Spinner, Modal, MoneyInput, PageHeader, Pagination, ConfirmDialog } from '@/components/ui';
 import { useActiveCounties, useCountyNeighborhoods } from '@/lib/geo';
 import type { Property, Owner, Colleague } from '@/lib/types';
 import { ownerToColleague, useColleagues } from '@/lib/colleagues';
@@ -410,18 +410,18 @@ export function PropertiesPage({ initialId }: { initialId?: string }) {
         }
       />
 
-      <div className="relative mb-3">
-        <Search size={18} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" />
-        <input
-          type="text"
-          value={search}
-          onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-          className="input pr-10"
-          placeholder="عنوان، آدرس، مالک، تلفن یا موقعیت..."
-        />
-      </div>
-
-      <div className="mb-3 flex gap-2 overflow-x-auto pb-1 no-scrollbar">
+      {/* نوار ابزار: جستجو + تب‌ها + فیلترها + مرتب‌سازی در یک سطر */}
+      <div className="mb-3 flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar">
+        <div className="relative min-w-[200px] flex-1">
+          <Search size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" />
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+            className="w-full rounded-xl border border-slate-200 bg-white py-2 pr-9 text-sm text-slate-800 placeholder-slate-400 outline-none transition-all focus:border-slate-400"
+            placeholder="عنوان، آدرس، مالک، تلفن یا موقعیت..."
+          />
+        </div>
         <div className="inline-flex shrink-0 rounded-xl border border-slate-200 bg-white p-0.5 text-xs font-medium" role="tablist" aria-label="نمایش فایل‌ها">
           <button
             type="button"
@@ -461,6 +461,18 @@ export function PropertiesPage({ initialId }: { initialId?: string }) {
           {activeFilterCount > 0 && <span className={`flex h-5 min-w-5 items-center justify-center rounded-full px-1 text-[10px] font-bold ${showFilters ? 'bg-white text-slate-900' : 'bg-slate-900 text-white'}`}>{toPersianDigits(activeFilterCount)}</span>}
         </button>
         {activeFilterCount > 0 && <button type="button" onClick={clearFilters} className="shrink-0 px-2 text-xs font-medium text-red-500">پاک کردن</button>}
+        <div className="relative w-36 shrink-0 sm:w-44">
+          <ArrowUpDown size={14} className="pointer-events-none absolute right-2.5 top-1/2 z-10 -translate-y-1/2 text-slate-500" />
+          <select
+            aria-label="مرتب‌سازی"
+            className="w-full appearance-none truncate rounded-xl border border-slate-200 bg-white py-2 pl-7 pr-8 text-xs font-bold text-slate-700 outline-none transition-all hover:border-slate-300 focus:border-slate-400"
+            value={sortKey}
+            onChange={(e) => { setSortKey(e.target.value); setPage(1); }}
+          >
+            {PROPERTY_SORTS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+          </select>
+          <ChevronDown size={14} className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-slate-400" />
+        </div>
       </div>
 
       {filterChips.length > 0 && (
@@ -558,8 +570,6 @@ export function PropertiesPage({ initialId }: { initialId?: string }) {
           </div>
         </div>
       )}
-
-      <SortSelect value={sortKey} options={PROPERTY_SORTS} onChange={(v) => { setSortKey(v); setPage(1); }} />
 
       {loadError && !loading && (
         <div className="mb-4 flex items-center justify-between gap-3 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
