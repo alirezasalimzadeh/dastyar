@@ -1,18 +1,6 @@
 // موتور تطبیق — پیکربندی متمرکز
 // همهٔ اعداد و جداول قابل تنظیم در این فایل است (طبق سند طراحی §۱۹).
 
-import { PROPERTY_TYPES } from '@/lib/constants';
-
-// ---- برچسب‌های فارسی مشترک (دلایل سازگاری + امتیازدهی) ----
-export const TYPE_LABELS: Record<string, string> = Object.values(PROPERTY_TYPES).flat().reduce(
-  (acc, { value, label }) => ({ ...acc, [value]: label }),
-  {} as Record<string, string>,
-);
-
-export const ROLE_LABELS: Record<string, string> = {
-  buyer: 'خریدار', seller: 'فروشنده', owner: 'مالک', applicant: 'متقاضی', builder: 'سازنده',
-};
-
 // ---- سطوح سازگاری نوع ملک ----
 export const TYPE_LEVELS = {
   EXACT: 1.0,

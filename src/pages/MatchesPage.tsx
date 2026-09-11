@@ -106,6 +106,82 @@ const REJECT_TITLES: Record<string, string> = {
   INCOMPLETE_CUSTOMER_PROFILE: 'پروفایل مشتری ناقص است',
 };
 
+const STRONG_LABELS: Record<string, string> = {
+  financial: 'مالی', area: 'متراژ', rooms: 'اتاق', location: 'موقعیت', partnership: 'شراکت', permitCommercial: 'جواز/تجاری',
+};
+
+const STRONG_ICONS: Record<string, string> = { PASS: '✓', WARNING: '⚠', REJECT: '✗', UNKNOWN: '—' };
+
+const mismatchReasons = (c: Customer, p: Property, res: ScoredMatchOutput, geo: GeoNames): string => {
+  const bestType = res.metadata.bestType;
+  const pp = (c.property_preferences ?? null) as Record<string, unknown> | null;
+  const pref = (key: string): number | null => {
+    if (!pp) return null;
+    const order = [bestType, ...(c.preferred_property_types ?? [])].filter((t): t is string => Boolean(t));
+    for (const t of order) {
+      const v = (pp[t] as Record<string, unknown> | undefined)?.[key];
+      const n = num(v);
+      if (n != null) return n;
+    }
+    return null;
+  };
+  const above = (d: number | null | undefined) => (d && d > 0 ? ` (${formatPrice(Math.round(d * 100))}٪ بالاتر)` : '');
+  const price = num(p.sale_price) ?? num(p.owner_requested_price);
+
+  switch (res.rejectionReason) {
+    case 'TRANSACTION_INCOMPATIBLE':
+      return `نوع معامله سازگار نیست: ${c.transaction_role ? `${ROLE_LABELS[c.transaction_role] ?? c.transaction_role} (${c.transaction_intention ? getTransactionLabel(c.transaction_intention) : '—'})` : 'نامشخص'} ↔ ${ROLE_LABELS[p.transaction_role] ?? p.transaction_role} (${getTransactionLabel(p.transaction_type)})`;
+    case 'CATEGORY_INCOMPATIBLE':
+      return `دستهٔ فایل (${getCategoryLabel(p.category)}) با دستهٔ درخواست‌شده (${c.preferred_category ? getCategoryLabel(c.preferred_category) : '—'}) مطابقت ندارد`;
+    case 'PROPERTY_TYPE_INCOMPATIBLE': {
+      const wanted = (c.preferred_property_types ?? []).filter(Boolean).map((t) => TYPE_LABELS[t] ?? t).join('، ');
+      return `نوع ملک فایل (${TYPE_LABELS[p.property_type] ?? p.property_type}) با انواع مورد نظر مشتری (${wanted || '—'}) سازگار نیست`;
+    }
+    case 'BUDGET_TOO_HIGH': {
+      const hi = pref('budget_max');
+      return price != null && hi != null
+        ? `قیمت فایل ${formatMoneyShort(price)} از سقف بودجهٔ مشتری ${formatMoneyShort(hi)}${above(res.metadata.distances.budget)} است`
+        : 'قیمت فایل از سقف بودجهٔ مشتری بالاتر است';
+    }
+    case 'DEPOSIT_TOO_HIGH': {
+      const hi = pref('deposit_max');
+      const dep = num(p.deposit_price);
+      return dep != null && hi != null
+        ? `ودیعهٔ فایل ${formatMoneyShort(dep)} از سقف ودیعهٔ مشتری ${formatMoneyShort(hi)}${above(res.metadata.distances.budget)} است`
+        : 'ودیعهٔ فایل از سقف ودیعهٔ مشتری بالاتر است';
+    }
+    case 'RENT_TOO_HIGH': {
+      const hi = pref('rent_max');
+      const rent = num(p.monthly_rent);
+      return rent != null && hi != null
+        ? `اجارهٔ ماهانهٔ فایل ${formatMoneyShort(rent)} از سقف اجارهٔ مشتری ${formatMoneyShort(hi)}${above(res.metadata.distances.budget)} است`
+        : 'اجارهٔ ماهانهٔ فایل از سقف اجارهٔ مشتری بالاتر است';
+    }
+    case 'AREA_TOO_LARGE': {
+      const area = num(p.building_area) ?? num(p.land_area);
+      const hi = pref('max_area') ?? pref('max_land_area');
+      return area != null && hi != null
+        ? `متراژ فایل ${formatPrice(area)} متر از حداکثر درخواستی ${formatPrice(hi)} متر${above(res.metadata.distances.area)} است`
+        : 'متراژ فایل از حداکثر متراژ درخواستی مشتری بیشتر است';
+    }
+    case 'INSUFFICIENT_ROOMS': {
+      const minRooms = pref('min_rooms');
+      const rooms = num(p.bedrooms) ?? num(p.rooms);
+      return minRooms != null && rooms != null
+        ? `اتاق فایل (${formatPrice(rooms)}) کمتر از حداقل درخواستی مشتری (${formatPrice(minRooms)}) است`
+        : 'تعداد اتاق فایل کمتر از حداقل درخواستی مشتری است';
+    }
+    case 'LOCATION_OUTSIDE_REQUEST': {
+      const loc = locText(geo, p.county_id, p.neighborhood_id, p.city_id ? [p.city_id] : undefined);
+      return loc ? `موقعیت فایل (${loc}) خارج از محدودهٔ مدنظر مشتری است` : 'موقعیت فایل خارج از محدودهٔ مدنظر مشتری است';
+    }
+    case 'INCOMPLETE_CUSTOMER_PROFILE':
+      return 'پروفایل مشتری ناقص است — نوع معامله یا نقش معامله‌ای ثبت نشده است';
+    default:
+      return 'این جفت خارج از محدودهٔ سازگاری است';
+  }
+};
+
 // ---- ردیف‌های داده «با یک نگاه» ----
 
 interface SpecRow { k: string; v: string }
@@ -876,14 +952,7 @@ export function MatchesPage() {
                         c!.transaction_role ? ROLE_LABELS[c!.transaction_role] ?? c!.transaction_role : null,
                       ].filter(Boolean).join(' / ');
                   const res = m.result;
-                  // نام مکان‌ها برای غنی‌سازی سطر موقعیت (موتور فقط id را می‌داند)
-                  const pLoc = p ? locText(geoNames, p.county_id, p.neighborhood_id, p.city_id ? [p.city_id] : undefined) : null;
-                  const cLoc = (() => {
-                    if (!c) return null;
-                    const pp = (c.property_preferences ?? null) as Record<string, unknown> | null;
-                    const loc = (pp?.location ?? null) as { county_id?: string; neighborhood_id?: string; city_id?: string } | null;
-                    return locText(geoNames, loc?.county_id, loc?.neighborhood_id, [...(c.preferred_city_ids ?? []), loc?.city_id].filter(Boolean) as string[]);
-                  })();
+                  const pair = pairOf(m);
                   return (
                     <div key={i} className="rounded-xl border border-rose-100 bg-rose-50/40 p-3">
                       <div className="flex items-center justify-between gap-3">
@@ -900,28 +969,24 @@ export function MatchesPage() {
                         </div>
                         <span className="text-[11px] font-bold text-rose-500 shrink-0">{REJECT_TITLES[res.rejectionReason ?? ''] ?? 'ناسازگار'}</span>
                       </div>
-                      {/* دلایل کامل — هر بعد با وضعیت خود: ✓ تأییدشده · ⚠ قابل مذاکره · ✗ دلیل رد · — قابل ارزیابی نیست */}
-                      <div className="mt-2 space-y-0.5">
-                        {res.eligibilityLines.map((l, j) => {
-                          const style =
-                            l.kind === 'REJECT' ? { icon: '✗', cls: 'text-rose-600' }
-                            : l.kind === 'WARNING' ? { icon: '⚠', cls: 'text-amber-700' }
-                            : l.kind === 'PASS' ? { icon: '✓', cls: 'text-green-700' }
-                            : { icon: '—', cls: 'text-slate-400' };
-                          let text = l.text;
-                          if (l.dimension === 'location' && l.kind !== 'INFO') {
-                            text += l.kind === 'REJECT'
-                              ? ` (فایل: ${pLoc ?? 'ثبت نشده'} — درخواست: ${cLoc ?? '—'})`
-                              : ` (${pLoc ?? 'فایل'})`;
-                          }
-                          return (
-                            <div key={j} className={`text-[12px] leading-6 ${style.cls}`}>
-                              <span className="inline-block w-3.5 text-center shrink-0 ml-1">{style.icon}</span>
-                              {text}
-                            </div>
-                          );
-                        })}
-                      </div>
+                      <p className="text-[12px] text-rose-600/90 leading-6 mt-1.5">{mismatchReasons(pair.customer, pair.property, res, geoNames)}</p>
+                      {res.strongConstraints && (
+                        <div className="flex flex-wrap gap-1 mt-2">
+                          {Object.entries(res.strongConstraints).map(([k, s]) => (
+                            <span
+                              key={k}
+                              className={`text-[10px] px-1.5 py-0.5 rounded-md border ${
+                                s === 'REJECT' ? 'bg-rose-100/60 text-rose-600 border-rose-200'
+                                : s === 'WARNING' ? 'bg-amber-50 text-amber-600 border-amber-200'
+                                : s === 'UNKNOWN' ? 'bg-slate-50 text-slate-400 border-slate-200'
+                                : 'bg-green-50 text-green-600 border-green-200'
+                              }`}
+                            >
+                              {STRONG_LABELS[k] ?? k} {STRONG_ICONS[s] ?? s}
+                            </span>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   );
                 })}

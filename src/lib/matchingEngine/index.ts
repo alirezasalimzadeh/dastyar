@@ -20,7 +20,6 @@ export function matchEligibility(customer: Customer, property: Property): MatchE
       strongConstraints: null,
       rejectionReason: hardResult.rejectionReason,
       warnings: hardResult.warnings,
-      eligibilityLines: hardResult.lines,
       metadata: {
         isSubstitutePropertyType: false,
         compatibilityFactor: hardResult.compatibilityFactor,
@@ -48,10 +47,6 @@ export function matchEligibility(customer: Customer, property: Property): MatchE
     },
     rejectionReason: strong.rejectedCode,
     warnings: [...hardResult.warnings, ...strong.warnings],
-    eligibilityLines: [
-      ...hardResult.lines,
-      ...strongKeys.flatMap((k) => strong[k].lines),
-    ],
     metadata: {
       isSubstitutePropertyType: hardResult.hard.isSubstitutePropertyType,
       compatibilityFactor: hardResult.compatibilityFactor,
