@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useMemo, type ComponentType } from 'react';
+import { useEffect, useState, useCallback, useMemo, type ComponentType, type ReactNode } from 'react';
 import {
   Target, ArrowLeft, Zap, Search, TrendingUp, Check, ChevronDown, ChevronUp,
   Building2, Users, Flame, AlertTriangle, Info, Minus, X, Ruler, BedDouble,
@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { scoreMatch, rankMatches, persistMatches, type ScoredMatchOutput, type ScoredComponent } from '@/lib/matchingEngine';
-import { formatPrice, getTransactionLabel, getCategoryLabel, getPropertyTypeLabel, getTemperatureInfo, PROPERTY_TYPES } from '@/lib/constants';
+import { formatPrice, formatMoneyShort, getTransactionLabel, getCategoryLabel, getPropertyTypeLabel, getTemperatureInfo, PROPERTY_TYPES } from '@/lib/constants';
 import { EmptyState, Spinner, PageHeader } from '@/components/ui';
 import type { Property, Customer } from '@/lib/types';
 
@@ -27,9 +27,9 @@ function getScoreTier(score: number) {
 }
 
 const CONFIDENCE = {
-  high: { label: 'اعتماد بالا', cls: 'bg-green-50 text-green-700 border-green-200', Icon: ShieldCheck },
-  medium: { label: 'اعتماد متوسط', cls: 'bg-amber-50 text-amber-700 border-amber-200', Icon: ShieldCheck },
-  low: { label: 'اعتماد کم', cls: 'bg-slate-100 text-slate-500 border-slate-200', Icon: ShieldCheck },
+  high: { label: 'اعتماد بالا', cls: 'bg-green-50 text-green-700 border-green-200' },
+  medium: { label: 'اعتماد متوسط', cls: 'bg-amber-50 text-amber-700 border-amber-200' },
+  low: { label: 'اعتماد کم', cls: 'bg-slate-100 text-slate-500 border-slate-200' },
 } as const;
 
 const TYPE_LABELS: Record<string, string> = Object.values(PROPERTY_TYPES).flat().reduce(
@@ -37,7 +37,189 @@ const TYPE_LABELS: Record<string, string> = Object.values(PROPERTY_TYPES).flat()
   {} as Record<string, string>,
 );
 
+const ROLE_LABELS: Record<string, string> = {
+  buyer: 'خریدار', seller: 'فروشنده', owner: 'مالک', applicant: 'متقاضی', builder: 'سازنده',
+};
+
+const FEATURE_LABELS_UI: Record<string, string> = {
+  parking: 'پارکینگ', elevator: 'آسانسور', storage: 'انباری', balcony: 'بالکن',
+  yard: 'حیاط', garden: 'باغ', pool: 'استخر', security: 'امنیت',
+  fireplace: 'آتشکده', fountain: 'آبنما', jacuzzi: 'جکوزی', gazebo: 'آلاچیق',
+  bbq: 'باربیکیو', sauna: 'سونا', caretaker: 'سرایدار', mezzanine: 'بالکن تجاری',
+  electric_shutter: 'کرکره برقی', signage: 'تابلوخور', restroom: 'سرویس بهداشتی',
+  walled: 'چهاردیواری', water_well: 'چاه آب', office_space: 'فضای اداری',
+  ceiling_crane: 'جرثقیل', water: 'آب', electricity: 'برق', gas: 'گاز',
+};
+
+// امکاناتی که ستون واقعی در فایل دارند (بقیه قابل تأیید نیستند)
+const VERIFY_FEATURES: [string, string][] = [
+  ['parking', 'پارکینگ'], ['elevator', 'آسانسور'], ['storage', 'انباری'], ['balcony', 'بالکن'],
+  ['yard', 'حیاط'], ['garden', 'باغ'], ['pool', 'استخر'], ['security', 'امنیت'],
+];
+
+// ---- ابزارهای متن (اعداد فارسی) ----
+const num = (v: unknown): number | null => {
+  if (v == null || v === '') return null;
+  const n = typeof v === 'number' ? v : Number(String(v).replace(/[^0-9.-]/g, ''));
+  return Number.isFinite(n) ? n : null;
+};
+
+const moneyRange = (lo: unknown, hi: unknown): string | null => {
+  const a = num(lo); const b = num(hi);
+  if (a == null && b == null) return null;
+  if (a != null && b != null) return `${formatMoneyShort(a)} تا ${formatMoneyShort(b)}`;
+  if (a != null) return `از ${formatMoneyShort(a)}`;
+  return `تا ${formatMoneyShort(b)}`;
+};
+
+const areaRange = (lo: unknown, hi: unknown): string | null => {
+  const a = num(lo); const b = num(hi);
+  if (a == null && b == null) return null;
+  if (a != null && b != null) return `${formatPrice(a)} تا ${formatPrice(b)} متر`;
+  if (a != null) return `از ${formatPrice(a)} متر`;
+  return `تا ${formatPrice(b)} متر`;
+};
+
+type GeoNames = Record<string, string>; // 'c:id' | 'ci:id' | 'n:id' → نام
+
+const locText = (geo: GeoNames, county?: string | null, hood?: string | null, cityIds?: string[]): string | null => {
+  const parts: string[] = [];
+  if (county && geo['c:' + county]) parts.push(geo['c:' + county]);
+  if (hood && geo['n:' + hood]) parts.push(geo['n:' + hood]);
+  const cities = (cityIds ?? []).map((id) => geo['ci:' + id]).filter(Boolean);
+  if (cities.length > 0) parts.push(cities.join('، '));
+  return parts.length > 0 ? parts.join(' — ') : null;
+};
+
+// ---- ردیف‌های داده «با یک نگاه» ----
+
+interface SpecRow { k: string; v: string }
+
+const customerRequestRows = (c: Customer, bestType: string | null, geo: GeoNames): SpecRow[] => {
+  const rows: SpecRow[] = [];
+  const pp = (c.property_preferences ?? null) as Record<string, unknown> | null;
+  const pref = (key: string): unknown => {
+    if (!pp) return undefined;
+    const order = [bestType, ...(c.preferred_property_types ?? [])].filter((t): t is string => Boolean(t));
+    for (const t of order) {
+      const v = (pp[t] as Record<string, unknown> | undefined)?.[key];
+      if (v != null && String(v).trim() !== '') return v;
+    }
+    return undefined;
+  };
+  if (c.transaction_intention) {
+    rows.push({ k: 'نوع معامله', v: [getTransactionLabel(c.transaction_intention), c.transaction_role ? ROLE_LABELS[c.transaction_role] ?? c.transaction_role : null].filter(Boolean).join(' / ') });
+  }
+  const types = (c.preferred_property_types ?? []).filter(Boolean);
+  if (types.length > 0) rows.push({ k: 'نوع ملک', v: types.map((t) => TYPE_LABELS[t] ?? t).join('، ') });
+  const tx = c.transaction_intention;
+  if (tx !== 'rent') {
+    const r = moneyRange(pref('budget_min'), pref('budget_max'));
+    if (r) rows.push({ k: tx === 'sell' ? 'قیمت دلخواه' : 'بودجه', v: r });
+  }
+  if (tx === 'rent') {
+    const dep = moneyRange(pref('deposit_min'), pref('deposit_max'));
+    if (dep) rows.push({ k: 'ودیعه', v: dep });
+    const rent = moneyRange(pref('rent_min'), pref('rent_max'));
+    if (rent) rows.push({ k: 'اجاره ماهانه', v: rent });
+  }
+  if (tx === 'partnership') {
+    const lv = num(pref('land_value'));
+    if (lv != null && lv > 0) rows.push({ k: 'ارزش زمین', v: formatMoneyShort(lv) });
+    const cb = moneyRange(pref('construction_budget_min'), pref('construction_budget_max'));
+    if (cb) rows.push({ k: 'بودجه ساخت', v: cb });
+  }
+  const ar = areaRange(pref('min_area'), pref('max_area'));
+  if (ar) rows.push({ k: 'متراژ', v: ar });
+  const lr = areaRange(pref('min_land_area'), pref('max_land_area'));
+  if (lr) rows.push({ k: 'متراژ زمین', v: lr });
+  const hall = num(pref('min_hall_area'));
+  if (hall != null) rows.push({ k: 'سالن', v: `از ${formatPrice(hall)} متر` });
+  const rooms = num(pref('min_rooms'));
+  if (rooms != null) rows.push({ k: 'خواب', v: `${formatPrice(rooms)}+` });
+  const floor = num(pref('preferred_floor'));
+  if (floor != null) rows.push({ k: 'طبقه', v: floor === 0 ? 'همکف' : `طبقه ${formatPrice(floor)}` });
+  const loc = (pp?.location ?? null) as { county_id?: string; neighborhood_id?: string } | null;
+  const lt = locText(geo, loc?.county_id, loc?.neighborhood_id, c.preferred_city_ids);
+  if (lt) rows.push({ k: 'موقعیت', v: lt });
+  const feats = Object.keys(FEATURE_LABELS_UI).filter((k) => pref(k) === true);
+  if (feats.length > 0) {
+    rows.push({ k: 'امکانات', v: feats.slice(0, 3).map((f) => FEATURE_LABELS_UI[f]).join('، ') + (feats.length > 3 ? ` +${formatPrice(feats.length - 3)}` : '') });
+  }
+  return rows;
+};
+
+const propertyFactsRows = (p: Property, geo: GeoNames): SpecRow[] => {
+  const rows: SpecRow[] = [];
+  rows.push({ k: 'نوع معامله', v: getTransactionLabel(p.transaction_type) });
+  if (p.property_type) rows.push({ k: 'نوع ملک', v: TYPE_LABELS[p.property_type] ?? p.property_type });
+  if (p.sale_price > 0) {
+    rows.push({ k: 'قیمت', v: formatMoneyShort(p.sale_price) });
+  } else if (p.deposit_price > 0) {
+    rows.push({ k: 'قیمت', v: formatMoneyShort(p.deposit_price) + (p.monthly_rent > 0 ? ` + ${formatMoneyShort(p.monthly_rent)} ماهانه` : '') });
+  }
+  const b = p.building_area > 0 ? p.building_area : null;
+  const l = p.land_area > 0 ? p.land_area : null;
+  if (b != null && l != null) rows.push({ k: 'متراژ', v: `زیربنا ${formatPrice(b)} / زمین ${formatPrice(l)} متر` });
+  else if (b != null) rows.push({ k: 'متراژ', v: `${formatPrice(b)} متر` });
+  else if (l != null) rows.push({ k: 'متراژ', v: `${formatPrice(l)} متر زمین` });
+  if (p.bedrooms > 0) rows.push({ k: 'خواب', v: formatPrice(p.bedrooms) });
+  if (p.rooms > 0 && p.rooms !== p.bedrooms) rows.push({ k: 'اتاق', v: formatPrice(p.rooms) });
+  if (p.floor > 0 || p.total_floors > 0) rows.push({ k: 'طبقه', v: (p.floor === 0 ? 'همکف' : `طبقه ${formatPrice(p.floor)}`) + (p.total_floors > 0 ? ` از ${formatPrice(p.total_floors)}` : '') });
+  if (p.building_age > 0) rows.push({ k: 'سن', v: `${formatPrice(p.building_age)} سال` });
+  if (p.negotiable) rows.push({ k: 'مذاکره', v: 'قابل مذاکره' });
+  const lt = locText(geo, p.county_id, p.neighborhood_id, p.county_id ? [] : p.city_id ? [p.city_id] : []);
+  if (lt) rows.push({ k: 'موقعیت', v: lt });
+  return rows;
+};
+
 // ---- اجزای کوچک ----
+
+function FeatureChips({ property }: { property: Property }) {
+  const has = VERIFY_FEATURES.filter(([k]) => (property as unknown as Record<string, unknown>)[k] === true);
+  if (has.length === 0) return null;
+  return (
+    <div className="flex flex-wrap gap-1 mt-1.5">
+      {has.map(([k, label]) => (
+        <span key={k} className="inline-flex items-center gap-1 rounded-md border border-green-200 bg-green-50 px-1.5 py-0.5 text-[10px] font-medium text-green-700">
+          <Check size={9} /> {label}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function SpecPanel({ title, icon: Icon, rows, children, tone }: {
+  title: string;
+  icon: ComponentType<{ size?: number | string; className?: string }>;
+  rows: SpecRow[];
+  children?: ReactNode;
+  tone: 'blue' | 'slate';
+}) {
+  const toneCls = tone === 'blue'
+    ? { box: 'bg-blue-50/50 border-blue-100', head: 'text-blue-600' }
+    : { box: 'bg-slate-50 border-slate-200', head: 'text-slate-500' };
+  return (
+    <div className={`rounded-lg border p-2.5 ${toneCls.box}`}>
+      <p className={`text-[10px] font-bold mb-1.5 flex items-center gap-1 ${toneCls.head}`}>
+        <Icon size={10} /> {title}
+      </p>
+      {rows.length > 0 ? (
+        <div className="space-y-0.5">
+          {rows.map((r, i) => (
+            <div key={i} className="flex items-baseline justify-between gap-2 text-[11px] leading-5">
+              <span className="text-slate-400 flex-shrink-0">{r.k}</span>
+              <span className="font-semibold text-slate-700 text-left break-words">{r.v}</span>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p className="text-[11px] text-slate-300">ثبت نشده</p>
+      )}
+      {children}
+    </div>
+  );
+}
 
 function ScoreRing({ score }: { score: number }) {
   const tier = getScoreTier(score);
@@ -71,7 +253,7 @@ function TierPill({ score }: { score: number }) {
   );
 }
 
-/** نوارهای مؤلفه: «مالی ۷۶٪ ⚠» — دقیق‌ترین نمای درون‌کارتی */
+/** نوارهای مؤلفه: «نوع ملک ۶۰٪ ⚠» */
 function ComponentMeters({ components }: { components: ScoredComponent[] }) {
   return (
     <div className="mt-3 grid grid-cols-1 gap-y-1.5">
@@ -79,7 +261,7 @@ function ComponentMeters({ components }: { components: ScoredComponent[] }) {
         const pct = Math.round(c.value * 100);
         const fill = !c.active ? '#e2e8f0' : c.value >= 0.999 ? '#22c55e' : c.value >= 0.5 ? '#f59e0b' : '#ef4444';
         return (
-          <div key={c.key} className="flex items-center gap-2" title={c.active ? `${c.label}: ${pct}٪` : `${c.label}: ثبت نشده توسط مشتری`}>
+          <div key={c.key} className="flex items-center gap-2" title={c.active ? `${c.label}: ${pct}٪` : `${c.label}: توسط مشتری ثبت نشده`}>
             <span className="w-16 flex-shrink-0 text-[11px] font-medium text-slate-500">{c.label}</span>
             <div className="flex-1 h-1.5 rounded-full bg-slate-100 overflow-hidden">
               <div className="h-full rounded-full transition-all duration-500" style={{ width: `${pct}%`, backgroundColor: fill }} />
@@ -141,25 +323,23 @@ function FactChip({ icon: Icon, text, tone = 'slate' }: { icon: ComponentType<{ 
   );
 }
 
-// ---- کارت نتیجه (جایزهٔ اصلی صفحه) ----
+// ---- کارت نتیجه: دیتای کامل هر دو طرف با یک نگاه ----
 
-function MatchCard({ entry }: { entry: MatchEntry }) {
+function MatchCard({ entry, customer, property, geo }: {
+  entry: MatchEntry;
+  customer: Customer; // سمت «درخواست» این جفت
+  property: Property; // سمت «فایل» این جفت
+  geo: GeoNames;
+}) {
   const result = entry.result;
   const score = result.score ?? 0;
   const tier = getScoreTier(score);
   const conf = result.confidence ? CONFIDENCE[result.confidence] : null;
+  const bestType = result.metadata.bestType;
 
   const name = entry.type === 'customer'
     ? entry.data.name ?? `${entry.data.first_name} ${entry.data.last_name}`
     : entry.data.title;
-
-  const priceLabel = entry.type === 'property'
-    ? (entry.data.sale_price > 0
-      ? formatPrice(entry.data.sale_price) + ' تومان'
-      : entry.data.deposit_price > 0
-        ? `رهن ${formatPrice(entry.data.deposit_price)} تومان` + (entry.data.monthly_rent > 0 ? ` + ${formatPrice(entry.data.monthly_rent)} ماهانه` : '')
-        : '')
-    : '';
 
   const lines: ReasonLine[] = [
     ...(result.explanation?.warnings ?? []).map((text) => ({ icon: 'warn' as const, text })),
@@ -170,7 +350,7 @@ function MatchCard({ entry }: { entry: MatchEntry }) {
   return (
     <div className="card overflow-hidden transition-all hover:shadow-md" style={{ borderRight: `3px solid ${tier.border}` }}>
       <div className="p-4">
-        {/* سربرگ: هویت + رینگ */}
+        {/* سربرگ */}
         <div className="flex items-start gap-3">
           {entry.type === 'customer' ? (
             <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-sm font-bold flex-shrink-0 ${
@@ -184,7 +364,6 @@ function MatchCard({ entry }: { entry: MatchEntry }) {
               <Building2 size={19} className="text-slate-500" />
             </div>
           )}
-
           <div className="flex-1 min-w-0">
             <div className="flex flex-wrap items-center gap-2">
               <p className="text-sm font-bold text-slate-800 truncate">{name}</p>
@@ -192,7 +371,12 @@ function MatchCard({ entry }: { entry: MatchEntry }) {
               <TierPill score={score} />
               {conf && (
                 <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium ${conf.cls}`}>
-                  <conf.Icon size={10} /> {conf.label}
+                  <ShieldCheck size={10} /> {conf.label}
+                </span>
+              )}
+              {result.metadata.isSubstitutePropertyType && (
+                <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-700">
+                  <AlertTriangle size={10} /> نوع جایگزین — حداکثر 69٪
                 </span>
               )}
             </div>
@@ -201,30 +385,22 @@ function MatchCard({ entry }: { entry: MatchEntry }) {
                 ? <span dir="ltr">{entry.data.mobile}</span>
                 : `${getTransactionLabel(entry.data.transaction_type)} • ${getCategoryLabel(entry.data.category)} • ${getPropertyTypeLabel(entry.data.category, entry.data.property_type)}`}
             </p>
-            <div className="flex flex-wrap items-center gap-1.5 mt-2">
-              {priceLabel && <FactChip icon={Wallet} text={priceLabel} tone="blue" />}
-              {entry.type === 'property' && entry.data.property_type && <FactChip icon={Home} text={TYPE_LABELS[entry.data.property_type] ?? entry.data.property_type} />}
-              {entry.type === 'property' && (entry.data.building_area > 0 || entry.data.land_area > 0) && (
-                <FactChip icon={Ruler} text={`${formatPrice(entry.data.building_area > 0 ? entry.data.building_area : entry.data.land_area)} متری`} />
-              )}
-              {entry.type === 'property' && entry.data.bedrooms > 0 && <FactChip icon={BedDouble} text={`${formatPrice(entry.data.bedrooms)} خواب`} />}
-              {entry.type === 'property' && entry.data.negotiable && <FactChip icon={TrendingUp} text="قابل مذاکره" tone="gold" />}
-              {entry.type === 'customer' && entry.data.transaction_intention && <FactChip icon={Zap} text={getTransactionLabel(entry.data.transaction_intention)} tone="green" />}
-              {result.metadata.isSubstitutePropertyType && (
-                <span className="inline-flex items-center gap-1 rounded-md border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-700">
-                  <AlertTriangle size={10} /> نوع جایگزین — حداکثر 69٪
-                </span>
-              )}
-            </div>
           </div>
-
           <ScoreRing score={score} />
+        </div>
+
+        {/* درخواست ↔ فایل: دادهٔ کامل هر دو طرف */}
+        <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-2">
+          <SpecPanel title="درخواست مشتری" icon={Users} tone="blue" rows={customerRequestRows(customer, bestType, geo)} />
+          <SpecPanel title="اطلاعات فایل" icon={Building2} tone="slate" rows={propertyFactsRows(property, geo)}>
+            <FeatureChips property={property} />
+          </SpecPanel>
         </div>
 
         {/* مؤلفه‌ها */}
         {result.components && <ComponentMeters components={result.components} />}
 
-        {/* سقف‌های اعمال‌شده */}
+        {/* سقف دادهٔ ناقص */}
         {result.caps.includes('INCOMPLETE_PROPERTY_DATA') && (
           <p className="mt-2.5 flex items-center gap-1.5 text-[11px] text-slate-500 bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5">
             <Info size={12} className="flex-shrink-0" /> دادهٔ فایل ناقص است — امتیاز سقف ۷۴٪ دارد
@@ -259,9 +435,10 @@ export function MatchesPage() {
   const [computing, setComputing] = useState(false);
   const [search, setSearch] = useState('');
   const [minScore, setMinScore] = useState(55); // آستانهٔ پیش‌فرض نمایش: ۵۵ (§۱۳ سند)
-  const [onlyWithMatches, setOnlyWithMatches] = useState(true); // پیش‌فرض: فهرست شلوغ نشود
+  const [onlyWithMatches, setOnlyWithMatches] = useState(true);
   const [matchCounts, setMatchCounts] = useState<Map<string, number> | null>(null);
   const [persistStatus, setPersistStatus] = useState<{ saved: number; error: string | null } | null>(null);
+  const [geoNames, setGeoNames] = useState<GeoNames>({});
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -276,8 +453,25 @@ export function MatchesPage() {
 
   useEffect(() => { loadData(); }, [loadData]);
 
+  // نام‌های موقعیت (شهرستان/شهر/محله) یک‌بار — برای نمایش «موقعیت: روباط‌کریم — …»
+  useEffect(() => {
+    let active = true;
+    Promise.all([
+      supabase.from('counties').select('id, name'),
+      supabase.from('cities').select('id, name'),
+      supabase.from('neighborhoods').select('id, name'),
+    ]).then(([ct, ci, nb]) => {
+      if (!active) return;
+      const map: GeoNames = {};
+      (ct.data ?? []).forEach((r: { id: string; name: string }) => { map['c:' + r.id] = r.name; });
+      (ci.data ?? []).forEach((r: { id: string; name: string }) => { map['ci:' + r.id] = r.name; });
+      (nb.data ?? []).forEach((r: { id: string; name: string }) => { map['n:' + r.id] = r.name; });
+      setGeoNames(map);
+    });
+    return () => { active = false; };
+  }, []);
+
   // شمارش «تطبیق سازگار» هر مورد — مستقل از فیلتر امتیاز، پس از رندر اولیه
-  // (تا UI گیر نکند)؛ صرفاً برای بج «N تطبیق / بدون تطبیق» و فیلتر فهرست
   useEffect(() => {
     setMatchCounts(null);
     const t = setTimeout(() => {
@@ -346,7 +540,7 @@ export function MatchesPage() {
 
   const visibleList = useMemo(() => {
     if (!onlyWithMatches) return filteredList;
-    if (!matchCounts) return filteredList; // تا شمارش آماده شود، فیلتر اعمال نشود
+    if (!matchCounts) return filteredList;
     return filteredList.filter((item) => (matchCounts.get(item.id) ?? 0) > 0);
   }, [filteredList, onlyWithMatches, matchCounts]);
 
@@ -358,12 +552,17 @@ export function MatchesPage() {
   if (loading) return <div className="flex justify-center py-16"><Spinner size={32} /></div>;
 
   const selectedIsProperty = mode === 'property_to_customer';
+  // در هر کارت، «درخواست» همیشه مشتری و «فایل» همیشه ملک است — هر دو طرف کامل
+  const pairOf = (entry: MatchEntry): { customer: Customer; property: Property } =>
+    selectedIsProperty
+      ? { customer: entry.type === 'customer' ? entry.data : (selected as Customer), property: selected as Property }
+      : { customer: selected as Customer, property: entry.type === 'property' ? entry.data : (selected as Property) };
 
   return (
     <div className="animate-fade-in">
       <PageHeader title="تطبیق‌ها" subtitle="فیلتر سخت ← محدودیت‌های قوی ← امتیاز، تیر و دلیل" />
 
-      {/* انتخاب جهت — segmented control */}
+      {/* انتخاب جهت */}
       <div className="bg-slate-100 rounded-xl p-1 flex gap-1 mb-4">
         <button
           onClick={() => { setMode('property_to_customer'); setSelected(null); setMatches([]); }}
@@ -385,7 +584,7 @@ export function MatchesPage() {
 
       {!selected ? (
         <>
-          {/* نوار ابزار — یک ردیف: جستجو + فیلتر امتیاز */}
+          {/* نوار ابزار — یک ردیف: جستجو + فیلتر امتیاز + فیلتر فهرست */}
           <div className="flex flex-wrap items-center gap-2 mb-2">
             <div className="relative flex-1 min-w-[200px]">
               <Search size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" />
@@ -453,6 +652,7 @@ export function MatchesPage() {
                 if (mode === 'property_to_customer') {
                   const p = item as Property;
                   const area = p.building_area > 0 ? p.building_area : p.land_area;
+                  const priceTxt = p.sale_price > 0 ? formatMoneyShort(p.sale_price) : p.deposit_price > 0 ? formatMoneyShort(p.deposit_price) : null;
                   return (
                     <div
                       key={p.id}
@@ -470,10 +670,12 @@ export function MatchesPage() {
                           </div>
                           <p className="text-[11px] text-slate-400 mt-0.5 truncate">
                             {getTransactionLabel(p.transaction_type)} • {getCategoryLabel(p.category)} • {getPropertyTypeLabel(p.category, p.property_type)}
+                            {locText(geoNames, p.county_id, p.neighborhood_id, p.county_id ? [] : p.city_id ? [p.city_id] : []) && ` • ${locText(geoNames, p.county_id, p.neighborhood_id, p.county_id ? [] : p.city_id ? [p.city_id] : [])}`}
                           </p>
                           <div className="flex flex-wrap gap-1.5 mt-1.5">
                             {area > 0 && <FactChip icon={Ruler} text={`${formatPrice(area)} متری`} />}
                             {p.bedrooms > 0 && <FactChip icon={BedDouble} text={`${formatPrice(p.bedrooms)} خواب`} />}
+                            {priceTxt && <FactChip icon={Wallet} text={priceTxt} tone="blue" />}
                             {p.negotiable && <FactChip icon={TrendingUp} text="قابل مذاکره" tone="gold" />}
                             {matchCounts && (
                               (matchCounts.get(p.id) ?? 0) > 0
@@ -481,10 +683,6 @@ export function MatchesPage() {
                                 : <span className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[10px] font-medium text-slate-400">بدون تطبیق</span>
                             )}
                           </div>
-                        </div>
-                        <div className="text-left flex-shrink-0">
-                          {p.sale_price > 0 && <p className="text-sm font-bold text-slate-700">{formatPrice(p.sale_price)} <span className="text-[10px] font-normal text-slate-400">تومان</span></p>}
-                          {p.deposit_price > 0 && <p className="text-[11px] text-slate-500">رهن: {formatPrice(p.deposit_price)}</p>}
                         </div>
                       </div>
                     </div>
@@ -537,7 +735,7 @@ export function MatchesPage() {
         </div>
       ) : (
         <div className="space-y-3">
-          {/* Hero انتخاب‌شده */}
+          {/* پروندهٔ مورد انتخاب‌شده — دادهٔ کامل */}
           <div className="card p-4 bg-gradient-to-l from-slate-50 to-white">
             <div className="flex items-center gap-3">
               <button
@@ -558,13 +756,24 @@ export function MatchesPage() {
                 <p className="text-[11px] text-slate-400 mt-0.5 truncate">
                   {selectedIsProperty
                     ? (() => { const p = selected as Property; return `${getTransactionLabel(p.transaction_type)} • ${getCategoryLabel(p.category)} • ${getPropertyTypeLabel(p.category, p.property_type)}`; })()
-                    : (() => { const c = selected as Customer; return c.transaction_intention ? getTransactionLabel(c.transaction_intention) : '—'; })()}
+                    : (() => { const c = selected as Customer; return [c.transaction_intention ? getTransactionLabel(c.transaction_intention) : null, c.transaction_role ? ROLE_LABELS[c.transaction_role] ?? c.transaction_role : null, c.temperature ? getTemperatureInfo(c.temperature).label : null].filter(Boolean).join(' • '); })()}
                 </p>
               </div>
             </div>
 
-            {/* تایل‌های آمار — ارتفاع یکنواخت */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 mt-3">
+            {/* پنل دادهٔ کامل مورد انتخاب‌شده */}
+            <div className="mt-3">
+              {selectedIsProperty ? (
+                <SpecPanel title="اطلاعات فایل" icon={Building2} tone="slate" rows={propertyFactsRows(selected as Property, geoNames)}>
+                  <FeatureChips property={selected as Property} />
+                </SpecPanel>
+              ) : (
+                <SpecPanel title="درخواست مشتری" icon={Users} tone="blue" rows={customerRequestRows(selected as Customer, matches[0]?.result.metadata.bestType ?? (selected as Customer).preferred_property_types?.[0] ?? null, geoNames)} />
+              )}
+            </div>
+
+            {/* تایل‌های آمار */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 mt-2">
               <div className="rounded-xl border border-slate-200 bg-white p-3 flex items-center gap-2.5 h-full">
                 <span className="w-9 h-9 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center flex-shrink-0"><Target size={16} /></span>
                 <div className="min-w-0">
@@ -618,11 +827,14 @@ export function MatchesPage() {
             <EmptyState
               icon={<Target size={48} />}
               title="تطبیقی با امتیاز کافی یافت نشد"
-              description={`فقط جفت‌های سازگار و با امتیاز حداقل ${minScore}٪ نمایش داده می‌شوند — ${rejectedCount} جفت ناسازگار حذف شد`}
+              description={`فقط جفت‌های سازگار و با امتیاز حداقل ${minScore}٪ نمایش داده می‌شوند — ${formatPrice(rejectedCount)} جفت ناسازگار حذف شد`}
             />
           ) : (
             <div className="space-y-3">
-              {matches.map((m, i) => <MatchCard key={i} entry={m} />)}
+              {matches.map((m, i) => {
+                const pair = pairOf(m);
+                return <MatchCard key={i} entry={m} customer={pair.customer} property={pair.property} geo={geoNames} />;
+              })}
             </div>
           )}
         </div>
