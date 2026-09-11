@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useMemo, type ReactNode } from 'react';
-import { Plus, Search, Users, Phone, X, Filter, ArrowLeft, ArrowUpDown, Trash2, Tag, Clock, Target, MapPin, Pencil, Key, ShoppingBag, Handshake, Wallet, Ruler, BedDouble, Building2, Landmark, Sparkles, StickyNote, UserPlus, CalendarClock, ChevronDown, type LucideIcon } from 'lucide-react';
+import { Plus, Search, Users, Phone, X, Filter, ArrowLeft, ArrowUpDown, Trash2, Tag, Clock, Target, MapPin, Pencil, Key, ShoppingBag, Handshake, Wallet, Ruler, BedDouble, Building2, Landmark, Sparkles, StickyNote, UserPlus, CalendarClock, ChevronDown, ChevronLeft, type LucideIcon } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth';
 import {
@@ -87,7 +87,7 @@ const CUSTOMER_SORTS = [
   { value: 'urgency', label: 'فوری‌ترین' },
 ];
 
-export function CustomersPage({ initialId, initialFilter }: { initialId?: string; initialFilter?: string }) {
+export function CustomersPage({ initialId, initialFilter, onNavigate }: { initialId?: string; initialFilter?: string; onNavigate?: (page: string, params?: Record<string, unknown>) => void }) {
   const { user } = useAuth();
   const colleagues = useColleagues();
   // نقشهٔ id شهر → نام، برای نمایش شهرِ موردنظر در کارت‌های لیست
@@ -209,6 +209,7 @@ export function CustomersPage({ initialId, initialFilter }: { initialId?: string
         customerId={selectedId}
         onBack={() => { setView('list'); setSelectedId(null); }}
         onEdit={() => setView('edit')}
+        onNavigate={onNavigate}
       />
     );
   }
@@ -607,7 +608,7 @@ export function CustomersPage({ initialId, initialFilter }: { initialId?: string
 }
 
 // Customer Detail Page
-function CustomerDetail({ customerId, onBack, onEdit }: { customerId: string; onBack: () => void; onEdit: () => void }) {
+function CustomerDetail({ customerId, onBack, onEdit, onNavigate }: { customerId: string; onBack: () => void; onEdit: () => void; onNavigate?: (page: string, params?: Record<string, unknown>) => void }) {
   const colleagues = useColleagues();
   const consultants = useConsultants();
   // نقشهٔ id شهر → نام، برای نمایش شهرهای موردنظر
@@ -820,20 +821,37 @@ function CustomerDetail({ customerId, onBack, onEdit }: { customerId: string; on
       {activeTab === 'matches' && (
         <div className="space-y-3">
           {matches.length > 0 ? (
-            matches.map((m) => (
-              <div key={m.id} className="card p-4">
-                <div className="flex items-center justify-between mb-2">
-                  <p className="text-sm font-medium text-slate-800">{m.properties?.title ?? 'فایل'}</p>
-                  <div className="flex items-center gap-2">
-                    <div className="w-12 h-12 rounded-full flex items-center justify-center text-sm font-bold text-white" style={{ backgroundColor: m.score >= 80 ? '#16a34a' : m.score >= 60 ? '#f97316' : '#64748b' }}>
-                      {m.score}%
+            <>
+              <p className="text-[11px] text-slate-400">روی هر تطبیق کلیک کنید تا صفحهٔ تطبیق‌های این مشتری باز شود</p>
+              {matches.map((m) => {
+                const scoreColor = m.score >= 85 ? '#2563eb' : m.score >= 70 ? '#059669' : m.score >= 55 ? '#ca8a04' : m.score >= 40 ? '#ea580c' : '#dc2626';
+                return (
+                  <button
+                    key={m.id}
+                    type="button"
+                    onClick={() => onNavigate?.('matches', { customerId })}
+                    className="card p-4 w-full text-right hover:shadow-md hover:border-slate-300 transition-all"
+                  >
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="text-sm font-medium text-slate-800">{m.properties?.title ?? 'فایل'}</p>
+                      <div className="w-12 h-12 rounded-full flex items-center justify-center text-sm font-bold text-white" style={{ backgroundColor: scoreColor }}>
+                        {m.score}%
+                      </div>
                     </div>
-                  </div>
-                </div>
-                <p className="text-xs text-slate-400">{m.properties ? getTransactionLabel(m.properties.transaction_type) : ''} • {m.properties ? getCategoryLabel(m.properties.category) : ''}</p>
-                {m.properties?.sale_price != null && <p className="text-xs text-slate-500 mt-1">{formatPrice(m.properties.sale_price)} ت</p>}
-              </div>
-            ))
+                    <p className="text-xs text-slate-400">{m.properties ? getTransactionLabel(m.properties.transaction_type) : ''} • {m.properties ? getCategoryLabel(m.properties.category) : ''}</p>
+                    {m.properties?.sale_price != null && <p className="text-xs text-slate-500 mt-1">{formatPrice(m.properties.sale_price)} ت</p>}
+                  </button>
+                );
+              })}
+              <button
+                type="button"
+                onClick={() => onNavigate?.('matches', { customerId })}
+                className="w-full flex items-center justify-center gap-1.5 rounded-xl border border-blue-200 bg-blue-50/60 px-3 py-2.5 text-xs font-bold text-blue-700 hover:bg-blue-100/60 transition-colors"
+              >
+                <Target size={13} /> دیدن تطبیق‌های کامل این مشتری
+                <ChevronLeft size={13} />
+              </button>
+            </>
           ) : (
             <EmptyState icon={<Target size={36} />} title="تطبیقی یافت نشده" description="با ثبت فایل‌های جدید، تطبیق‌ها به‌صورت خودکار محاسبه می‌شوند" />
           )}

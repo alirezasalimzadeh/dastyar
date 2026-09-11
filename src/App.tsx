@@ -49,7 +49,7 @@ function AppContent() {
       case 'dashboard':
         return <DashboardPage onNavigate={navigate} />;
       case 'customers':
-        return <CustomersPage initialId={params.id as string | undefined} initialFilter={params.filter as string | undefined} />;
+        return <CustomersPage initialId={params.id as string | undefined} initialFilter={params.filter as string | undefined} onNavigate={navigate} />;
       case 'owners':
         return <OwnersPage initialId={params.id as string | undefined} onNavigate={navigate} />;
       case 'colleagues':
@@ -57,7 +57,7 @@ function AppContent() {
       case 'properties':
         return <PropertiesPage initialId={params.id as string | undefined} onNavigate={navigate} />;
       case 'matches':
-        return <MatchesPage initialPropertyId={params.id as string | undefined} />;
+        return <MatchesPage initialPropertyId={params.propertyId as string | undefined} initialCustomerId={params.customerId as string | undefined} />;
       case 'calls':
         return <CallsPage />;
       case 'followups':

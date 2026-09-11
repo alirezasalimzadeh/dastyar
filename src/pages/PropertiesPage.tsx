@@ -1161,7 +1161,7 @@ function PropertyDetail({ propertyId, onBack, onEdit, onNavigate }: { propertyId
                   <button
                     key={m.id}
                     type="button"
-                    onClick={() => onNavigate?.('matches', { id: property.id })}
+                    onClick={() => onNavigate?.('matches', { propertyId: property.id })}
                     className="card p-4 w-full flex items-center justify-between text-right hover:shadow-md hover:border-slate-300 transition-all"
                   >
                     <div>
@@ -1176,7 +1176,7 @@ function PropertyDetail({ propertyId, onBack, onEdit, onNavigate }: { propertyId
               })}
               <button
                 type="button"
-                onClick={() => onNavigate?.('matches', { id: property.id })}
+                onClick={() => onNavigate?.('matches', { propertyId: property.id })}
                 className="w-full flex items-center justify-center gap-1.5 rounded-xl border border-blue-200 bg-blue-50/60 px-3 py-2.5 text-xs font-bold text-blue-700 hover:bg-blue-100/60 transition-colors"
               >
                 <Target size={13} /> دیدن تطبیق‌های کامل این فایل

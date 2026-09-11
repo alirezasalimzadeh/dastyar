@@ -470,7 +470,7 @@ function MatchCard({ entry, customer, property, geo }: {
 
 // ---- صفحه ----
 
-export function MatchesPage({ initialPropertyId }: { initialPropertyId?: string }) {
+export function MatchesPage({ initialPropertyId, initialCustomerId }: { initialPropertyId?: string; initialCustomerId?: string }) {
   const [mode, setMode] = useState<'property_to_customer' | 'customer_to_property'>('property_to_customer');
   const [properties, setProperties] = useState<Property[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -575,17 +575,27 @@ export function MatchesPage({ initialPropertyId }: { initialPropertyId?: string 
     setComputing(false);
   }, [mode, customers, properties, minScore]);
 
-  // ورود عمیق از صفحهٔ جزئیات فایل: تطبیق‌های همان فایل را مستقیم باز کن
+  // ورود عمیق از صفحهٔ جزئیات فایل/مشتری: تطبیق‌های همان مورد را مستقیم باز کن
   const autoSelectedRef = useRef(false);
   useEffect(() => {
-    if (!initialPropertyId || autoSelectedRef.current) return;
+    if (autoSelectedRef.current) return;
     if (properties.length === 0 || customers.length === 0) return;
-    const prop = properties.find((p) => p.id === initialPropertyId);
-    if (!prop) return;
-    autoSelectedRef.current = true;
-    setMode('property_to_customer');
-    computeMatches(prop, 'property_to_customer');
-  }, [initialPropertyId, properties, customers, computeMatches]);
+    if (initialPropertyId) {
+      const prop = properties.find((p) => p.id === initialPropertyId);
+      if (!prop) return;
+      autoSelectedRef.current = true;
+      setMode('property_to_customer');
+      computeMatches(prop, 'property_to_customer');
+      return;
+    }
+    if (initialCustomerId) {
+      const cust = customers.find((c) => c.id === initialCustomerId);
+      if (!cust) return;
+      autoSelectedRef.current = true;
+      setMode('customer_to_property');
+      computeMatches(cust, 'customer_to_property');
+    }
+  }, [initialPropertyId, initialCustomerId, properties, customers, computeMatches]);
 
   const filteredList = useMemo(() => {
     const q = search.trim().toLowerCase();
