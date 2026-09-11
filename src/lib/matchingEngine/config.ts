@@ -107,3 +107,105 @@ export function typeCompatibility(a: string, b: string): number {
   const key = [a, b].sort().join('|');
   return TYPE_COMPATIBILITY[key] ?? 0;
 }
+
+// ============================================================
+// فاز ۳ — امتیازدهی (طبق سند طراحی §۵/§۶/§۱۱/§۱۳)
+// ============================================================
+
+// وزن مؤلفه‌ها (مجموع = 100)
+export const SCORE_WEIGHTS = {
+  core: 20,
+  financial: 25,
+  location: 20,
+  physical: 20,
+  features: 15,
+} as const;
+
+// زیرمقادارهای فیزیکی (داخل مؤلفهٔ Physical)
+export const PHYSICAL_SUB_WEIGHTS = {
+  area: 0.5,
+  rooms: 0.3,
+  floor: 0.2,
+} as const;
+
+// امتیاز کمبود ۱ اتاق (کمبود ≥۲ در فاز ۲ REJECT شده و به امتیاز نمی‌رسد)
+export const ROOMS_SHORTFALL_1_SCORE = 0.4;
+
+// تابع تناسب طبقه (فاصله از طبقهٔ موردنظر)
+export const FLOOR_FIT = {
+  exact: 1.0,
+  adjacent: 0.5,
+  far: 0.2,
+} as const;
+
+// لولهٔ موقعیت (سلسله‌مراتبی؛ §۹ سند)
+export const LOCATION_SCORES = {
+  sameHood: 1.0,
+  sameCountyCityOk: 0.75,
+  sameCountyCityUnknown: 0.6,
+  countyUnknownCityInList: 0.7,
+  provinceOnly: 0.3,
+  provinceMismatch: 0.2,
+  noLocation: 0.5,
+} as const;
+
+// وزن هر امکانات درخواستی (§۱۱ سند)
+export const FEATURE_WEIGHTS: Record<string, number> = {
+  parking: 3,
+  elevator: 2,
+  security: 2,
+  storage: 2,
+  signage: 2,
+  yard: 2,
+  garden: 2,
+  walled: 2,
+  water_well: 2,
+  office_space: 2,
+  ceiling_crane: 2,
+  water: 2,
+  electricity: 2,
+  gas: 2,
+  balcony: 1,
+  electric_shutter: 1,
+  restroom: 1,
+  fireplace: 1,
+  jacuzzi: 1,
+  fountain: 1,
+  gazebo: 1,
+  bbq: 1,
+  sauna: 1,
+  caretaker: 1,
+  mezzanine: 1,
+  pool: 1,
+};
+
+// امکاناتی که در ستون‌های واقعی فایل قابل تأییدند (بقیه تا ستون جدید = 0.5 + ℹ)
+export const VERIFIABLE_FEATURES: Record<string, string> = {
+  parking: 'parking',
+  storage: 'storage',
+  elevator: 'elevator',
+  balcony: 'balcony',
+  yard: 'yard',
+  garden: 'garden',
+  pool: 'pool',
+  security: 'security',
+};
+
+// تیرها (§۱۳ سند)
+export const TIER_THRESHOLDS = {
+  excellent: 85,
+  good: 70,
+  fair: 55,
+  weak: 40,
+} as const;
+export const DISPLAY_THRESHOLD = 55;
+
+// اعتماد (trust = وزن مؤلفه‌های فعال / 100)
+export const CONFIDENCE_THRESHOLDS = {
+  high: 0.85,
+  medium: 0.5,
+} as const;
+
+// سقف امتیاز وقتی ≥۲ مورد REQUIRED در فایل ثبت نشده باشد (§۱۳/§۱۸ سند)
+export const INCOMPLETE_DATA_CAP = 74;
+export const INCOMPLETE_DATA_THRESHOLD = 2;

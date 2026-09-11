@@ -3,49 +3,11 @@
 // UNKNOWN هرگز به REJECT تبدیل نمی‌شود (دادهٔ ناقص ≠ عدم تطبیق).
 
 import { INDUSTRIAL_BUILDING_TYPES, LAND_AREA_TYPES, STRONG_THRESHOLDS } from './config';
+import { firstPrefValue, positiveNum, toNum } from './prefUtils';
 import { RejectionReason, WarningCode, type ConstraintStatus, type RejectionReasonCode, type WarningCodeValue } from './types';
 import type { Customer, Property } from '@/lib/types';
 
-// ---- ابزارها ----
-
-function toNum(v: unknown): number | null {
-  if (v == null || v === '') return null;
-  const n = typeof v === 'number' ? v : Number(String(v).replace(/[^0-9.-]/g, ''));
-  return Number.isFinite(n) ? n : null;
-}
-
-/** عددی «ثبت‌شده» (بزرگ‌تر از صفر)؛ صفر در این ستون‌ها یعنی ثبت نشده */
-function positiveNum(v: unknown): number | null {
-  const n = toNum(v);
-  return n != null && n > 0 ? n : null;
-}
-
-interface Prefs {
-  [key: string]: unknown;
-}
-
-function getPrefs(customer: Customer, bestCustomerType: string | null): Prefs[] {
-  const pp = (customer.property_preferences ?? null) as Record<string, unknown> | null;
-  if (!pp) return [];
-  const order: string[] = [];
-  if (bestCustomerType) order.push(bestCustomerType);
-  for (const t of customer.preferred_property_types ?? []) if (!order.includes(t)) order.push(t);
-  for (const k of Object.keys(pp)) {
-    if (['location', 'address', 'colleague_id'].includes(k)) continue;
-    const v = pp[k];
-    if (v && typeof v === 'object' && !order.includes(k)) order.push(k);
-  }
-  return order.map((k) => (pp[k] as Prefs) ?? {});
-}
-
-/** اولین مقدار غیرخالی برای یک کلید در ترجیحات مشتری (اولویت: نوع سازگار برنده → سایر انواع) */
-function firstPrefValue(customer: Customer, bestCustomerType: string | null, key: string): unknown {
-  for (const prefs of getPrefs(customer, bestCustomerType)) {
-    const v = prefs[key];
-    if (v != null && String(v).trim() !== '') return v;
-  }
-  return undefined;
-}
+// ---- ابزار محلی ----
 
 export interface ConstraintOutcome {
   status: ConstraintStatus;

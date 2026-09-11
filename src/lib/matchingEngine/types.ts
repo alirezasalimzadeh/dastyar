@@ -66,7 +66,41 @@ export interface MatchEligibilityOutput {
   metadata: {
     isSubstitutePropertyType: boolean;
     compatibilityFactor: number | null;
+    /** نوع ملکِ مشتری که برندهٔ سازگاری بود (مبنای خواندن ترجیحات در فاز ۲/۳) */
+    bestType: string | null;
     /** فاصله‌های خام (d) برای استفادهٔ فاز ۳ در امتیازدهی */
     distances: Record<string, number | null>;
   };
+}
+
+// ---- فاز ۳: امتیازدهی ----
+
+export type Tier = 'excellent' | 'good' | 'fair' | 'weak' | 'hidden';
+export type Confidence = 'high' | 'medium' | 'low';
+export type ScoreCap = 'SUBSTITUTE_PROPERTY_TYPE' | 'INCOMPLETE_PROPERTY_DATA';
+
+export interface ScoredComponent {
+  key: 'core' | 'financial' | 'location' | 'physical' | 'features';
+  /** برچسب فارسی برای UI (مالي/موقعیت/...) */
+  label: string;
+  weight: number;
+  /** امتیاز مؤلفه 0–1 (مؤلفه‌های غیرفعال با 0.5 خنثی نمایش می‌شوند) */
+  value: number;
+  active: boolean;
+}
+
+export interface MatchExplanation {
+  positives: string[];
+  warnings: string[];
+  unverifiable: string[];
+}
+
+/** خروجی کامل موتور: فاز ۱ + ۲ + ۳. score فقط وقتی compatible=true ساخته می‌شود. */
+export interface ScoredMatchOutput extends MatchEligibilityOutput {
+  score: number | null;
+  tier: Tier | null;
+  confidence: Confidence | null;
+  components: ScoredComponent[] | null;
+  explanation: MatchExplanation | null;
+  caps: ScoreCap[];
 }
