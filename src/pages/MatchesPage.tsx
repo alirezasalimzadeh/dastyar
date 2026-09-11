@@ -260,14 +260,19 @@ function ComponentMeters({ components }: { components: ScoredComponent[] }) {
       {components.map((c) => {
         const pct = Math.round(c.value * 100);
         // همان رام رنگی تیرها — یک منبع واحد برای همهٔ رنگ‌های امتیاز
-        const fill = !c.active ? '#e2e8f0' : getScoreTier(pct).color;
+        const fill = getScoreTier(pct).color;
         return (
-          <div key={c.key} className="flex items-center gap-2" title={c.active ? `${c.label}: ${pct}٪` : `${c.label}: توسط مشتری ثبت نشده`}>
-            <span className="w-16 flex-shrink-0 text-[11px] font-medium text-slate-500">{c.label}</span>
+          <div key={c.key} className="flex items-center gap-2" title={c.active ? `${c.label}: ${pct}٪` : `${c.label}: توسط مشتری ثبت نشده — مقدار خنثی ۵۰٪ (نه امتیاز واقعی)`}>
+            <span className={`w-16 flex-shrink-0 text-[11px] font-medium ${c.active ? 'text-slate-500' : 'text-slate-400'}`}>{c.label}</span>
             <div className="flex-1 h-1.5 rounded-full bg-slate-100 overflow-hidden">
-              <div className="h-full rounded-full transition-all duration-500" style={{ width: `${pct}%`, backgroundColor: fill }} />
+              {c.active ? (
+                <div className="h-full rounded-full transition-all duration-500" style={{ width: `${pct}%`, backgroundColor: fill }} />
+              ) : (
+                // مؤلفهٔ غیرفعال: مقدار خنثی ۵۰٪ — راه‌راه تا از امتیاز واقعی قابل تشخیص باشد
+                <div className="h-full rounded-full transition-all duration-500" style={{ width: `${pct}%`, backgroundImage: 'repeating-linear-gradient(45deg, #cbd5e1 0, #cbd5e1 4px, #eef2f7 4px, #eef2f7 8px)' }} />
+              )}
             </div>
-            <span className="w-9 flex-shrink-0 text-[11px] font-bold text-slate-600 text-left" dir="ltr">{pct}%</span>
+            <span className={`w-9 flex-shrink-0 text-[11px] font-bold text-left ${c.active ? 'text-slate-600' : 'text-slate-400'}`} dir="ltr">{pct}%</span>
             <span className="w-4 flex-shrink-0 flex justify-center">
               {!c.active ? <Minus size={12} className="text-slate-300" />
                 : c.value >= 0.999 ? <Check size={13} style={{ color: fill }} />
