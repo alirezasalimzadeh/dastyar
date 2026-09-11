@@ -26,7 +26,7 @@ import {
 } from './config';
 import { firstPrefValue, toNum } from './prefUtils';
 import type { MatchEligibilityOutput, MatchExplanation, ScoredComponent } from './types';
-import { formatMoneyShort, formatPrice, PROPERTY_TYPES } from '@/lib/constants';
+import { formatMoneyShort, formatPrice, getTransactionLabel, PROPERTY_TYPES } from '@/lib/constants';
 import type { Customer, Property } from '@/lib/types';
 
 // ---- ابزار مشترک ----
@@ -71,14 +71,20 @@ function fitValue(v: number, lo: number | null, hi: number | null, negotiable: b
 
 // ---- مؤلفهٔ Core (نوع معامله/دسته/نوع ملک) ----
 
-function coreScore(elig: MatchEligibilityOutput, property: Property): ComponentResult {
+function coreScore(elig: MatchEligibilityOutput, property: Property, customer: Customer): ComponentResult {
   const factor = elig.hardCompatibility.compatibilityFactor ?? 1.0;
   const positives: string[] = [];
   const warnings: string[] = [];
+  // سازگاری سخت برای جفت‌های امتیازدار همیشه برقرار است — در دلایل صریح می‌شود
+  if (customer.transaction_intention) {
+    positives.push(`نوع معامله سازگار: ${getTransactionLabel(customer.transaction_intention)} ↔ ${getTransactionLabel(property.transaction_type)}`);
+  }
   if (elig.metadata.isSubstitutePropertyType) {
     warnings.push('نوع ملک جایگزین است و تطبیق دقیق نیست.');
   } else if (factor < 1.0) {
     warnings.push(`نوع ملک نزدیک به درخواست است: ${TYPE_LABELS[property.property_type] ?? property.property_type}`);
+  } else {
+    positives.push(`نوع ملک دقیقاً مطابق درخواست (${TYPE_LABELS[property.property_type] ?? property.property_type})`);
   }
   return { value: factor, active: true, positives, warnings, unverifiable: [], missingRequired: 0, activeFraction: 1 };
 }
@@ -405,7 +411,7 @@ export function calculateScore(
 ): ScoredPart {
   const bestType = elig.metadata.bestType;
 
-  const core = coreScore(elig, property);
+  const core = coreScore(elig, property, customer);
   const financial = financialScore(customer, property, bestType);
   const location = locationScore(customer, property);
   const physical = physicalScore(customer, property, bestType);

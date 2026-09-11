@@ -283,7 +283,7 @@ interface ReasonLine { icon: 'ok' | 'warn' | 'info'; text: string }
 
 function ReasonList({ lines }: { lines: ReasonLine[] }) {
   const [expanded, setExpanded] = useState(false);
-  const visible = expanded ? lines : lines.slice(0, 6);
+  const visible = expanded ? lines : lines.slice(0, 8);
   return (
     <div className="mt-3 pt-3 border-t border-slate-100">
       <p className="text-[11px] font-bold text-slate-400 mb-1.5 flex items-center gap-1">
@@ -299,10 +299,10 @@ function ReasonList({ lines }: { lines: ReasonLine[] }) {
           </div>
         ))}
       </div>
-      {lines.length > 6 && (
+      {lines.length > 8 && (
         <button onClick={() => setExpanded(!expanded)} className="flex items-center gap-1 text-[11px] text-slate-400 mt-2 hover:text-slate-600 transition-colors">
           {expanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
-          {expanded ? 'بستن' : `${formatPrice(lines.length - 6)} مورد دیگر`}
+          {expanded ? 'بستن' : `${formatPrice(lines.length - 8)} مورد دیگر`}
         </button>
       )}
     </div>
@@ -560,7 +560,7 @@ export function MatchesPage() {
 
   return (
     <div className="animate-fade-in">
-      <PageHeader title="تطبیق‌ها" subtitle="فیلتر سخت ← محدودیت‌های قوی ← امتیاز، تیر و دلیل" />
+      <PageHeader title="تطبیق‌ها" />
 
       {/* انتخاب جهت */}
       <div className="bg-slate-100 rounded-xl p-1 flex gap-1 mb-4">
@@ -761,16 +761,7 @@ export function MatchesPage() {
               </div>
             </div>
 
-            {/* پنل دادهٔ کامل مورد انتخاب‌شده */}
-            <div className="mt-3">
-              {selectedIsProperty ? (
-                <SpecPanel title="اطلاعات فایل" icon={Building2} tone="slate" rows={propertyFactsRows(selected as Property, geoNames)}>
-                  <FeatureChips property={selected as Property} />
-                </SpecPanel>
-              ) : (
-                <SpecPanel title="درخواست مشتری" icon={Users} tone="blue" rows={customerRequestRows(selected as Customer, matches[0]?.result.metadata.bestType ?? (selected as Customer).preferred_property_types?.[0] ?? null, geoNames)} />
-              )}
-            </div>
+            {/* پنل دادهٔ کامل حذف شد — دادهٔ هر دو طرف در حالت مقایسه‌ای هر کارت نمایش داده می‌شود */}
 
             {/* تایل‌های آمار */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 mt-2">
