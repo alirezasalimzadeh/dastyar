@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback, useMemo, type ComponentType, type ReactNode } from 'react';
 import {
   Target, ArrowLeft, Zap, Search, TrendingUp, Check, ChevronDown, ChevronUp,
-  Building2, Users, Flame, AlertTriangle, Info, Minus, X, Ruler, BedDouble,
+  Building2, Users, Flame, AlertTriangle, Info, Minus, Ruler, BedDouble,
   Home, Wallet, ShieldCheck, Star, CheckCircle2, Handshake,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
@@ -492,6 +492,7 @@ export function MatchesPage() {
   const [selected, setSelected] = useState<Property | Customer | null>(null);
   const [matches, setMatches] = useState<MatchEntry[]>([]);
   const [rejectedCount, setRejectedCount] = useState(0);
+  const [qualityMin, setQualityMin] = useState(85); // تیر انتخابی تایل «کیفیت»
   const [loading, setLoading] = useState(true);
   const [computing, setComputing] = useState(false);
   const [search, setSearch] = useState('');
@@ -607,8 +608,7 @@ export function MatchesPage() {
 
   const withMatchesCount = matchCounts ? [...matchCounts.values()].filter((n) => n > 0).length : null;
 
-  const avgScore = matches.length > 0 ? Math.round(matches.reduce((s, m) => s + (m.result.score ?? 0), 0) / matches.length) : 0;
-  const excellentCount = matches.filter((m) => (m.result.score ?? 0) >= 85).length;
+  const qualityCount = matches.filter((m) => (m.result.score ?? 0) >= qualityMin).length;
 
   if (loading) return <div className="flex justify-center py-16"><Spinner size={32} /></div>;
 
@@ -825,7 +825,7 @@ export function MatchesPage() {
             {/* پنل دادهٔ کامل حذف شد — دادهٔ هر دو طرف در حالت مقایسه‌ای هر کارت نمایش داده می‌شود */}
 
             {/* تایل‌های آمار */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 mt-2">
+            <div className="grid grid-cols-2 gap-2 mt-2">
               <div className="rounded-xl border border-slate-200 bg-white p-3 flex items-center gap-2.5 h-full">
                 <span className="w-9 h-9 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center flex-shrink-0"><Target size={16} /></span>
                 <div className="min-w-0">
@@ -834,24 +834,19 @@ export function MatchesPage() {
                 </div>
               </div>
               <div className="rounded-xl border border-slate-200 bg-white p-3 flex items-center gap-2.5 h-full">
-                <span className="w-9 h-9 rounded-lg bg-green-50 text-green-600 flex items-center justify-center flex-shrink-0"><TrendingUp size={16} /></span>
-                <div className="min-w-0">
-                  <p className="text-base font-extrabold text-slate-800 leading-5">{matches.length > 0 ? `${avgScore}٪` : '—'}</p>
-                  <p className="text-[10px] text-slate-400">میانگین امتیاز</p>
-                </div>
-              </div>
-              <div className="rounded-xl border border-slate-200 bg-white p-3 flex items-center gap-2.5 h-full">
                 <span className="w-9 h-9 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center flex-shrink-0"><Star size={16} /></span>
-                <div className="min-w-0">
-                  <p className="text-base font-extrabold text-slate-800 leading-5">{formatPrice(excellentCount)}</p>
-                  <p className="text-[10px] text-slate-400">عالی (≥ 85٪)</p>
-                </div>
-              </div>
-              <div className="rounded-xl border border-slate-200 bg-white p-3 flex items-center gap-2.5 h-full">
-                <span className="w-9 h-9 rounded-lg bg-red-50 text-red-500 flex items-center justify-center flex-shrink-0"><X size={16} /></span>
-                <div className="min-w-0">
-                  <p className="text-base font-extrabold text-slate-800 leading-5">{formatPrice(rejectedCount)}</p>
-                  <p className="text-[10px] text-slate-400">ناسازگار (رد شد)</p>
+                <div className="min-w-0 flex-1">
+                  <p className="text-base font-extrabold text-slate-800 leading-5">{formatPrice(qualityCount)}</p>
+                  <select
+                    value={qualityMin}
+                    onChange={(e) => setQualityMin(Number(e.target.value))}
+                    title="انتخاب تیر کیفیت"
+                    className="w-full mt-0.5 text-[10px] text-slate-500 bg-transparent border-0 p-0 cursor-pointer focus:outline-none"
+                  >
+                    {SCORE_TIERS.slice(0, 4).map((t) => (
+                      <option key={t.min} value={t.min}>کیفیت: {t.label} ({t.min}+)</option>
+                    ))}
+                  </select>
                 </div>
               </div>
             </div>
