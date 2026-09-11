@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useMemo, useRef, type ReactNode } from 'react';
-import { Plus, Search, Users, Phone, X, Filter, ArrowLeft, ArrowUpDown, Trash2, Tag, Clock, Target, MapPin, Pencil, Key, ShoppingBag, Handshake, Wallet, Ruler, BedDouble, Building2, Landmark, Sparkles, StickyNote, UserPlus, CalendarClock, ChevronDown, ChevronLeft, type LucideIcon } from 'lucide-react';
+import { Plus, Search, Users, Phone, X, Filter, ArrowLeft, ArrowUpDown, Trash2, Tag, Clock, Target, MapPin, Pencil, Key, ShoppingBag, Handshake, Wallet, Ruler, BedDouble, Building2, Landmark, Sparkles, StickyNote, UserPlus, CalendarClock, ChevronDown, ChevronLeft, Zap, type LucideIcon } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth';
 import {
@@ -30,6 +30,7 @@ import { Badge, EmptyState, Spinner, Modal, MoneyInput, PageHeader, Pagination, 
 import { useActiveCounties, useCountyNeighborhoods } from '@/lib/geo';
 import type { Customer } from '@/lib/types';
 import { getFieldSections, getFieldLabel, type FieldDef } from '@/lib/propertyFields';
+import { POWER_LABELS, GAS_LABELS } from '@/lib/shopUtils';
 import { useColleagues } from '@/lib/colleagues';
 import { useConsultants, consultantName } from '@/lib/consultants';
 import { CallFormModal, CallRecordCard } from '@/components/calls';
@@ -505,6 +506,19 @@ export function CustomersPage({ initialId, initialFilter, onNavigate, onGoBack }
                 const amenitiesText = amenities.length > 0
                   ? [...new Set(amenities)].slice(0, 4).join('، ') + (amenities.length > 4 ? ' …' : '')
                   : null;
+                // برق ۳‌فاز / گاز تجاری (مغازه و کارخانه) — جدا و برجسته نمایش داده می‌شود
+                const powerGasText = (() => {
+                  const pt = (c.preferred_property_types ?? [])[0];
+                  if (!pt) return null;
+                  const prefs = (c.property_preferences?.[pt] ?? null) as Record<string, unknown> | null;
+                  if (!prefs) return null;
+                  const parts: string[] = [];
+                  const p = typeof prefs.required_power === 'string' && prefs.required_power ? POWER_LABELS[prefs.required_power] : null;
+                  const g = typeof prefs.required_gas === 'string' && prefs.required_gas ? GAS_LABELS[prefs.required_gas] : null;
+                  if (p) parts.push(`برق: ${p}`);
+                  if (g) parts.push(`گاز: ${g}`);
+                  return parts.length > 0 ? parts.join(' · ') : null;
+                })();
                 const sourceLabel = c.lead_source
                   ? c.lead_source === 'colleague_transfer' && referringColleague
                     ? `${getContactSourceLabel(c.lead_source)} — ${referringColleague.name}`
@@ -577,6 +591,14 @@ export function CustomersPage({ initialId, initialFilter, onNavigate, onGoBack }
                       )}
                       <CardStat icon={<Sparkles size={13} />} label="امکانات" value={amenitiesText} tint={txStyle?.icon} />
                     </div>
+
+                    {/* ۸.۵. برق و گاز (مغازه/کارخانه) */}
+                    {powerGasText && (
+                      <p className="mt-2 flex items-center gap-1.5 text-xs font-semibold text-amber-800">
+                        <Zap size={12} className="shrink-0 text-amber-500" />
+                        <span>{powerGasText}</span>
+                      </p>
+                    )}
 
                     {/* ۹. منبع آشنایی */}
                     <p className="mt-3 flex items-center gap-1.5 text-xs font-medium text-slate-700">

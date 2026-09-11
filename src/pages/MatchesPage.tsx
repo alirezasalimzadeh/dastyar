@@ -6,6 +6,7 @@ import {
 import { supabase } from '@/lib/supabase';
 import { scoreMatch, rankMatches, persistMatches, type ScoredMatchOutput, type ScoredComponent } from '@/lib/matchingEngine';
 import { formatPrice, formatMoneyShort, getTransactionLabel, getCategoryLabel, getPropertyTypeLabel, getTemperatureInfo, PROPERTY_TYPES } from '@/lib/constants';
+import { POWER_LABELS, GAS_LABELS } from '@/lib/shopUtils';
 import { EmptyState, Spinner, PageHeader } from '@/components/ui';
 import type { Property, Customer } from '@/lib/types';
 
@@ -141,6 +142,10 @@ const customerRequestRows = (c: Customer, bestType: string | null, geo: GeoNames
   const loc = (pp?.location ?? null) as { county_id?: string; neighborhood_id?: string } | null;
   const lt = locText(geo, loc?.county_id, loc?.neighborhood_id, c.preferred_city_ids);
   if (lt) rows.push({ k: 'موقعیت', v: lt });
+  const pwr = pref('required_power');
+  if (typeof pwr === 'string' && pwr) rows.push({ k: 'برق ۳‌فاز (حداقل)', v: POWER_LABELS[pwr] ?? pwr });
+  const gas = pref('required_gas');
+  if (typeof gas === 'string' && gas) rows.push({ k: 'گاز تجاری (حداقل)', v: GAS_LABELS[gas] ?? gas });
   const feats = Object.keys(FEATURE_LABELS_UI).filter((k) => pref(k) === true);
   if (feats.length > 0) {
     rows.push({ k: 'امکانات', v: feats.slice(0, 3).map((f) => FEATURE_LABELS_UI[f]).join('، ') + (feats.length > 3 ? ` +${formatPrice(feats.length - 3)}` : '') });

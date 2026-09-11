@@ -163,8 +163,8 @@ export const FEATURE_WEIGHTS: Record<string, number> = {
   office_space: 2,
   ceiling_crane: 2,
   water: 2,
-  electricity: 2,
-  gas: 2,
+  // electricity/gas به‌عنوان «مقدار اندازه‌شده» (آمپر/سایز متر) در
+  // featuresScore مقایسه می‌شوند، نه چک‌باکس بله/خیر
   balcony: 1,
   electric_shutter: 1,
   restroom: 1,

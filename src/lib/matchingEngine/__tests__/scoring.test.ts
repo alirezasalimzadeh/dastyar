@@ -295,3 +295,66 @@ describe('فاز ۳: رتبه‌بندی (§۱۶)', () => {
     expect(items.find((x) => x.id === 'A')!.result.score!).toBeGreaterThan(items.find((x) => x.id === 'B')!.result.score!);
   });
 });
+
+describe('فاز ۳: برق ۳‌فاز و گاز تجاری (مقادیر اندازه‌شده)', () => {
+  const shopApplicant = (prefs: Record<string, unknown>) =>
+    makeCustomer({
+      transaction_intention: 'buy',
+      transaction_role: 'buyer',
+      preferred_category: 'commercial',
+      preferred_property_types: ['shop'],
+      property_preferences: { shop: prefs },
+    });
+  const shopFile = (marker: string) =>
+    makeProperty({
+      transaction_type: 'sell',
+      transaction_role: 'seller',
+      category: 'commercial',
+      property_type: 'shop',
+      owner_followup_status: marker,
+    });
+
+  it('فایل ≥ درخواست → کامل + ✓ با مقدار واقعی', () => {
+    const out = scoreMatch(
+      shopApplicant({ required_power: 'three_100', required_gas: 'g10' }),
+      shopFile('[shop_power:three_125]\n[shop_gas:g16]'),
+    );
+    expect(out.compatible).toBe(true);
+    expect(comp(out, 'features').value).toBe(1.0);
+    expect(out.explanation!.positives).toEqual(expect.arrayContaining([expect.stringContaining('برق')]));
+    expect(out.explanation!.positives).toEqual(expect.arrayContaining([expect.stringContaining('گاز')]));
+  });
+
+  it('فایل < درخواست → 0.5 + ⚠ مقایسهٔ واقعی + مسیر ارتقا', () => {
+    const out = scoreMatch(
+      shopApplicant({ required_power: 'three_125', required_gas: 'g10' }),
+      shopFile('[shop_power:three_63]\n[shop_gas:g16]'),
+    );
+    // برق: 1/2 + گاز: 2/2 → 3/4
+    expect(comp(out, 'features').value).toBeCloseTo(0.75, 3);
+    expect(out.explanation!.warnings).toEqual(expect.arrayContaining([expect.stringContaining('برق کمتر از درخواست است')]));
+  });
+
+  it('در فایل ثبت نشده → 0.5 (نه «ندارد») + مؤلفه فعال', () => {
+    const out = scoreMatch(
+      shopApplicant({ required_power: 'single' }),
+      shopFile(''),
+    );
+    expect(comp(out, 'features').active).toBe(true);
+    expect(comp(out, 'features').value).toBe(0.5);
+  });
+
+  it('دادهٔ قدیمی: چک‌باکس «برق» = حداقل‌ترین نیاز ( تک‌فاز )', () => {
+    const out = scoreMatch(
+      shopApplicant({ electricity: true }),
+      shopFile('[shop_power:three_63]'),
+    );
+    expect(comp(out, 'features').value).toBe(1.0);
+  });
+
+  it('درخواستی نیست → مؤلفه خنثی، بدون جریمه', () => {
+    const out = scoreMatch(shopApplicant({}), shopFile('[shop_power:three_200]'));
+    expect(comp(out, 'features').active).toBe(false);
+    expect(comp(out, 'features').value).toBe(0.5);
+  });
+});

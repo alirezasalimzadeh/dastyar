@@ -43,6 +43,7 @@ import {
 } from '@/lib/propertyImages';
 import { getArchiveInfo, markPropertyArchived, clearPropertyArchive, type ArchiveInfo } from '@/lib/propertyArchive';
 import { getFileSource, hasDivarSource, hasManagerSource, markDivarSource, markManagerSource, FILE_SOURCE_LABELS } from '@/lib/propertySource';
+import { POWER_OPTIONS, GAS_OPTIONS, POWER_LABELS, GAS_LABELS, getShopPower, getShopGas, setShopPower, setShopGas } from '@/lib/shopUtils';
 
 
 const PAGE_SIZE = 20;
@@ -1114,6 +1115,8 @@ function PropertyDetail({ propertyId, onBack, onEdit, onNavigate }: { propertyId
             {property.security && <InfoField label="امنیت" value="دارد" />}
             {property.heating && <InfoField label="گرمایش" value={property.heating} />}
             {property.cooling && <InfoField label="سرمایش" value={property.cooling} />}
+            {getShopPower(property.owner_followup_status) && <InfoField label="برق ۳‌فاز" value={POWER_LABELS[getShopPower(property.owner_followup_status)!] ?? getShopPower(property.owner_followup_status)!} />}
+            {getShopGas(property.owner_followup_status) && <InfoField label="گاز تجاری" value={GAS_LABELS[getShopGas(property.owner_followup_status)!] ?? getShopGas(property.owner_followup_status)!} />}
           </div>
           <div className="border-t border-slate-100 pt-4">
             <h4 className="text-sm font-bold text-slate-700 mb-3">اطلاعات مالی</h4>
@@ -1524,6 +1527,8 @@ function PropertyForm({ propertyId, onBack, onSaved }: { propertyId?: string; on
     owner_name: '',
     owner_phone: '',
     owner_notes: '',
+    shop_power: '',
+    shop_gas: '',
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
 
@@ -1602,6 +1607,8 @@ function PropertyForm({ propertyId, onBack, onSaved }: { propertyId?: string; on
         owner_name: text(ownerInfo?.name),
         owner_phone: text(ownerInfo?.phone),
         owner_notes: text(ownerInfo?.notes ?? data.owner_notes),
+        shop_power: getShopPower(data.owner_followup_status),
+        shop_gas: getShopGas(data.owner_followup_status),
       });
       setExistingImages(Array.isArray(data.images) ? data.images : []);
       setPropertyMetadata(text(data.owner_followup_status));
@@ -1831,20 +1838,26 @@ function PropertyForm({ propertyId, onBack, onSaved }: { propertyId?: string; on
       negotiable: form.negotiable,
       commission: commissionBase > 0 ? commissionFromTransactionValue(commissionBase) : null,
       owner_notes: wantsOwner ? form.owner_notes || null : null,
-      owner_followup_status: markManagerSource(
-        markDivarSource(
-          setUnitsPerFloor(
-            setRentBudgetMins(
-              propertyMetadata,
-              form.deposit_price_min,
-              form.monthly_rent_min,
-              form.transaction_type === 'rent' && form.transaction_role === 'applicant' && form.rent_budget_mode === 'range',
+      owner_followup_status: setShopGas(
+        setShopPower(
+          markManagerSource(
+            markDivarSource(
+              setUnitsPerFloor(
+                setRentBudgetMins(
+                  propertyMetadata,
+                  form.deposit_price_min,
+                  form.monthly_rent_min,
+                  form.transaction_type === 'rent' && form.transaction_role === 'applicant' && form.rent_budget_mode === 'range',
+                ),
+                form.property_type === 'apartment' ? form.units_per_floor : '',
+              ),
+              form.contact_type === 'divar',
             ),
-            form.property_type === 'apartment' ? form.units_per_floor : '',
+            form.contact_type === 'manager',
           ),
-          form.contact_type === 'divar',
+          form.property_type === PROPERTY_TYPES.shop ? form.shop_power : null,
         ),
-        form.contact_type === 'manager',
+        form.property_type === PROPERTY_TYPES.shop ? form.shop_gas : null,
       ),
       images: [...existingImages, ...preparedImages],
     };
@@ -2099,6 +2112,28 @@ function PropertyForm({ propertyId, onBack, onSaved }: { propertyId?: string; on
                   <div>
                     <label className="label">واحد ملک</label>
                     <input className="input" type="text" inputMode="numeric" value={form.unit_number} onChange={(e) => setForm({ ...form, unit_number: wholeArea(e.target.value) })} placeholder="4" dir="ltr" />
+                  </div>
+                </>
+              )}
+              {form.property_type === PROPERTY_TYPES.shop && (
+                <>
+                  <div>
+                    <label className="label">برق ۳‌فاز</label>
+                    <select className="input" value={form.shop_power} onChange={(e) => setForm({ ...form, shop_power: e.target.value })}>
+                      <option value="">ثبت نشده</option>
+                      {POWER_OPTIONS.map((o) => (
+                        <option key={o.value} value={o.value}>{o.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="label">گاز تجاری</label>
+                    <select className="input" value={form.shop_gas} onChange={(e) => setForm({ ...form, shop_gas: e.target.value })}>
+                      <option value="">ثبت نشده</option>
+                      {GAS_OPTIONS.map((o) => (
+                        <option key={o.value} value={o.value}>{o.label}</option>
+                      ))}
+                    </select>
                   </div>
                 </>
               )}

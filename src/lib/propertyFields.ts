@@ -3,6 +3,8 @@
 // Fields differ by role: buyers/applicants get ranges & preferences;
 // owners/sellers/builders get exact values describing their property.
 
+import { POWER_OPTIONS, GAS_OPTIONS, POWER_LABELS, GAS_LABELS } from './shopUtils';
+
 export type FieldType = 'text' | 'number' | 'select' | 'checkbox' | 'checkbox-group' | 'location';
 
 export interface FieldDef {
@@ -140,6 +142,15 @@ function feat(key: string, noun: string, role: string): FieldDef {
   return { key, label: `${noun} ${suffix}`, type: 'checkbox' };
 }
 
+// برق ۳‌فاز (به آمپر) و گاز تجاری (به سایز متر) — مقدار اندازه‌شده، نه بله/خیر
+function powerGasFields(role: string): FieldDef[] {
+  const isOwner = isOwnerRole(role);
+  return [
+    { key: 'required_power', label: isOwner ? 'برق ملک' : 'برق ۳‌فاز (حداقل)', type: 'select', options: POWER_OPTIONS.map((o) => ({ value: o.value, label: o.label })) },
+    { key: 'required_gas', label: isOwner ? 'گاز ملک' : 'گاز تجاری (حداقل)', type: 'select', options: GAS_OPTIONS.map((o) => ({ value: o.value, label: o.label })) },
+  ];
+}
+
 function featuresApartment(role: string): FieldDef[] {
   return [
     feat('parking', 'پارکینگ', role),
@@ -200,6 +211,7 @@ function featuresShop(role: string): FieldDef[] {
     feat('electric_shutter', 'کرکره برقی', role),
     feat('signage', 'تابلوخور', role),
     feat('restroom', 'سرویس بهداشتی', role),
+    ...powerGasFields(role),
   ];
 }
 
@@ -244,8 +256,7 @@ function featuresFactory(role: string): FieldDef[] {
     feat('security', 'نگهبانی', role),
     feat('ceiling_crane', 'جرثقیل سقفی', role),
     feat('water', 'آب', role),
-    feat('electricity', 'برق', role),
-    feat('gas', 'گاز', role),
+    ...powerGasFields(role),
   ];
 }
 
@@ -610,6 +621,8 @@ const labelMaps: Record<string, Record<string, string>> = {
   facing: Object.fromEntries(facingOptions.map((o) => [o.value, o.label])),
   commercial_location: Object.fromEntries(commercialLocationOptions.map((o) => [o.value, o.label])),
   structure_type: Object.fromEntries(structureTypeOptions.map((o) => [o.value, o.label])),
+  required_power: POWER_LABELS,
+  required_gas: GAS_LABELS,
 };
 
 export function getFieldLabel(fieldKey: string, value: string): string {

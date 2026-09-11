@@ -27,6 +27,7 @@ import {
 import { firstPrefValue, toNum } from './prefUtils';
 import type { MatchEligibilityOutput, MatchExplanation, ScoredComponent } from './types';
 import { formatMoneyShort, formatPrice, getTransactionLabel, PROPERTY_TYPES } from '@/lib/constants';
+import { GAS_LABELS, GAS_RANKS, getShopGas, getShopPower, POWER_LABELS, POWER_RANKS } from '@/lib/shopUtils';
 import type { Customer, Property } from '@/lib/types';
 
 // ---- ابزار مشترک ----
@@ -350,6 +351,9 @@ const FEATURE_LABELS: Record<string, string> = {
   ceiling_crane: 'جرثقیل سقفی', water: 'آب', electricity: 'برق', gas: 'گاز',
 };
 
+// وزن هر امکانات اندازه‌شده (برق ۳‌فاز / گاز تجاری)
+const MEASURED_FEATURE_WEIGHT = 2;
+
 function featuresScore(customer: Customer, property: Property, bestType: string | null): ComponentResult {
   const positives: string[] = [];
   const warnings: string[] = [];
@@ -358,7 +362,24 @@ function featuresScore(customer: Customer, property: Property, bestType: string 
   const requested = Object.keys(FEATURE_WEIGHTS).filter(
     (k) => firstPrefValue(customer, bestType, k) === true,
   );
-  if (requested.length === 0) {
+
+  // مقادیر اندازه‌شده: برق ۳‌فاز (آمپر) و گاز تجاری (سایز متر)
+  const reqPowerRaw = firstPrefValue(customer, bestType, 'required_power');
+  const reqGasRaw = firstPrefValue(customer, bestType, 'required_gas');
+  // سازگاری با دادهٔ قدیمی: چک‌باکس سادهٔ «برق»/«گاز» = حداقل‌ترین نیاز
+  const reqPower =
+    typeof reqPowerRaw === 'string' && reqPowerRaw ? reqPowerRaw
+      : firstPrefValue(customer, bestType, 'electricity') === true ? 'single' : '';
+  const reqGas =
+    typeof reqGasRaw === 'string' && reqGasRaw ? reqGasRaw
+      : firstPrefValue(customer, bestType, 'gas') === true ? 'g4' : '';
+  const measured = [
+    { req: reqPower, ranks: POWER_RANKS, labels: POWER_LABELS, propVal: getShopPower(property.owner_followup_status), name: 'برق', upgrade: 'با درخواست از شرکت توزیع برق قابل ارتقا است' },
+    { req: reqGas, ranks: GAS_RANKS, labels: GAS_LABELS, propVal: getShopGas(property.owner_followup_status), name: 'گاز', upgrade: 'با تعویض متر از شرکت گاز قابل ارتقا است' },
+  ];
+  const hasMeasured = measured.some((m) => m.req && m.req in m.ranks);
+
+  if (requested.length === 0 && !hasMeasured) {
     return { value: 0.5, active: false, activeFraction: 0, positives, warnings, unverifiable: notes, missingRequired: 0 };
   }
 
@@ -389,6 +410,22 @@ function featuresScore(customer: Customer, property: Property, bestType: string 
   }
   if (has.length > 0) positives.push(has.join('، '));
   if (missing.length > 0) warnings.push(`بدون ${missing.join('، ')}`);
+
+  // مقایسهٔ رتبه‌ای مقادیر اندازه‌شده: فایل باید حداقل به اندازهٔ درخواست باشد
+  for (const m of measured) {
+    if (!m.req || !(m.req in m.ranks)) continue;
+    total += MEASURED_FEATURE_WEIGHT;
+    if (!m.propVal) {
+      earned += MEASURED_FEATURE_WEIGHT * 0.5; // ثبت نشده (نه «ندارد»)
+      notes.push(`${m.name} در فایل ثبت نشده`);
+    } else if ((m.ranks[m.propVal] ?? 0) >= (m.ranks[m.req] ?? 0)) {
+      earned += MEASURED_FEATURE_WEIGHT;
+      positives.push(`${m.name}: ${m.labels[m.propVal] ?? m.propVal}`);
+    } else {
+      earned += MEASURED_FEATURE_WEIGHT * 0.5;
+      warnings.push(`${m.name} کمتر از درخواست است (فایل: ${m.labels[m.propVal] ?? m.propVal}، درخواست: ${m.labels[m.req] ?? m.req}) — ${m.upgrade}`);
+    }
+  }
 
   return { value: total > 0 ? earned / total : 0.5, active: true, activeFraction: 1, positives, warnings, unverifiable, missingRequired: 0 };
 }
