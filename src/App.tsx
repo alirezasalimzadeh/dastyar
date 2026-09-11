@@ -1,4 +1,4 @@
-import { Suspense, lazy, useState } from 'react';
+import { Suspense, lazy, useEffect, useState } from 'react';
 import { AuthProvider, useAuth } from '@/lib/auth';
 import { AuthPage } from '@/pages/AuthPage';
 import { Layout } from '@/components/Layout';
@@ -89,12 +89,58 @@ function AppContent() {
   };
 
   return (
-    <Layout currentPage={page} onNavigate={navigate}>
-      <Suspense fallback={<FullPageSpinner />}>
-        {renderPage()}
-      </Suspense>
-    </Layout>
+    <>
+      <OverflowDebugger />
+      <Layout currentPage={page} onNavigate={navigate}>
+        <Suspense fallback={<FullPageSpinner />}>
+          {renderPage()}
+        </Suspense>
+      </Layout>
+    </>
   );
+}
+
+/** ابزار موقتِ تشخیص: اگر چیزی عرض صفحه را بیش از عرض گوشی کند،
+ *  عناصر مقصر را در بنر قرمز بالای صفحه فهرست می‌کند (فقط وقتی overflow هست).
+ *  بعد از عیب‌یابی حذف می‌شود. */
+function OverflowDebugger() {
+  useEffect(() => {
+    const check = () => {
+      const vw = window.innerWidth;
+      const sw = document.documentElement.scrollWidth;
+      let el = document.getElementById('__overflow_debug') as HTMLDivElement | null;
+      if (sw <= vw + 1) {
+        el?.remove();
+        return;
+      }
+      const bad: string[] = [];
+      document.querySelectorAll('body *').forEach((node) => {
+        const target = node as HTMLElement;
+        const r = target.getBoundingClientRect();
+        if (r.width > 0 && (r.left < -1 || r.right > vw + 1)) {
+          const cls = (typeof target.className === 'string' ? target.className : '')
+            .trim().split(/\s+/).slice(0, 5).join('.');
+          const text = target.childElementCount === 0 ? (target.textContent ?? '').trim().slice(0, 30) : '';
+          bad.push(`${target.tagName.toLowerCase()}${cls ? `.${cls}` : ''} left=${Math.round(r.left)} right=${Math.round(r.right)} w=${Math.round(r.width)}${text ? ` «${text}»` : ''}`);
+        }
+      });
+      if (!el) {
+        el = document.createElement('div');
+        el.id = '__overflow_debug';
+        el.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:2147483647;background:#b91c1c;color:#fff;font-family:monospace;font-size:10px;line-height:1.6;padding:8px 10px;white-space:pre-wrap;word-break:break-all;max-height:45vh;overflow:auto;direction:ltr;text-align:left;border-bottom:2px solid #7f1d1d;';
+        document.body.appendChild(el);
+      }
+      el.textContent = `OVERFLOW: viewport=${vw}px document=${sw}px (excess=${sw - vw}px)\noffending elements (top 30):\n` + bad.slice(0, 30).join('\n');
+    };
+    const first = window.setTimeout(check, 800);
+    const timer = window.setInterval(check, 1500);
+    return () => {
+      window.clearTimeout(first);
+      window.clearInterval(timer);
+      document.getElementById('__overflow_debug')?.remove();
+    };
+  }, []);
+  return null;
 }
 
 function App() {
