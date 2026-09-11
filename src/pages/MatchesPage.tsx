@@ -91,6 +91,97 @@ const locText = (geo: GeoNames, county?: string | null, hood?: string | null, ci
   return parts.length > 0 ? parts.join(' — ') : null;
 };
 
+// ---- دلایل عدم تطبیق (کدهای ماشین‌خوان موتور → جملهٔ فارسی با مقادیر واقعی) ----
+
+const REJECT_TITLES: Record<string, string> = {
+  TRANSACTION_INCOMPATIBLE: 'نوع معامله سازگار نیست',
+  CATEGORY_INCOMPATIBLE: 'دستهٔ ملک مطابقت ندارد',
+  PROPERTY_TYPE_INCOMPATIBLE: 'نوع ملک مطابقت ندارد',
+  BUDGET_TOO_HIGH: 'قیمت از سقف بودجه بالاتر است',
+  DEPOSIT_TOO_HIGH: 'ودیعه از سقف ودیعه بالاتر است',
+  RENT_TOO_HIGH: 'اجاره از سقف اجاره بالاتر است',
+  AREA_TOO_LARGE: 'متراژ بیشتر از حداکثر درخواستی است',
+  INSUFFICIENT_ROOMS: 'اتاق کافی ندارد',
+  LOCATION_OUTSIDE_REQUEST: 'خارج از محدودهٔ جغرافیایی است',
+  INCOMPLETE_CUSTOMER_PROFILE: 'پروفایل مشتری ناقص است',
+};
+
+const STRONG_LABELS: Record<string, string> = {
+  financial: 'مالی', area: 'متراژ', rooms: 'اتاق', location: 'موقعیت', partnership: 'شراکت', permitCommercial: 'جواز/تجاری',
+};
+
+const STRONG_ICONS: Record<string, string> = { PASS: '✓', WARNING: '⚠', REJECT: '✗', UNKNOWN: '—' };
+
+const mismatchReasons = (c: Customer, p: Property, res: ScoredMatchOutput, geo: GeoNames): string => {
+  const bestType = res.metadata.bestType;
+  const pp = (c.property_preferences ?? null) as Record<string, unknown> | null;
+  const pref = (key: string): number | null => {
+    if (!pp) return null;
+    const order = [bestType, ...(c.preferred_property_types ?? [])].filter((t): t is string => Boolean(t));
+    for (const t of order) {
+      const v = (pp[t] as Record<string, unknown> | undefined)?.[key];
+      const n = num(v);
+      if (n != null) return n;
+    }
+    return null;
+  };
+  const above = (d: number | null | undefined) => (d && d > 0 ? ` (${formatPrice(Math.round(d * 100))}٪ بالاتر)` : '');
+  const price = num(p.sale_price) ?? num(p.owner_requested_price);
+
+  switch (res.rejectionReason) {
+    case 'TRANSACTION_INCOMPATIBLE':
+      return `نوع معامله سازگار نیست: ${c.transaction_role ? `${ROLE_LABELS[c.transaction_role] ?? c.transaction_role} (${c.transaction_intention ? getTransactionLabel(c.transaction_intention) : '—'})` : 'نامشخص'} ↔ ${ROLE_LABELS[p.transaction_role] ?? p.transaction_role} (${getTransactionLabel(p.transaction_type)})`;
+    case 'CATEGORY_INCOMPATIBLE':
+      return `دستهٔ فایل (${getCategoryLabel(p.category)}) با دستهٔ درخواست‌شده (${c.preferred_category ? getCategoryLabel(c.preferred_category) : '—'}) مطابقت ندارد`;
+    case 'PROPERTY_TYPE_INCOMPATIBLE': {
+      const wanted = (c.preferred_property_types ?? []).filter(Boolean).map((t) => TYPE_LABELS[t] ?? t).join('، ');
+      return `نوع ملک فایل (${TYPE_LABELS[p.property_type] ?? p.property_type}) با انواع مورد نظر مشتری (${wanted || '—'}) سازگار نیست`;
+    }
+    case 'BUDGET_TOO_HIGH': {
+      const hi = pref('budget_max');
+      return price != null && hi != null
+        ? `قیمت فایل ${formatMoneyShort(price)} از سقف بودجهٔ مشتری ${formatMoneyShort(hi)}${above(res.metadata.distances.budget)} است`
+        : 'قیمت فایل از سقف بودجهٔ مشتری بالاتر است';
+    }
+    case 'DEPOSIT_TOO_HIGH': {
+      const hi = pref('deposit_max');
+      const dep = num(p.deposit_price);
+      return dep != null && hi != null
+        ? `ودیعهٔ فایل ${formatMoneyShort(dep)} از سقف ودیعهٔ مشتری ${formatMoneyShort(hi)}${above(res.metadata.distances.budget)} است`
+        : 'ودیعهٔ فایل از سقف ودیعهٔ مشتری بالاتر است';
+    }
+    case 'RENT_TOO_HIGH': {
+      const hi = pref('rent_max');
+      const rent = num(p.monthly_rent);
+      return rent != null && hi != null
+        ? `اجارهٔ ماهانهٔ فایل ${formatMoneyShort(rent)} از سقف اجارهٔ مشتری ${formatMoneyShort(hi)}${above(res.metadata.distances.budget)} است`
+        : 'اجارهٔ ماهانهٔ فایل از سقف اجارهٔ مشتری بالاتر است';
+    }
+    case 'AREA_TOO_LARGE': {
+      const area = num(p.building_area) ?? num(p.land_area);
+      const hi = pref('max_area') ?? pref('max_land_area');
+      return area != null && hi != null
+        ? `متراژ فایل ${formatPrice(area)} متر از حداکثر درخواستی ${formatPrice(hi)} متر${above(res.metadata.distances.area)} است`
+        : 'متراژ فایل از حداکثر متراژ درخواستی مشتری بیشتر است';
+    }
+    case 'INSUFFICIENT_ROOMS': {
+      const minRooms = pref('min_rooms');
+      const rooms = num(p.bedrooms) ?? num(p.rooms);
+      return minRooms != null && rooms != null
+        ? `اتاق فایل (${formatPrice(rooms)}) کمتر از حداقل درخواستی مشتری (${formatPrice(minRooms)}) است`
+        : 'تعداد اتاق فایل کمتر از حداقل درخواستی مشتری است';
+    }
+    case 'LOCATION_OUTSIDE_REQUEST': {
+      const loc = locText(geo, p.county_id, p.neighborhood_id, p.city_id ? [p.city_id] : undefined);
+      return loc ? `موقعیت فایل (${loc}) خارج از محدودهٔ مدنظر مشتری است` : 'موقعیت فایل خارج از محدودهٔ مدنظر مشتری است';
+    }
+    case 'INCOMPLETE_CUSTOMER_PROFILE':
+      return 'پروفایل مشتری ناقص است — نوع معامله یا نقش معامله‌ای ثبت نشده است';
+    default:
+      return 'این جفت خارج از محدودهٔ سازگاری است';
+  }
+};
+
 // ---- ردیف‌های داده «با یک نگاه» ----
 
 interface SpecRow { k: string; v: string }
@@ -431,6 +522,8 @@ export function MatchesPage() {
   const [selected, setSelected] = useState<Property | Customer | null>(null);
   const [matches, setMatches] = useState<MatchEntry[]>([]);
   const [rejectedCount, setRejectedCount] = useState(0);
+  const [rejectedEntries, setRejectedEntries] = useState<MatchEntry[]>([]);
+  const [showAllRejected, setShowAllRejected] = useState(false);
   const [loading, setLoading] = useState(true);
   const [computing, setComputing] = useState(false);
   const [search, setSearch] = useState('');
@@ -498,32 +591,37 @@ export function MatchesPage() {
     setSelected(item);
     setComputing(true);
     setPersistStatus(null);
+    setShowAllRejected(false);
 
-    let results: MatchEntry[] = [];
-    let rejected = 0;
+    const pairs = mode === 'property_to_customer'
+      ? customers.map((c) => ({ property: item as Property, customer: c, result: scoreMatch(c, item as Property) }))
+      : properties.map((p) => ({ property: p, customer: item as Customer, result: scoreMatch(item as Customer, p) }));
 
-    if (mode === 'property_to_customer') {
-      const prop = item as Property;
-      const pairs = customers.map((c) => ({ property: prop, customer: c, result: scoreMatch(c, prop) }));
-      rejected = pairs.filter((p) => !p.result.compatible).length;
-      results = rankMatches(pairs)
-        .filter((p) => (p.result.score ?? 0) >= minScore)
-        .slice(0, 15)
-        .map((p) => ({ type: 'customer' as const, data: p.customer, result: p.result }));
-      persistMatches(pairs).then(setPersistStatus).catch((e: unknown) => setPersistStatus({ saved: 0, error: String(e) }));
-    } else {
-      const cust = item as Customer;
-      const pairs = properties.map((p) => ({ property: p, customer: cust, result: scoreMatch(cust, p) }));
-      rejected = pairs.filter((p) => !p.result.compatible).length;
-      results = rankMatches(pairs)
-        .filter((p) => (p.result.score ?? 0) >= minScore)
-        .slice(0, 15)
-        .map((p) => ({ type: 'property' as const, data: p.property, result: p.result }));
-      persistMatches(pairs).then(setPersistStatus).catch((e: unknown) => setPersistStatus({ saved: 0, error: String(e) }));
-    }
+    const toEntry = (p: { property: Property; customer: Customer; result: ScoredMatchOutput }): MatchEntry =>
+      mode === 'property_to_customer'
+        ? { type: 'customer', data: p.customer, result: p.result }
+        : { type: 'property', data: p.property, result: p.result };
+
+    const results = rankMatches(pairs)
+      .filter((p) => (p.result.score ?? 0) >= minScore)
+      .slice(0, 15)
+      .map(toEntry);
+
+    // جفت‌های ردشده + دلیل رد — برای بخش «دلایل عدم تطبیق»
+    const nonMatches = pairs
+      .filter((p) => !p.result.compatible)
+      .map(toEntry)
+      .sort((a, b) =>
+        (a.result.rejectionReason ?? '').localeCompare(b.result.rejectionReason ?? '') ||
+        (a.type === 'customer' ? (a.data.name ?? '') : a.data.title).localeCompare(
+          b.type === 'customer' ? (b.data.name ?? '') : b.data.title, 'fa'))
+      .slice(0, 50);
+
+    persistMatches(pairs).then(setPersistStatus).catch((e: unknown) => setPersistStatus({ saved: 0, error: String(e) }));
 
     setMatches(results);
-    setRejectedCount(rejected);
+    setRejectedEntries(nonMatches);
+    setRejectedCount(pairs.filter((p) => !p.result.compatible).length);
     setComputing(false);
   }, [mode, customers, properties, minScore]);
 
@@ -565,7 +663,7 @@ export function MatchesPage() {
       {/* انتخاب جهت */}
       <div className="bg-slate-100 rounded-xl p-1 flex gap-1 mb-4">
         <button
-          onClick={() => { setMode('property_to_customer'); setSelected(null); setMatches([]); }}
+          onClick={() => { setMode('property_to_customer'); setSelected(null); setMatches([]); setRejectedEntries([]); }}
           className={`flex-1 flex items-center justify-center gap-1.5 p-2.5 rounded-lg text-sm font-medium transition-all ${
             mode === 'property_to_customer' ? 'bg-white shadow-sm text-slate-800 font-bold' : 'text-slate-500 hover:text-slate-700'
           }`}
@@ -573,7 +671,7 @@ export function MatchesPage() {
           <Target size={16} /> فایل ← مشتری
         </button>
         <button
-          onClick={() => { setMode('customer_to_property'); setSelected(null); setMatches([]); }}
+          onClick={() => { setMode('customer_to_property'); setSelected(null); setMatches([]); setRejectedEntries([]); }}
           className={`flex-1 flex items-center justify-center gap-1.5 p-2.5 rounded-lg text-sm font-medium transition-all ${
             mode === 'customer_to_property' ? 'bg-white shadow-sm text-slate-800 font-bold' : 'text-slate-500 hover:text-slate-700'
           }`}
@@ -739,7 +837,7 @@ export function MatchesPage() {
           <div className="card p-4 bg-gradient-to-l from-slate-50 to-white">
             <div className="flex items-center gap-3">
               <button
-                onClick={() => { setSelected(null); setMatches([]); }}
+                onClick={() => { setSelected(null); setMatches([]); setRejectedEntries([]); }}
                 className="flex items-center gap-1 text-xs font-medium text-slate-500 hover:text-slate-700 bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 transition-all"
               >
                 <ArrowLeft size={14} /> بازگشت
@@ -827,6 +925,79 @@ export function MatchesPage() {
                 return <MatchCard key={i} entry={m} customer={pair.customer} property={pair.property} geo={geoNames} />;
               })}
             </div>
+          )}
+
+          {/* دلایل عدم تطبیق — جفت‌هایی که از فهرست خارج شدند و چرا */}
+          {rejectedEntries.length > 0 && (
+            <section className="mt-4">
+              <div className="flex flex-wrap items-center gap-2 mb-2.5">
+                <span className="w-7 h-7 rounded-lg bg-rose-50 text-rose-500 flex items-center justify-center"><AlertTriangle size={14} /></span>
+                <h3 className="text-sm font-bold text-slate-700">دلایل عدم تطبیق</h3>
+                <span className="text-[11px] px-2 py-0.5 rounded-full bg-rose-50 text-rose-600 border border-rose-200">{formatPrice(rejectedCount)} مورد</span>
+                <span className="text-[11px] text-slate-400">این جفت‌ها به دلیل موارد زیر از فهرست تطبیق‌ها حذف شدند</span>
+              </div>
+              <div className="space-y-2">
+                {(showAllRejected ? rejectedEntries : rejectedEntries.slice(0, 6)).map((m, i) => {
+                  const d = m.data;
+                  const isProp = m.type === 'property';
+                  const p = isProp ? (d as Property) : null;
+                  const c = isProp ? null : (d as Customer);
+                  const sub = isProp
+                    ? [
+                        locText(geoNames, p!.county_id, p!.neighborhood_id, p!.city_id ? [p!.city_id] : undefined),
+                        (() => { const pr = num(p!.sale_price) ?? num(p!.owner_requested_price); return pr != null ? formatMoneyShort(pr) : null; })(),
+                      ].filter(Boolean).join(' • ')
+                    : [
+                        c!.transaction_intention ? getTransactionLabel(c!.transaction_intention) : null,
+                        c!.transaction_role ? ROLE_LABELS[c!.transaction_role] ?? c!.transaction_role : null,
+                      ].filter(Boolean).join(' / ');
+                  const res = m.result;
+                  const pair = pairOf(m);
+                  return (
+                    <div key={i} className="rounded-xl border border-rose-100 bg-rose-50/40 p-3">
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="w-7 h-7 rounded-lg bg-white border border-rose-100 text-rose-400 flex items-center justify-center flex-shrink-0">
+                            {isProp ? <Building2 size={13} /> : <Users size={13} />}
+                          </span>
+                          <div className="min-w-0">
+                            <p className="text-[13px] font-bold text-slate-700 truncate">
+                              {isProp ? p!.title : ((c!.name ?? `${c!.first_name ?? ''} ${c!.last_name ?? ''}`.trim()) || 'مشتری')}
+                            </p>
+                            {sub && <p className="text-[10px] text-slate-400 truncate">{sub}</p>}
+                          </div>
+                        </div>
+                        <span className="text-[11px] font-bold text-rose-500 shrink-0">{REJECT_TITLES[res.rejectionReason ?? ''] ?? 'ناسازگار'}</span>
+                      </div>
+                      <p className="text-[12px] text-rose-600/90 leading-6 mt-1.5">{mismatchReasons(pair.customer, pair.property, res, geoNames)}</p>
+                      {res.strongConstraints && (
+                        <div className="flex flex-wrap gap-1 mt-2">
+                          {Object.entries(res.strongConstraints).map(([k, s]) => (
+                            <span
+                              key={k}
+                              className={`text-[10px] px-1.5 py-0.5 rounded-md border ${
+                                s === 'REJECT' ? 'bg-rose-100/60 text-rose-600 border-rose-200'
+                                : s === 'WARNING' ? 'bg-amber-50 text-amber-600 border-amber-200'
+                                : s === 'UNKNOWN' ? 'bg-slate-50 text-slate-400 border-slate-200'
+                                : 'bg-green-50 text-green-600 border-green-200'
+                              }`}
+                            >
+                              {STRONG_LABELS[k] ?? k} {STRONG_ICONS[s] ?? s}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+              {rejectedEntries.length > 6 && (
+                <button onClick={() => setShowAllRejected(!showAllRejected)} className="flex items-center gap-1 text-[11px] text-slate-400 mt-2 hover:text-slate-600 transition-colors">
+                  {showAllRejected ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+                  {showAllRejected ? 'بستن' : `${formatPrice(Math.min(rejectedEntries.length, 50) - 6)} مورد دیگر`}
+                </button>
+              )}
+            </section>
           )}
         </div>
       )}
