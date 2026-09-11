@@ -419,7 +419,7 @@ function MatchCard({ entry, customer, property, geo }: {
           <>
             {matchLines.length > 0 && <ReasonList title="دلایل تطبیق" lines={matchLines} />}
             {score < 100 && finalGapLines.length > 0 && (
-              <ReasonList title={`چرا ۱۰۰٪ نشد؟ (${formatPrice(100 - score)}٪ کسری)`} lines={finalGapLines} />
+              <ReasonList title="دلایل کسری امتیاز" lines={finalGapLines} />
             )}
           </>
         ) : (
