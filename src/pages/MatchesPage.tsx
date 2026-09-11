@@ -259,7 +259,8 @@ function ComponentMeters({ components }: { components: ScoredComponent[] }) {
     <div className="mt-3 grid grid-cols-1 gap-y-1.5">
       {components.map((c) => {
         const pct = Math.round(c.value * 100);
-        const fill = !c.active ? '#e2e8f0' : c.value >= 0.999 ? '#22c55e' : c.value >= 0.5 ? '#f59e0b' : '#ef4444';
+        // همان رام رنگی تیرها — یک منبع واحد برای همهٔ رنگ‌های امتیاز
+        const fill = !c.active ? '#e2e8f0' : getScoreTier(pct).color;
         return (
           <div key={c.key} className="flex items-center gap-2" title={c.active ? `${c.label}: ${pct}٪` : `${c.label}: توسط مشتری ثبت نشده`}>
             <span className="w-16 flex-shrink-0 text-[11px] font-medium text-slate-500">{c.label}</span>
@@ -269,8 +270,8 @@ function ComponentMeters({ components }: { components: ScoredComponent[] }) {
             <span className="w-9 flex-shrink-0 text-[11px] font-bold text-slate-600 text-left" dir="ltr">{pct}%</span>
             <span className="w-4 flex-shrink-0 flex justify-center">
               {!c.active ? <Minus size={12} className="text-slate-300" />
-                : c.value >= 0.999 ? <Check size={13} className="text-green-600" />
-                : <AlertTriangle size={12} className="text-amber-500" />}
+                : c.value >= 0.999 ? <Check size={13} style={{ color: fill }} />
+                : <AlertTriangle size={12} style={{ color: fill }} />}
             </span>
           </div>
         );
