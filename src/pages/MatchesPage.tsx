@@ -16,9 +16,9 @@ type MatchEntry =
 
 // ---- ثابت‌های نمایش (آستانه‌ها دقیقاً مطابق config موتور / §۱۳ سند) ----
 const SCORE_TIERS = [
-  { min: 85, label: 'عالی', color: '#16a34a', bg: '#dcfce7', border: '#16a34a' },
-  { min: 70, label: 'خوب', color: '#65a30d', bg: '#ecfccb', border: '#65a30d' },
-  { min: 55, label: 'متوسط', color: '#f97316', bg: '#ffedd5', border: '#f97316' },
+  { min: 85, label: 'عالی', color: '#2563eb', bg: '#dbeafe', border: '#2563eb' },
+  { min: 70, label: 'خوب', color: '#059669', bg: '#d1fae5', border: '#059669' },
+  { min: 55, label: 'متوسط', color: '#d97706', bg: '#fef3c7', border: '#d97706' },
   { min: 40, label: 'ضعیف', color: '#64748b', bg: '#f1f5f9', border: '#94a3b8' },
   { min: 0, label: 'نامناسب', color: '#dc2626', bg: '#fee2e2', border: '#dc2626' },
 ];
@@ -460,7 +460,7 @@ function MatchCard({ entry, customer, property, geo }: {
 
         {/* توضیح اجباری: دلایل تطبیق + موارد قابل مذاکره + دلایل عدم تطبیق — ۱ تا ۳ ستون */}
         {matchLines.length > 0 || finalGapLines.length > 0 ? (
-          <div className="mt-3 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2 items-start">
+          <div className="mt-3 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
             {matchLines.length > 0 && <ReasonList tone="ok" title="دلایل تطبیق" lines={matchLines} />}
             {negotiableLines.length > 0 && <ReasonList tone="warn" title="موارد قابل مذاکره" lines={negotiableLines} />}
             {mismatchLines.length > 0 && <ReasonList tone="mismatch" title="دلایل عدم تطبیق" lines={mismatchLines} />}
@@ -835,7 +835,7 @@ export function MatchesPage() {
                 </div>
               </div>
               <div className="rounded-xl border border-slate-200 bg-white p-3 flex items-center gap-2.5 h-full">
-                <span className="w-9 h-9 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center flex-shrink-0"><Star size={16} /></span>
+                <span className="w-9 h-9 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center flex-shrink-0"><Star size={16} /></span>
                 <div className="min-w-0">
                   <p className="text-base font-extrabold text-slate-800 leading-5">{formatPrice(excellentCount)}</p>
                   <p className="text-[10px] text-slate-400">عالی (≥ 85٪)</p>
