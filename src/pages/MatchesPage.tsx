@@ -259,6 +259,8 @@ export function MatchesPage() {
   const [computing, setComputing] = useState(false);
   const [search, setSearch] = useState('');
   const [minScore, setMinScore] = useState(55); // آستانهٔ پیش‌فرض نمایش: ۵۵ (§۱۳ سند)
+  const [onlyWithMatches, setOnlyWithMatches] = useState(true); // پیش‌فرض: فهرست شلوغ نشود
+  const [matchCounts, setMatchCounts] = useState<Map<string, number> | null>(null);
   const [persistStatus, setPersistStatus] = useState<{ saved: number; error: string | null } | null>(null);
 
   const loadData = useCallback(async () => {
@@ -273,6 +275,30 @@ export function MatchesPage() {
   }, []);
 
   useEffect(() => { loadData(); }, [loadData]);
+
+  // شمارش «تطبیق سازگار» هر مورد — مستقل از فیلتر امتیاز، پس از رندر اولیه
+  // (تا UI گیر نکند)؛ صرفاً برای بج «N تطبیق / بدون تطبیق» و فیلتر فهرست
+  useEffect(() => {
+    setMatchCounts(null);
+    const t = setTimeout(() => {
+      const map = new Map<string, number>();
+      if (mode === 'property_to_customer') {
+        for (const p of properties) {
+          let n = 0;
+          for (const c of customers) if (scoreMatch(c, p).compatible) n++;
+          map.set(p.id, n);
+        }
+      } else {
+        for (const c of customers) {
+          let n = 0;
+          for (const p of properties) if (scoreMatch(c, p).compatible) n++;
+          map.set(c.id, n);
+        }
+      }
+      setMatchCounts(map);
+    }, 60);
+    return () => clearTimeout(t);
+  }, [mode, properties, customers]);
 
   const computeMatches = useCallback((item: Property | Customer) => {
     setSelected(item);
@@ -317,6 +343,14 @@ export function MatchesPage() {
       return !q || name.includes(q) || c.mobile.includes(q);
     });
   }, [mode, properties, customers, search]);
+
+  const visibleList = useMemo(() => {
+    if (!onlyWithMatches) return filteredList;
+    if (!matchCounts) return filteredList; // تا شمارش آماده شود، فیلتر اعمال نشود
+    return filteredList.filter((item) => (matchCounts.get(item.id) ?? 0) > 0);
+  }, [filteredList, onlyWithMatches, matchCounts]);
+
+  const withMatchesCount = matchCounts ? [...matchCounts.values()].filter((n) => n > 0).length : null;
 
   const avgScore = matches.length > 0 ? Math.round(matches.reduce((s, m) => s + (m.result.score ?? 0), 0) / matches.length) : 0;
   const excellentCount = matches.filter((m) => (m.result.score ?? 0) >= 85).length;
@@ -364,7 +398,7 @@ export function MatchesPage() {
             </div>
             <div className="flex items-center gap-1.5">
               <span className="text-[11px] text-slate-400 font-medium">حداقل امتیاز</span>
-              {[40, 55, 70, 85].map((t) => (
+              {[40, 50, 55, 65, 75, 85, 95].map((t) => (
                 <button
                   key={t}
                   onClick={() => setMinScore(t)}
@@ -376,9 +410,29 @@ export function MatchesPage() {
                 </button>
               ))}
             </div>
+            <div className="flex items-center gap-1.5">
+              <span className="text-[11px] text-slate-400 font-medium">فهرست</span>
+              <button
+                onClick={() => setOnlyWithMatches(true)}
+                className={`px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all border ${
+                  onlyWithMatches ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-slate-500 border-slate-200 hover:border-slate-300'
+                }`}
+              >
+                دارای تطبیق{withMatchesCount != null && ` (${formatPrice(withMatchesCount)})`}
+              </button>
+              <button
+                onClick={() => setOnlyWithMatches(false)}
+                className={`px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all border ${
+                  !onlyWithMatches ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-slate-500 border-slate-200 hover:border-slate-300'
+                }`}
+              >
+                همه{matchCounts && ` (${formatPrice(matchCounts.size)})`}
+              </button>
+            </div>
           </div>
           <p className="text-[11px] text-slate-400 mb-3">
-            {mode === 'property_to_customer' ? `${formatPrice(filteredList.length)} فایل فعال` : `${formatPrice(filteredList.length)} مشتری فعال`}
+            {mode === 'property_to_customer' ? `فایل فعال: ${formatPrice(filteredList.length)}` : `مشتری فعال: ${formatPrice(filteredList.length)}`}
+            {visibleList.length !== filteredList.length && ` • نمایش: ${formatPrice(visibleList.length)}`}
             {' • '}فقط جفت‌های سازگار با امتیاز ≥ {minScore}٪ نمایش داده می‌شوند
           </p>
 
@@ -387,9 +441,15 @@ export function MatchesPage() {
               icon={mode === 'property_to_customer' ? <Building2 size={48} /> : <Users size={48} />}
               title={mode === 'property_to_customer' ? 'فایلی یافت نشد' : 'مشتری‌ای یافت نشد'}
             />
+          ) : visibleList.length === 0 ? (
+            <EmptyState
+              icon={<Target size={48} />}
+              title="هیچ موردی تطبیق سازگار ندارد"
+              description="برای دیدن همهٔ موارد، فیلتر فهرست را روی «همه» بگذارید"
+            />
           ) : (
             <div className="space-y-2">
-              {filteredList.map((item) => {
+              {visibleList.map((item) => {
                 if (mode === 'property_to_customer') {
                   const p = item as Property;
                   const area = p.building_area > 0 ? p.building_area : p.land_area;
@@ -415,6 +475,11 @@ export function MatchesPage() {
                             {area > 0 && <FactChip icon={Ruler} text={`${formatPrice(area)} متری`} />}
                             {p.bedrooms > 0 && <FactChip icon={BedDouble} text={`${formatPrice(p.bedrooms)} خواب`} />}
                             {p.negotiable && <FactChip icon={TrendingUp} text="قابل مذاکره" tone="gold" />}
+                            {matchCounts && (
+                              (matchCounts.get(p.id) ?? 0) > 0
+                                ? <span className="inline-flex items-center gap-1 rounded-md border border-green-200 bg-green-50 px-1.5 py-0.5 text-[10px] font-bold text-green-700"><Target size={10} /> {formatPrice(matchCounts.get(p.id) ?? 0)} تطبیق</span>
+                                : <span className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[10px] font-medium text-slate-400">بدون تطبیق</span>
+                            )}
                           </div>
                         </div>
                         <div className="text-left flex-shrink-0">
@@ -451,6 +516,11 @@ export function MatchesPage() {
                         <div className="flex flex-wrap gap-1.5 mt-1.5">
                           {c.transaction_intention && <FactChip icon={Zap} text={getTransactionLabel(c.transaction_intention)} tone="green" />}
                           {firstType && <FactChip icon={Home} text={TYPE_LABELS[firstType] ?? firstType} />}
+                          {matchCounts && (
+                            (matchCounts.get(c.id) ?? 0) > 0
+                              ? <span className="inline-flex items-center gap-1 rounded-md border border-green-200 bg-green-50 px-1.5 py-0.5 text-[10px] font-bold text-green-700"><Target size={10} /> {formatPrice(matchCounts.get(c.id) ?? 0)} تطبیق</span>
+                              : <span className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[10px] font-medium text-slate-400">بدون تطبیق</span>
+                          )}
                         </div>
                       </div>
                     </div>

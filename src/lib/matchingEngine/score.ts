@@ -414,7 +414,7 @@ export function calculateScore(
   const all = { core, financial, location, physical, features };
   const keys: (keyof typeof all)[] = ['core', 'financial', 'location', 'physical', 'features'];
   const labels: Record<keyof typeof all, string> = {
-    core: 'Core',
+    core: 'نوع ملک',
     financial: 'مالی',
     location: 'موقعیت',
     physical: 'فیزیکی',
