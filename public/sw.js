@@ -1,5 +1,5 @@
-const CACHE_NAME = 'dastyar-shell-v2';
-const DATA_CACHE_NAME = 'dastyar-data-v2';
+const CACHE_NAME = 'dastyar-shell-v3';
+const DATA_CACHE_NAME = 'dastyar-data-v3';
 const baseUrl = new URL('./', self.registration.scope);
 const appUrl = (path = '') => new URL(path, baseUrl).href;
 const APP_SHELL = [appUrl(), appUrl('index.html'), appUrl('manifest.webmanifest'), appUrl('icon-192.png'), appUrl('icon-512.png')];

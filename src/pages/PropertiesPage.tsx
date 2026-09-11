@@ -1013,15 +1013,15 @@ function PropertyDetail({ propertyId, onBack, onEdit, onNavigate }: { propertyId
 
           {/* Mobile gallery: large cover plus a swipeable thumbnail rail */}
           <div className="sm:hidden">
-            <button type="button" onClick={() => setSelectedImageIndex(0)} className="group relative block aspect-[4/3] w-full overflow-hidden rounded-xl bg-slate-100">
-              <img src={property.images[0]} alt={`${property.title} - تصویر اصلی`} className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105" />
+            <button type="button" onClick={() => setSelectedImageIndex(0)} className="group relative block h-[75vw] max-h-80 min-h-52 w-full overflow-hidden rounded-xl bg-slate-100">
+              <img src={property.images[0]} alt={`${property.title} - تصویر اصلی`} className="h-full max-h-full w-full max-w-full object-cover transition-transform duration-300 group-hover:scale-105" />
               <span className="absolute bottom-3 left-3 rounded-full bg-black/60 px-2.5 py-1 text-[11px] text-white" dir="ltr">1 / {property.images.length}</span>
             </button>
             {property.images.length > 1 && (
               <div className="mt-2 flex gap-2 overflow-x-auto pb-1 no-scrollbar" dir="rtl">
                 {property.images.slice(1).map((image, index) => (
                   <button key={`${image.slice(0, 60)}-${index}`} type="button" onClick={() => setSelectedImageIndex(index + 1)} className="h-20 w-24 shrink-0 overflow-hidden rounded-lg bg-slate-100">
-                    <img src={image} alt={`${property.title} - عکس ${index + 2}`} className="h-full w-full object-cover" loading="lazy" />
+                    <img src={image} alt={`${property.title} - عکس ${index + 2}`} className="h-full max-h-full w-full max-w-full object-cover" loading="lazy" />
                   </button>
                 ))}
               </div>
@@ -1053,7 +1053,7 @@ function PropertyDetail({ propertyId, onBack, onEdit, onNavigate }: { propertyId
                   className={`group relative overflow-hidden bg-slate-100 ${tileClass}`}
                   aria-label={`نمایش عکس ${index + 1}`}
                 >
-                  <img src={image} alt={`${property.title} - عکس ${index + 1}`} className="h-full w-full object-cover transition duration-300 group-hover:scale-105 group-hover:brightness-90" loading={index === 0 ? 'eager' : 'lazy'} />
+                  <img src={image} alt={`${property.title} - عکس ${index + 1}`} className="h-full max-h-full w-full max-w-full object-cover transition duration-300 group-hover:scale-105 group-hover:brightness-90" loading={index === 0 ? 'eager' : 'lazy'} />
                   {index === 0 && <span className="absolute bottom-3 right-3 rounded-md bg-black/55 px-2 py-1 text-[11px] font-medium text-white">تصویر اصلی</span>}
                   {isLastPreview && (
                     <span className="absolute inset-0 flex items-center justify-center bg-black/55 text-lg font-bold text-white" dir="ltr">+{remaining}</span>
@@ -1066,7 +1066,7 @@ function PropertyDetail({ propertyId, onBack, onEdit, onNavigate }: { propertyId
       ) : (
         <section className="card overflow-hidden" aria-label="تصویر پیش‌فرض ملک">
           <div className="relative">
-            <img src={propertyPlaceholder} alt="تصویر پیش‌فرض ملک" className="h-64 sm:h-[360px] w-full object-cover" />
+            <img src={propertyPlaceholder} alt="تصویر پیش‌فرض ملک" className="h-64 max-h-full w-full max-w-full object-cover sm:h-[360px]" />
             <span className="absolute bottom-3 right-3 rounded-md bg-black/55 px-2.5 py-1 text-xs text-white">تصویر پیش‌فرض</span>
           </div>
         </section>
