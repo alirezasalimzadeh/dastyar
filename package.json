@@ -10,7 +10,8 @@
     "preview": "npm run build && vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.app.json",
     "deploy:pwa": "npm run build && gh-pages -d dist",
-    "backup:postgres": "bash scripts/postgres-backup.sh"
+    "backup:postgres": "bash scripts/postgres-backup.sh",
+    "test": "vitest run"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.116.0",
@@ -34,6 +35,7 @@
     "tailwindcss": "^3.4.1",
     "typescript": "^5.5.3",
     "typescript-eslint": "^8.3.0",
-    "vite": "^5.4.2"
+    "vite": "^5.4.2",
+    "vitest": "^2.1.9"
   }
 }
