@@ -44,7 +44,7 @@ export function FollowUpsPage({ initialFilter }: { initialFilter?: string }) {
     <div className="animate-fade-in">
       <PageHeader title="پیگیری‌ها" subtitle={`${followups.length} مورد`} actions={<button onClick={() => setShowCreate(true)} className="btn-primary"><Plus size={18} /> پیگیری جدید</button>} />
 
-      <div className="mb-3 flex gap-2 overflow-x-auto pb-1 no-scrollbar">
+      <div className="mb-3 flex flex-wrap gap-2">
         {[
           { key: 'pending', label: 'در انتظار' },
           { key: 'completed', label: 'انجام‌شده' },
@@ -53,7 +53,7 @@ export function FollowUpsPage({ initialFilter }: { initialFilter?: string }) {
           { key: 'all', label: 'همه وضعیت‌ها' },
         ].map((item) => <button key={item.key} onClick={() => setStatusFilter(item.key)} className={`shrink-0 rounded-lg px-3 py-1.5 text-xs font-medium ${statusFilter === item.key ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600'}`}>{item.label}</button>)}
       </div>
-      <div className="mb-4 flex gap-2 overflow-x-auto pb-1 text-xs no-scrollbar">
+      <div className="mb-4 flex flex-wrap gap-2 text-xs">
         {[
           { key: 'all', label: 'همه زمان‌ها' },
           { key: 'overdue', label: 'عقب‌افتاده' },

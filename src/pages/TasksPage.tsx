@@ -56,7 +56,7 @@ export function TasksPage() {
     <div className="animate-fade-in">
       <PageHeader title="وظایف" subtitle={`${tasks.length} وظیفه`} actions={<button onClick={() => setShowCreate(true)} className="btn-primary"><Plus size={18} /> وظیفه جدید</button>} />
 
-      <div className="mb-3 flex gap-2 overflow-x-auto pb-1 no-scrollbar">
+      <div className="mb-3 flex flex-wrap gap-2">
         <button onClick={() => setStatusFilter('all')} className={`shrink-0 rounded-lg px-3 py-1.5 text-xs font-medium ${statusFilter === 'all' ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600'}`}>همه</button>
         {TASK_STATUSES.map((item) => <button key={item.value} onClick={() => setStatusFilter(item.value)} className={`shrink-0 rounded-lg px-3 py-1.5 text-xs font-medium ${statusFilter === item.value ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600'}`}>{item.label}</button>)}
       </div>

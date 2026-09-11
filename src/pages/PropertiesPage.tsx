@@ -427,7 +427,7 @@ export function PropertiesPage({ initialId, onNavigate, onGoBack }: { initialId?
       />
 
       {/* نوار ابزار: جستجو + تب‌ها + فیلترها + مرتب‌سازی در یک سطر */}
-      <div className="mb-3 flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar">
+      <div className="mb-3 flex flex-wrap items-center gap-2">
         <div className="relative min-w-[200px] flex-1">
           <Search size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" />
           <input
@@ -492,7 +492,7 @@ export function PropertiesPage({ initialId, onNavigate, onGoBack }: { initialId?
       </div>
 
       {filterChips.length > 0 && (
-        <div className="mb-3 flex gap-1.5 overflow-x-auto pb-1 no-scrollbar">
+        <div className="mb-3 flex flex-wrap gap-1.5">
           {filterChips.map((chip) => (
             <button key={chip.key} type="button" onClick={() => removeFilter(chip.key)} className="inline-flex shrink-0 items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-medium text-slate-600 hover:bg-red-50 hover:text-red-600">
               {chip.label}<X size={12} />
@@ -718,7 +718,7 @@ export function PropertiesPage({ initialId, onNavigate, onGoBack }: { initialId?
                         )}
                       </>
                     ) : hasRentPrice ? (
-                      <div className="flex items-start gap-5">
+                      <div className="flex flex-wrap items-start gap-x-5 gap-y-1">
                         {p.deposit_price != null && (
                           <div>
                             <p className="text-[11px] text-slate-400 mb-0.5">{p.transaction_role === 'applicant' ? 'بودجه رهن' : 'رهن'}</p>

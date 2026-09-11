@@ -8,6 +8,12 @@
   html {
     direction: rtl;
   }
+  /* ترمز امنیتی موبایل: هیچ محتوایی نباید عرض سند را از عرض صفحه بیشتر کند
+     (اگر نشود، مرورگر گوشی صفحه را زوم/بریده نشان می‌دهد) */
+  html,
+  body {
+    overflow-x: clip;
+  }
   body {
     font-family: 'Vazirmatn', system-ui, -apple-system, sans-serif;
     background-color: #f8fafc;

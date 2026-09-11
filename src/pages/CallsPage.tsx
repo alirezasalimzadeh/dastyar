@@ -48,7 +48,7 @@ export function CallsPage() {
         actions={<button type="button" onClick={() => setShowCreate(true)} className="btn-primary"><Plus size={17} /> ثبت تماس</button>}
       />
 
-      <div className="mb-3 flex gap-2 overflow-x-auto pb-1 no-scrollbar">
+      <div className="mb-3 flex flex-wrap gap-2">
         <button onClick={() => { setFilter(''); setPage(1); }} className={`shrink-0 rounded-lg px-3 py-1.5 text-xs font-medium ${!filter ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600'}`}>همه نتایج</button>
         {CALL_RESULTS.map((item) => <button key={item.value} onClick={() => { setFilter(item.value); setPage(1); }} className={`shrink-0 rounded-lg px-3 py-1.5 text-xs font-medium ${filter === item.value ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600'}`}>{item.label}</button>)}
       </div>
