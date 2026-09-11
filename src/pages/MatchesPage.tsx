@@ -18,8 +18,8 @@ type MatchEntry =
 const SCORE_TIERS = [
   { min: 85, label: 'عالی', color: '#2563eb', bg: '#dbeafe', border: '#2563eb' },
   { min: 70, label: 'خوب', color: '#059669', bg: '#d1fae5', border: '#059669' },
-  { min: 55, label: 'متوسط', color: '#d97706', bg: '#fef3c7', border: '#d97706' },
-  { min: 40, label: 'ضعیف', color: '#64748b', bg: '#f1f5f9', border: '#94a3b8' },
+  { min: 55, label: 'متوسط', color: '#ca8a04', bg: '#fef9c3', border: '#ca8a04' },
+  { min: 40, label: 'ضعیف', color: '#ea580c', bg: '#ffedd5', border: '#ea580c' },
   { min: 0, label: 'نامناسب', color: '#dc2626', bg: '#fee2e2', border: '#dc2626' },
 ];
 function getScoreTier(score: number) {
