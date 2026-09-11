@@ -84,6 +84,8 @@ export function rankMatches<T extends { result: ScoredMatchOutput }>(items: T[])
 }
 
 export { calculateScore } from './score';
+export { persistMatches } from './persist';
+export type { PersistPair, PersistResult } from './persist';
 export { RejectionReason, WarningCode } from './types';
 export * from './config';
 export type * from './types';

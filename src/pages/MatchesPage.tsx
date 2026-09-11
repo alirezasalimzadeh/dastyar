@@ -1,21 +1,16 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
-import { Target, ArrowLeft, Zap, Search, TrendingUp, Check, X, ChevronDown, ChevronUp, Building2, Users, Flame } from 'lucide-react';
+import { Target, ArrowLeft, Zap, Search, TrendingUp, Check, ChevronDown, ChevronUp, Building2, Users, Flame, AlertTriangle, Info, Minus } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
-import { calculateMatch, type MatchResult } from '@/lib/matching';
+import { scoreMatch, rankMatches, persistMatches, type ScoredMatchOutput, type ScoredComponent } from '@/lib/matchingEngine';
 import { formatPrice, getTransactionLabel, getCategoryLabel, getPropertyTypeLabel, getTemperatureInfo } from '@/lib/constants';
 import { Badge, EmptyState, Spinner, PageHeader } from '@/components/ui';
 import type { Property, Customer } from '@/lib/types';
 
-interface MatchCardProps {
-  score: number;
-  factors: { label: string; matched: boolean }[];
-  differences: { label: string; detail: string }[];
-}
-
 type MatchEntry =
-  | { type: 'customer'; data: Customer; result: MatchResult }
-  | { type: 'property'; data: Property; result: MatchResult };
+  | { type: 'customer'; data: Customer; result: ScoredMatchOutput }
+  | { type: 'property'; data: Property; result: ScoredMatchOutput };
 
+// تیرها دقیقاً مطابق §۱۳ سند (آستانه‌ها در config موتور: 85/70/55/40)
 const SCORE_TIERS = [
   { min: 85, label: 'عالی', color: '#16a34a', bg: '#dcfce7' },
   { min: 70, label: 'خوب', color: '#65a30d', bg: '#ecfccb' },
@@ -27,6 +22,12 @@ const SCORE_TIERS = [
 function getScoreTier(score: number) {
   return SCORE_TIERS.find((t) => score >= t.min) ?? SCORE_TIERS[SCORE_TIERS.length - 1];
 }
+
+const CONFIDENCE_BADGES = {
+  high: { label: 'اعتماد بالا', cls: 'bg-green-50 text-green-700 border-green-200' },
+  medium: { label: 'اعتماد متوسط', cls: 'bg-amber-50 text-amber-700 border-amber-200' },
+  low: { label: 'اعتماد کم', cls: 'bg-slate-100 text-slate-500 border-slate-200' },
+} as const;
 
 function ScoreRing({ score }: { score: number }) {
   const tier = getScoreTier(score);
@@ -50,20 +51,65 @@ function ScoreRing({ score }: { score: number }) {
   );
 }
 
-function FactorChip({ label, matched }: { label: string; matched: boolean }) {
+// مؤلفه‌ها: «مالی: ۱۰٪ ✅» — مطابق خروجی موردنظر کاربر
+function ComponentChips({ components }: { components: ScoredComponent[] }) {
   return (
-    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${
-      matched ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-slate-100 text-slate-400 border border-slate-200'
-    }`}>
-      {matched ? <Check size={11} /> : <X size={11} />}
-      {label}
-    </span>
+    <div className="flex flex-wrap gap-1.5 mt-3">
+      {components.map((c) => {
+        const pct = Math.round(c.value * 100);
+        const icon = !c.active
+          ? <Minus size={11} className="text-slate-300" />
+          : c.value >= 0.999
+            ? <Check size={11} className="text-green-600" />
+            : <AlertTriangle size={11} className="text-orange-500" />;
+        return (
+          <span
+            key={c.key}
+            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium border ${
+              !c.active ? 'bg-slate-50 text-slate-400 border-slate-200' : c.value >= 0.999 ? 'bg-green-50 text-green-700 border-green-200' : 'bg-orange-50 text-orange-700 border-orange-200'
+            }`}
+          >
+            {c.label} {pct}٪ {icon}
+          </span>
+        );
+      })}
+    </div>
+  );
+}
+
+interface ReasonLine { icon: 'ok' | 'warn' | 'info'; text: string }
+
+function ReasonList({ lines }: { lines: ReasonLine[] }) {
+  const [expanded, setExpanded] = useState(false);
+  const visible = expanded ? lines : lines.slice(0, 6);
+  return (
+    <div className="mt-3 pt-3 border-t border-slate-100">
+      <p className="text-[11px] font-bold text-slate-400 mb-1.5">دلایل:</p>
+      <div className="space-y-1">
+        {visible.map((l, i) => (
+          <div key={i} className="flex items-start gap-1.5 text-xs leading-5">
+            {l.icon === 'ok' && <Check size={13} className="text-green-600 flex-shrink-0 mt-1" />}
+            {l.icon === 'warn' && <AlertTriangle size={13} className="text-orange-500 flex-shrink-0 mt-1" />}
+            {l.icon === 'info' && <Info size={13} className="text-slate-400 flex-shrink-0 mt-1" />}
+            <span className={l.icon === 'warn' ? 'text-orange-700' : l.icon === 'info' ? 'text-slate-400' : 'text-slate-600'}>{l.text}</span>
+          </div>
+        ))}
+      </div>
+      {lines.length > 6 && (
+        <button onClick={() => setExpanded(!expanded)} className="flex items-center gap-1 text-xs text-slate-400 mt-1.5 hover:text-slate-600">
+          {expanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+          {expanded ? 'بستن' : `${lines.length - 6} مورد دیگر`}
+        </button>
+      )}
+    </div>
   );
 }
 
 function MatchCard({ entry }: { entry: MatchEntry }) {
-  const [expanded, setExpanded] = useState(false);
-  const tier = getScoreTier(entry.result.score);
+  const result = entry.result;
+  const score = result.score ?? 0;
+  const tier = getScoreTier(score);
+  const conf = result.confidence ? CONFIDENCE_BADGES[result.confidence] : null;
 
   const name = entry.type === 'customer'
     ? entry.data.name ?? `${entry.data.first_name} ${entry.data.last_name}`
@@ -77,6 +123,13 @@ function MatchCard({ entry }: { entry: MatchEntry }) {
     ? (entry.data.sale_price != null ? `${formatPrice(entry.data.sale_price)} ت` :
        entry.data.deposit_price != null ? `رهن: ${formatPrice(entry.data.deposit_price)}` : '')
     : (entry.data.temperature === 'hot' ? 'مشتری داغ' : '');
+
+  // سطرهای دلیل — مستقیم از محاسبات موتور (نه ساختگی)
+  const lines: ReasonLine[] = [
+    ...(result.explanation?.warnings ?? []).map((text) => ({ icon: 'warn' as const, text })),
+    ...(result.explanation?.positives ?? []).map((text) => ({ icon: 'ok' as const, text })),
+    ...(result.explanation?.unverifiable ?? []).map((text) => ({ icon: 'info' as const, text })),
+  ];
 
   return (
     <div className="card overflow-hidden transition-all" style={{ borderLeft: `3px solid ${tier.color}` }}>
@@ -99,38 +152,25 @@ function MatchCard({ entry }: { entry: MatchEntry }) {
             <div className="flex items-center gap-2">
               <p className="text-sm font-bold text-slate-800 truncate">{name}</p>
               {entry.type === 'customer' && entry.data.temperature === 'hot' && <Flame size={14} className="text-red-500 flex-shrink-0" />}
+              {conf && <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium border flex-shrink-0 ${conf.cls}`}>{conf.label}</span>}
             </div>
             <p className="text-xs text-slate-400 truncate" dir={entry.type === 'customer' ? 'ltr' : 'rtl'}>{subtitle}</p>
             {priceLabel && <p className="text-xs text-slate-500 mt-0.5">{priceLabel}</p>}
           </div>
-          <ScoreRing score={entry.result.score} />
+          <ScoreRing score={score} />
         </div>
 
-        {/* Factors */}
-        <div className="flex flex-wrap gap-1.5 mt-3">
-          {entry.result.factors.map((f, i) => <FactorChip key={i} label={f.label} matched={f.matched} />)}
-        </div>
+        {/* مؤلفه‌ها با درصد و وضعیت */}
+        {result.components && <ComponentChips components={result.components} />}
 
-        {/* Differences preview */}
-        {entry.result.differences.length > 0 && (
-          <button
-            onClick={() => setExpanded(!expanded)}
-            className="flex items-center gap-1 text-xs text-orange-600 mt-3 hover:text-orange-700"
-          >
-            {expanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-            {entry.result.differences.length} مورد تفاوت
-          </button>
-        )}
-
-        {/* Expanded differences */}
-        {expanded && entry.result.differences.length > 0 && (
-          <div className="mt-2 pt-2 border-t border-slate-100 space-y-1 animate-fade-in">
-            {entry.result.differences.map((d, i) => (
-              <div key={i} className="flex items-start gap-2 text-xs">
-                <span className="text-slate-400 font-medium min-w-fit">{d.label}:</span>
-                <span className="text-orange-600">{d.detail}</span>
-              </div>
-            ))}
+        {/* قانون توضیح اجباری: عدد هرگز به‌تنهایی؛ همه‌چیز خنثی = بج اطمینان کم */}
+        {lines.length > 0 ? (
+          <ReasonList lines={lines} />
+        ) : (
+          <div className="mt-3 pt-3 border-t border-slate-100">
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-slate-100 text-slate-500 border border-slate-200">
+              <Info size={12} /> اطمینان کم — دادهٔ کافی نیست
+            </span>
           </div>
         )}
       </div>
@@ -144,10 +184,12 @@ export function MatchesPage() {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [selected, setSelected] = useState<Property | Customer | null>(null);
   const [matches, setMatches] = useState<MatchEntry[]>([]);
+  const [rejectedCount, setRejectedCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [computing, setComputing] = useState(false);
   const [search, setSearch] = useState('');
-  const [minScore, setMinScore] = useState(40);
+  const [minScore, setMinScore] = useState(55); // آستانهٔ پیش‌فرض نمایش: ۵۵ (§۱۳ سند)
+  const [persistStatus, setPersistStatus] = useState<{ saved: number; error: string | null } | null>(null);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -165,24 +207,34 @@ export function MatchesPage() {
   const computeMatches = useCallback((item: Property | Customer) => {
     setSelected(item);
     setComputing(true);
+    setPersistStatus(null);
+
+    let results: MatchEntry[] = [];
+    let rejected = 0;
 
     if (mode === 'property_to_customer') {
       const prop = item as Property;
-      const results: MatchEntry[] = customers
-        .map((c) => ({ type: 'customer' as const, data: c, result: calculateMatch(prop, c) }))
-        .filter((m) => m.result.score >= minScore)
-        .sort((a, b) => b.result.score - a.result.score)
-        .slice(0, 15);
-      setMatches(results);
+      const pairs = customers.map((c) => ({ property: prop, customer: c, result: scoreMatch(c, prop) }));
+      rejected = pairs.filter((p) => !p.result.compatible).length;
+      results = rankMatches(pairs)
+        .filter((p) => (p.result.score ?? 0) >= minScore)
+        .slice(0, 15)
+        .map((p) => ({ type: 'customer' as const, data: p.customer, result: p.result }));
+      // ذخیره top-20 (فاز ۴) — بی‌صدا اما خطایش قابل مشاهده
+      persistMatches(pairs).then(setPersistStatus).catch((e: unknown) => setPersistStatus({ saved: 0, error: String(e) }));
     } else {
       const cust = item as Customer;
-      const results: MatchEntry[] = properties
-        .map((p) => ({ type: 'property' as const, data: p, result: calculateMatch(p, cust) }))
-        .filter((m) => m.result.score >= minScore)
-        .sort((a, b) => b.result.score - a.result.score)
-        .slice(0, 15);
-      setMatches(results);
+      const pairs = properties.map((p) => ({ property: p, customer: cust, result: scoreMatch(cust, p) }));
+      rejected = pairs.filter((p) => !p.result.compatible).length;
+      results = rankMatches(pairs)
+        .filter((p) => (p.result.score ?? 0) >= minScore)
+        .slice(0, 15)
+        .map((p) => ({ type: 'property' as const, data: p.property, result: p.result }));
+      persistMatches(pairs).then(setPersistStatus).catch((e: unknown) => setPersistStatus({ saved: 0, error: String(e) }));
     }
+
+    setMatches(results);
+    setRejectedCount(rejected);
     setComputing(false);
   }, [mode, customers, properties, minScore]);
 
@@ -197,14 +249,14 @@ export function MatchesPage() {
     });
   }, [mode, properties, customers, search]);
 
-  const avgScore = matches.length > 0 ? Math.round(matches.reduce((s, m) => s + m.result.score, 0) / matches.length) : 0;
-  const excellentCount = matches.filter((m) => m.result.score >= 85).length;
+  const avgScore = matches.length > 0 ? Math.round(matches.reduce((s, m) => s + (m.result.score ?? 0), 0) / matches.length) : 0;
+  const excellentCount = matches.filter((m) => (m.result.score ?? 0) >= 85).length;
 
   if (loading) return <div className="flex justify-center py-16"><Spinner size={32} /></div>;
 
   return (
     <div className="animate-fade-in">
-      <PageHeader title="تطبیق‌ها" subtitle="موتور تطبیق هوشمند فایل و مشتری" />
+      <PageHeader title="تطبیق‌ها" subtitle="فیلتر سخت ← محدودیت‌های قوی ← امتیاز و دلیل" />
 
       {/* Mode Toggle */}
       <div className="flex gap-2 mb-4">
@@ -342,7 +394,13 @@ export function MatchesPage() {
                 <p className="text-xs text-slate-400 mt-0.5">
                   {matches.length} تطبیق یافت شد
                   {matches.length > 0 && ` • میانگین: ${avgScore}% • عالی: ${excellentCount}`}
+                  {rejectedCount > 0 && ` • ${rejectedCount} ناسازگار`}
                 </p>
+                {persistStatus && (
+                  <p className={`text-[11px] mt-1 ${persistStatus.error ? 'text-red-500' : 'text-slate-400'}`}>
+                    {persistStatus.error ? `ذخیرهٔ تطبیق‌ها انجام نشد: ${persistStatus.error}` : `${persistStatus.saved} تطبیق ذخیره شد`}
+                  </p>
+                )}
               </div>
               <TrendingUp size={20} className="text-slate-300" />
             </div>
@@ -353,7 +411,7 @@ export function MatchesPage() {
             <EmptyState
               icon={<Target size={48} />}
               title="تطبیقی با امتیاز کافی یافت نشد"
-              description={`تطبیق‌هایی با امتیاز حداقل ${minScore}٪ نمایش داده می‌شوند`}
+              description={`فقط جفت‌های سازگار و با امتیاز حداقل ${minScore}٪ نمایش داده می‌شوند (ردشده‌ها حذف شدند)`}
             />
           ) : (
             matches.map((m, i) => <MatchCard key={i} entry={m} />)
