@@ -1,8 +1,7 @@
 import { useEffect, useState, useCallback, useMemo, type ComponentType, type ReactNode } from 'react';
 import {
-  Target, ArrowLeft, Zap, Search, TrendingUp, Check, ChevronDown, ChevronUp,
-  Building2, Users, Flame, AlertTriangle, Info, Minus, Ruler, BedDouble,
-  Home, Wallet, ShieldCheck, Star, CheckCircle2, Handshake,
+  Target, ArrowLeft, Zap, Search, Check, ChevronDown, ChevronUp,
+  Building2, Users, Flame, AlertTriangle, Info, Minus, ShieldCheck, Star, CheckCircle2, Handshake,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { scoreMatch, rankMatches, persistMatches, type ScoredMatchOutput, type ScoredComponent } from '@/lib/matchingEngine';
@@ -354,20 +353,6 @@ function ReasonList({ tone, title, lines }: { tone: ReasonTone; title: string; l
   );
 }
 
-function FactChip({ icon: Icon, text, tone = 'slate' }: { icon: ComponentType<{ size?: number | string; className?: string }>; text: string; tone?: 'slate' | 'blue' | 'green' | 'gold' }) {
-  const tones = {
-    slate: 'bg-slate-50 text-slate-500 border-slate-200',
-    blue: 'bg-blue-50 text-blue-700 border-blue-200',
-    green: 'bg-green-50 text-green-700 border-green-200',
-    gold: 'bg-amber-50 text-amber-700 border-amber-200',
-  };
-  return (
-    <span className={`inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[10px] font-medium ${tones[tone]}`}>
-      <Icon size={10} /> {text}
-    </span>
-  );
-}
-
 // ---- کارت نتیجه: دیتای کامل هر دو طرف با یک نگاه ----
 
 function MatchCard({ entry, customer, property, geo }: {
@@ -712,8 +697,6 @@ export function MatchesPage() {
               {visibleList.map((item) => {
                 if (mode === 'property_to_customer') {
                   const p = item as Property;
-                  const area = p.building_area > 0 ? p.building_area : p.land_area;
-                  const priceTxt = p.sale_price > 0 ? formatMoneyShort(p.sale_price) : p.deposit_price > 0 ? formatMoneyShort(p.deposit_price) : null;
                   return (
                     <div
                       key={p.id}
@@ -729,29 +712,25 @@ export function MatchesPage() {
                             {p.is_hot && <Flame size={13} className="text-red-500 flex-shrink-0" />}
                             <p className="text-sm font-bold text-slate-800 truncate">{p.title}</p>
                           </div>
-                          <p className="text-[11px] text-slate-400 mt-0.5 truncate">
-                            {getTransactionLabel(p.transaction_type)} • {getCategoryLabel(p.category)} • {getPropertyTypeLabel(p.category, p.property_type)}
-                            {locText(geoNames, p.county_id, p.neighborhood_id, p.county_id ? [] : p.city_id ? [p.city_id] : []) && ` • ${locText(geoNames, p.county_id, p.neighborhood_id, p.county_id ? [] : p.city_id ? [p.city_id] : [])}`}
-                          </p>
-                          <div className="flex flex-wrap gap-1.5 mt-1.5">
-                            {area > 0 && <FactChip icon={Ruler} text={`${formatPrice(area)} متری`} />}
-                            {p.bedrooms > 0 && <FactChip icon={BedDouble} text={`${formatPrice(p.bedrooms)} خواب`} />}
-                            {priceTxt && <FactChip icon={Wallet} text={priceTxt} tone="blue" />}
-                            {p.negotiable && <FactChip icon={TrendingUp} text="قابل مذاکره" tone="gold" />}
-                            {matchCounts && (
-                              (matchCounts.get(p.id) ?? 0) > 0
-                                ? <span className="inline-flex items-center gap-1 rounded-md border border-green-200 bg-green-50 px-1.5 py-0.5 text-[10px] font-bold text-green-700"><Target size={10} /> {formatPrice(matchCounts.get(p.id) ?? 0)} تطبیق</span>
-                                : <span className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[10px] font-medium text-slate-400">بدون تطبیق</span>
-                            )}
-                          </div>
                         </div>
+                        {matchCounts && (
+                          (matchCounts.get(p.id) ?? 0) > 0
+                            ? <span className="inline-flex items-center gap-1 rounded-md border border-green-200 bg-green-50 px-1.5 py-0.5 text-[10px] font-bold text-green-700 shrink-0"><Target size={10} /> {formatPrice(matchCounts.get(p.id) ?? 0)} تطبیق</span>
+                            : <span className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[10px] font-medium text-slate-400 shrink-0">بدون تطبیق</span>
+                        )}
+                      </div>
+                      {/* دادهٔ کامل فایل */}
+                      <div className="mt-2.5">
+                        <SpecPanel title="اطلاعات فایل" icon={Building2} tone="slate" rows={propertyFactsRows(p, geoNames)}>
+                          <FeatureChips property={p} />
+                        </SpecPanel>
                       </div>
                     </div>
                   );
                 }
                 const c = item as Customer;
                 const temp = getTemperatureInfo(c.temperature);
-                const firstType = (c.preferred_property_types ?? [])[0];
+                const firstType = (c.preferred_property_types ?? [])[0] ?? null;
                 return (
                   <div
                     key={c.id}
@@ -772,16 +751,16 @@ export function MatchesPage() {
                           <span className="text-[10px] text-slate-400">{temp.label}</span>
                         </div>
                         <p className="text-[11px] text-slate-400 mt-0.5" dir="ltr">{c.mobile}</p>
-                        <div className="flex flex-wrap gap-1.5 mt-1.5">
-                          {c.transaction_intention && <FactChip icon={Zap} text={getTransactionLabel(c.transaction_intention)} tone="green" />}
-                          {firstType && <FactChip icon={Home} text={TYPE_LABELS[firstType] ?? firstType} />}
-                          {matchCounts && (
-                            (matchCounts.get(c.id) ?? 0) > 0
-                              ? <span className="inline-flex items-center gap-1 rounded-md border border-green-200 bg-green-50 px-1.5 py-0.5 text-[10px] font-bold text-green-700"><Target size={10} /> {formatPrice(matchCounts.get(c.id) ?? 0)} تطبیق</span>
-                              : <span className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[10px] font-medium text-slate-400">بدون تطبیق</span>
-                          )}
-                        </div>
                       </div>
+                      {matchCounts && (
+                        (matchCounts.get(c.id) ?? 0) > 0
+                          ? <span className="inline-flex items-center gap-1 rounded-md border border-green-200 bg-green-50 px-1.5 py-0.5 text-[10px] font-bold text-green-700 shrink-0"><Target size={10} /> {formatPrice(matchCounts.get(c.id) ?? 0)} تطبیق</span>
+                          : <span className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[10px] font-medium text-slate-400 shrink-0">بدون تطبیق</span>
+                      )}
+                    </div>
+                    {/* دادهٔ کامل درخواست مشتری */}
+                    <div className="mt-2.5">
+                      <SpecPanel title="درخواست مشتری" icon={Users} tone="blue" rows={customerRequestRows(c, firstType, geoNames)} />
                     </div>
                   </div>
                 );
