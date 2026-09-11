@@ -458,9 +458,9 @@ function MatchCard({ entry, customer, property, geo }: {
           </p>
         )}
 
-        {/* توضیح اجباری: دلایل تطبیق + موارد قابل مذاکره + دلایل عدم تطبیق */}
+        {/* توضیح اجباری: دلایل تطبیق + موارد قابل مذاکره + دلایل عدم تطبیق — ۱ تا ۳ ستون */}
         {matchLines.length > 0 || finalGapLines.length > 0 ? (
-          <div className="mt-3 space-y-2">
+          <div className="mt-3 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2 items-start">
             {matchLines.length > 0 && <ReasonList tone="ok" title="دلایل تطبیق" lines={matchLines} />}
             {negotiableLines.length > 0 && <ReasonList tone="warn" title="موارد قابل مذاکره" lines={negotiableLines} />}
             {mismatchLines.length > 0 && <ReasonList tone="mismatch" title="دلایل عدم تطبیق" lines={mismatchLines} />}
