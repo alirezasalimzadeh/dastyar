@@ -55,6 +55,15 @@ export interface StrongConstraintsResult {
   permitCommercial: ConstraintStatus;
 }
 
+/** سطر دلیل سازگاری (فاز ۱+۲) — هر بعد با وضعیت و مقادیر واقعی */
+export interface EligibilityLine {
+  /** REJECT = دلیل رد؛ WARNING = جریمهٔ کنترل‌شده؛ PASS = تأییدشده؛ INFO = قابل ارزیابی نیست */
+  kind: 'REJECT' | 'WARNING' | 'PASS' | 'INFO';
+  /** بعد موردنظر (برای غنی‌سازی UI، مثلاً افزودن نام مکان به location) */
+  dimension: 'transaction' | 'category' | 'propertyType' | 'financial' | 'area' | 'rooms' | 'location' | 'partnership' | 'permit';
+  text: string;
+}
+
 export interface MatchEligibilityOutput {
   /** false یعنی این جفت به عنوان کاندید به فاز ۳ نمی‌رود */
   compatible: boolean;
@@ -63,6 +72,8 @@ export interface MatchEligibilityOutput {
   strongConstraints: StrongConstraintsResult | null;
   rejectionReason: RejectionReasonCode | null;
   warnings: WarningCodeValue[];
+  /** دلایل کامل سازگاری — هر بعد با وضعیت خود (نه فقط دلیل رد) */
+  eligibilityLines: EligibilityLine[];
   metadata: {
     isSubstitutePropertyType: boolean;
     compatibilityFactor: number | null;

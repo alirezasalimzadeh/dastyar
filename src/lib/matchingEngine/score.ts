@@ -22,11 +22,12 @@ import {
   STRONG_THRESHOLDS,
   SUBSTITUTE_SCORE_CAP,
   TIER_THRESHOLDS,
+  TYPE_LABELS,
   VERIFIABLE_FEATURES,
 } from './config';
 import { firstPrefValue, toNum } from './prefUtils';
 import type { MatchEligibilityOutput, MatchExplanation, ScoredComponent } from './types';
-import { formatMoneyShort, formatPrice, getTransactionLabel, PROPERTY_TYPES } from '@/lib/constants';
+import { formatMoneyShort, formatPrice, getTransactionLabel } from '@/lib/constants';
 import type { Customer, Property } from '@/lib/types';
 
 // ---- ابزار مشترک ----
@@ -49,11 +50,6 @@ const rangeStr = (lo: number | null, hi: number | null) => {
   if (hi != null) return `تا ${formatMoneyShort(hi)}`;
   return `از ${formatMoneyShort(lo)}`;
 };
-
-const TYPE_LABELS: Record<string, string> = Object.values(PROPERTY_TYPES).flat().reduce(
-  (acc, { value, label }) => ({ ...acc, [value]: label }),
-  {} as Record<string, string>,
-);
 
 /** تابع تناسب عمومی (§۶ سند): داخل بازه 1.0 / عبور بالا و پایین با منحنی تصویب‌شده */
 function fitValue(v: number, lo: number | null, hi: number | null, negotiable: boolean): { value: number; above: boolean; below: boolean; d: number } {
