@@ -192,6 +192,9 @@ export const ROBAT_KARIM_COUNTY_NAME = 'رباط کریم';
 // Colleagues (همکاران) are stored as owner rows carrying this tag
 export const COLLEAGUE_TAG = 'همکار';
 
+// Builders (سازندگان — شریک مشارکت) are stored as owner rows carrying this tag
+export const BUILDER_TAG = 'سازنده';
+
 // Streets (خیابان) — only for the neighborhood رباط کریم
 export const ROBAT_KARIM_STREETS = [
   'بلوار امام خمینی',

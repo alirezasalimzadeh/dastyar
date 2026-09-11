@@ -10,6 +10,7 @@ import { FullPageSpinner } from '@/components/ui';
 const DashboardPage = lazy(() => import('@/pages/DashboardPage').then((m) => ({ default: m.DashboardPage })));
 const CustomersPage = lazy(() => import('@/pages/CustomersPage').then((m) => ({ default: m.CustomersPage })));
 const OwnersPage = lazy(() => import('@/pages/OwnersPage').then((m) => ({ default: m.OwnersPage })));
+const BuildersPage = lazy(() => import('@/pages/BuildersPage').then((m) => ({ default: m.BuildersPage })));
 const ColleaguesPage = lazy(() => import('@/pages/ColleaguesPage').then((m) => ({ default: m.ColleaguesPage })));
 const PropertiesPage = lazy(() => import('@/pages/PropertiesPage').then((m) => ({ default: m.PropertiesPage })));
 const MatchesPage = lazy(() => import('@/pages/MatchesPage').then((m) => ({ default: m.MatchesPage })));
@@ -69,6 +70,8 @@ function AppContent() {
         return <CustomersPage initialId={params.id as string | undefined} initialFilter={params.filter as string | undefined} onNavigate={navigate} onGoBack={goBack} />;
       case 'owners':
         return <OwnersPage initialId={params.id as string | undefined} onNavigate={navigate} />;
+      case 'builders':
+        return <BuildersPage initialId={params.id as string | undefined} onNavigate={navigate} />;
       case 'colleagues':
         return <ColleaguesPage onNavigate={navigate} />;
       case 'properties':

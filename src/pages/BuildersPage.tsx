@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback, useMemo } from 'react';
 import { Plus, Search, Building2, Phone, Clock, ArrowLeft, ArrowUpDown, Trash2, X, Pencil, User, UserCheck, ChevronDown } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth';
-import { normalizePhone, validatePhone, formatDate, timeAgo, toEnglishDigits, toPersianDigits, COLLEAGUE_TAG, BUILDER_TAG, CONTACT_SOURCES, getContactSourceLabel, stripPhoneSpaces } from '@/lib/constants';
+import { normalizePhone, validatePhone, formatDate, timeAgo, toEnglishDigits, toPersianDigits, BUILDER_TAG, CONTACT_SOURCES, getContactSourceLabel, stripPhoneSpaces } from '@/lib/constants';
 import { Badge, EmptyState, Spinner, Modal, PageHeader, Pagination, ConfirmDialog, CopyButton } from '@/components/ui';
 import type { Owner } from '@/lib/types';
 import { getColleagueRef, getOwnerSource, useColleagues, visibleOwnerTags, withColleagueRef, withOwnerSource } from '@/lib/colleagues';
@@ -13,7 +13,7 @@ import { useConsultants, consultantName } from '@/lib/consultants';
 
 const PAGE_SIZE = 20;
 
-type OwnerRow = Owner & {
+type BuilderRow = Owner & {
   properties?: { status: string }[] | null;
   calls?: { call_date: string }[] | null;
 };
@@ -27,11 +27,11 @@ const OWNER_SORTS = [
   { value: 'active_props', label: 'بیشترین فایل فعال' },
 ];
 
-export function OwnersPage({ initialId, onNavigate }: { initialId?: string; onNavigate?: (page: string, params?: Record<string, unknown>) => void }) {
+export function BuildersPage({ initialId, onNavigate }: { initialId?: string; onNavigate?: (page: string, params?: Record<string, unknown>) => void }) {
   const { user } = useAuth();
   const colleagues = useColleagues();
   const [view, setView] = useState<'list' | 'detail' | 'create'>('list');
-  const [owners, setOwners] = useState<OwnerRow[]>([]);
+  const [builders, setBuilders] = useState<BuilderRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [sortKey, setSortKey] = useState('newest');
@@ -50,19 +50,19 @@ export function OwnersPage({ initialId, onNavigate }: { initialId?: string; onNa
     setLoading(true);
     const { data } = await supabase
       .from('owners')
-      .select('*, properties(status), calls(call_date)');
-    // سازنده‌ها در بخش مستقل «سازندگان» دیده می‌شوند — از لیست مالکین حذف
-    const ownerRows = ((data as OwnerRow[]) ?? []).filter((owner) => !owner.tags?.includes(COLLEAGUE_TAG) && !owner.tags?.includes(BUILDER_TAG));
-    setOwners(ownerRows);
-    setTotal(ownerRows.length);
+      .select('*, properties(status), calls(call_date)')
+      .contains('tags', [BUILDER_TAG]);
+    const builderRows = ((data as BuilderRow[]) ?? []).filter((owner) => owner.tags?.includes(BUILDER_TAG));
+    setBuilders(builderRows);
+    setTotal(builderRows.length);
     setLoading(false);
   }, []);
 
   useEffect(() => { loadOwners(); }, [loadOwners]);
 
-  const visibleOwners = useMemo(() => {
+  const visibleBuilders = useMemo(() => {
     const q = toEnglishDigits(search.trim()).toLowerCase();
-    let rows = owners.map((o) => {
+    let rows = builders.map((o) => {
       const propsArr = o.properties ?? [];
       const activeCount = propsArr.filter((pr) => pr.status === 'active').length;
       const lastCall = (o.calls ?? []).reduce<string | null>(
@@ -90,27 +90,27 @@ export function OwnersPage({ initialId, onNavigate }: { initialId?: string; onNa
       default: rows.sort((a, b) => (b.created_at ?? '').localeCompare(a.created_at ?? ''));
     }
     return rows;
-  }, [owners, search, sortKey, sourceFilter]);
+  }, [builders, search, sortKey, sourceFilter]);
 
   const colleagueOf = (owner: Owner) => colleagues.find((colleague) => colleague.id === getColleagueRef(owner.tags));
 
   if (view === 'detail' && selectedId) {
     return (
-      <OwnerDetail
-        ownerId={selectedId}
+      <BuilderDetail
+        builderId={selectedId}
         onBack={() => { setView('list'); setSelectedId(null); }}
         onPropertyOpen={(propertyId) => onNavigate?.('properties', { id: propertyId })}
       />
     );
   }
 
-  const totalPages = Math.ceil(visibleOwners.length / PAGE_SIZE);
-  const pageItems = visibleOwners.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const totalPages = Math.ceil(visibleBuilders.length / PAGE_SIZE);
+  const pageItems = visibleBuilders.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   return (
     <div className="animate-fade-in">
-      <PageHeader title="مالکین" subtitle={`${total} مالک`} actions={
-        <button onClick={() => setShowCreate(true)} className="btn-primary"><Plus size={18} /><span className="hidden sm:inline">مالک جدید</span></button>
+      <PageHeader title="سازندگان" subtitle={`${total} سازنده`} actions={
+        <button onClick={() => setShowCreate(true)} className="btn-primary"><Plus size={18} /><span className="hidden sm:inline">سازنده جدید</span></button>
       } />
 
       {/* نوار ابزار: جستجو + فیلتر منبع + مرتب‌سازی در یک سطر */}
@@ -139,8 +139,8 @@ export function OwnersPage({ initialId, onNavigate }: { initialId?: string; onNa
 
       {loading ? (
         <div className="flex justify-center py-16"><Spinner size={32} /></div>
-      ) : visibleOwners.length === 0 ? (
-        <EmptyState icon={<Building2 size={48} />} title="مالکی یافت نشد" action={<button onClick={() => setShowCreate(true)} className="btn-primary"><Plus size={18} /> مالک جدید</button>} />
+      ) : visibleBuilders.length === 0 ? (
+        <EmptyState icon={<Building2 size={48} />} title="سازنده‌ای یافت نشد" action={<button onClick={() => setShowCreate(true)} className="btn-primary"><Plus size={18} /> سازنده جدید</button>} />
       ) : (
         <>
           <div className="space-y-3">
@@ -178,17 +178,17 @@ export function OwnersPage({ initialId, onNavigate }: { initialId?: string; onNa
         </>
       )}
 
-      {showCreate && <OwnerForm onClose={() => setShowCreate(false)} onSaved={() => { setShowCreate(false); loadOwners(); }} />}
+      {showCreate && <BuilderForm onClose={() => setShowCreate(false)} onSaved={() => { setShowCreate(false); loadOwners(); }} />}
     </div>
   );
 }
 
-function OwnerDetail({ ownerId, onBack, onPropertyOpen }: { ownerId: string; onBack: () => void; onPropertyOpen: (propertyId: string) => void }) {
+function BuilderDetail({ builderId, onBack, onPropertyOpen }: { builderId: string; onBack: () => void; onPropertyOpen: (propertyId: string) => void }) {
   const { user, profile } = useAuth();
   const colleagues = useColleagues();
   const consultants = useConsultants();
   const [claiming, setClaiming] = useState(false);
-  const [owner, setOwner] = useState<Owner | null>(null);
+  const [builder, setBuilder] = useState<Owner | null>(null);
   const [properties, setProperties] = useState<any[]>([]);
   const [calls, setCalls] = useState<any[]>([]);
   const [followups, setFollowups] = useState<any[]>([]);
@@ -201,34 +201,34 @@ function OwnerDetail({ ownerId, onBack, onPropertyOpen }: { ownerId: string; onB
   const loadDetail = useCallback(async () => {
     setLoading(true);
     const [ownerRes, propsRes, callsRes, followupsRes] = await Promise.all([
-      supabase.from('owners').select('*').eq('id', ownerId).maybeSingle(),
+      supabase.from('owners').select('*').eq('id', builderId).maybeSingle(),
       supabase.from('properties').select('id, title, transaction_type, status, sale_price, deposit_price, owner_followup_status').eq('owner_id', ownerId).order('created_at', { ascending: false }),
       supabase.from('calls').select('*, properties(title)').eq('owner_id', ownerId).order('call_date', { ascending: false }).limit(20),
       supabase.from('follow_ups').select('*, properties(title)').eq('owner_id', ownerId).order('due_date', { ascending: false }).limit(20),
     ]);
-    setOwner(ownerRes.data as Owner);
+    setBuilder(ownerRes.data as Owner);
     setProperties(propsRes.data ?? []);
     setCalls(callsRes.data ?? []);
     setFollowups(followupsRes.data ?? []);
     setLoading(false);
-  }, [ownerId]);
+  }, [builderId]);
 
   useEffect(() => { loadDetail(); }, [loadDetail]);
 
-  const handleDelete = async () => { await supabase.from('owners').delete().eq('id', ownerId); onBack(); };
+  const handleDelete = async () => { await supabase.from('owners').delete().eq('id', builderId); onBack(); };
 
   // دریافت مالک از هم‌تیمی (مثلاً انتقال مدیر): مسئولیت مالک به کاربر جاری می‌رسد
   const handleClaim = async () => {
-    if (!owner || !user) return;
+    if (!builder || !user) return;
     setClaiming(true);
     const { error } = await supabase
       .from('owners')
       .update({
         assigned_consultant_id: user.id,
-        // با دریافت مالک، منبع آشنایی هم «انتقال از مدیر» می‌شود
-        tags: withOwnerSource(owner.tags ?? [], 'manager_transfer'),
+        // با دریافت سازنده، منبع آشنایی هم «انتقال از مدیر» می‌شود
+        tags: withOwnerSource(builder.tags ?? [], 'manager_transfer'),
       })
-      .eq('id', ownerId);
+      .eq('id', builderId);
     if (error) {
       setClaiming(false);
       alert(error.message ?? 'انتقال مالک انجام نشد. لطفاً دوباره تلاش کنید.');
@@ -238,34 +238,34 @@ function OwnerDetail({ ownerId, onBack, onPropertyOpen }: { ownerId: string; onB
     await supabase.from('activities').insert({
       user_id: user.id,
       entity_type: 'owner',
-      entity_id: ownerId,
-      action: 'owner_transferred',
-      description: `مسئولیت مالک «${owner.name}» به ${myName} منتقل شد`,
+      entity_id: builderId,
+      action: 'builder_transferred',
+      description: `مسئولیت سازنده «${builder.name}» به ${myName} منتقل شد`,
     });
     setClaiming(false);
     loadDetail();
   };
 
-  if (loading || !owner) return <div className="flex justify-center py-16"><Spinner size={32} /></div>;
+  if (loading || !builder) return <div className="flex justify-center py-16"><Spinner size={32} /></div>;
 
-  const referringColleague = colleagues.find((colleague) => colleague.id === getColleagueRef(owner.tags));
-  const isMyOwner = owner.assigned_consultant_id === user?.id;
-  const ownerConsultantName = consultantName(consultants, owner.assigned_consultant_id, 'بدون انتساب');
+  const referringColleague = colleagues.find((colleague) => colleague.id === getColleagueRef(builder.tags));
+  const isMyBuilder = builder.assigned_consultant_id === user?.id;
+  const builderConsultantName = consultantName(consultants, builder.assigned_consultant_id, 'بدون انتساب');
 
   return (
     <div className="animate-fade-in space-y-4">
       <button onClick={onBack} className="detail-back"><ArrowLeft size={16} /> بازگشت</button>
       <div className="detail-hero detail-hero-blue">
-        <p className="mb-3 flex items-center gap-1.5 text-xs font-medium text-blue-600"><Building2 size={14} /> پرونده مالک</p>
+        <p className="mb-3 flex items-center gap-1.5 text-xs font-medium text-teal-600"><Building2 size={14} /> پرونده سازنده</p>
         <div className="flex items-start gap-4">
-          <div className="detail-avatar bg-blue-100 text-blue-700">{owner.name?.[0] ?? '؟'}</div>
+          <div className="detail-avatar bg-teal-100 text-teal-700">{builder.name?.[0] ?? '؟'}</div>
           <div className="flex-1">
-            <h2 className="text-xl font-extrabold text-slate-800">{owner.name}</h2>
-            <p className="text-sm text-slate-500" dir="ltr">{owner.phone}</p>
-            {owner.secondary_phone && <p className="text-xs text-slate-400" dir="ltr">{owner.secondary_phone}</p>}
-            {getOwnerSource(owner.tags) && (() => {
-              const src = getOwnerSource(owner.tags);
-              const refColleague = colleagues.find((c) => c.id === getColleagueRef(owner.tags));
+            <h2 className="text-xl font-extrabold text-slate-800">{builder.name}</h2>
+            <p className="text-sm text-slate-500" dir="ltr">{builder.phone}</p>
+            {builder.secondary_phone && <p className="text-xs text-slate-400" dir="ltr">{builder.secondary_phone}</p>}
+            {getOwnerSource(builder.tags) && (() => {
+              const src = getOwnerSource(builder.tags);
+              const refColleague = colleagues.find((c) => c.id === getColleagueRef(builder.tags));
               return (
                 <p className="mt-1 text-xs text-slate-400">
                   منبع: {src === 'colleague_transfer' && refColleague ? `${getContactSourceLabel(src)} — ${refColleague.name}` : getContactSourceLabel(src)}
@@ -273,7 +273,7 @@ function OwnerDetail({ ownerId, onBack, onPropertyOpen }: { ownerId: string; onB
               );
             })()}
           </div>
-          <Badge color={owner.status === 'active' ? 'green' : 'red'}>{owner.status === 'active' ? 'فعال' : 'غیرفعال'}</Badge>
+          <Badge color={builder.status === 'active' ? 'green' : 'red'}>{builder.status === 'active' ? 'فعال' : 'غیرفعال'}</Badge>
         </div>
         {referringColleague && (
           <div className="mt-4 rounded-lg border border-indigo-100 bg-indigo-50 p-3 text-sm text-indigo-700">
@@ -281,17 +281,17 @@ function OwnerDetail({ ownerId, onBack, onPropertyOpen }: { ownerId: string; onB
           </div>
         )}
         <div className="flex gap-2 mt-5 flex-wrap border-t border-slate-200/70 pt-4">
-          <a href={`tel:${normalizePhone(owner.phone)}`} className="btn-primary"><Phone size={16} /> تماس</a>
+          <a href={`tel:${normalizePhone(builder.phone)}`} className="btn-primary"><Phone size={16} /> تماس</a>
           <button onClick={() => setShowCallModal(true)} className="btn-secondary"><Phone size={16} /> ثبت تماس</button>
           <button onClick={() => setShowFollowupModal(true)} className="btn-secondary"><Clock size={16} /> پیگیری</button>
-          <button onClick={() => setShowEdit(true)} className="btn-secondary"><Pencil size={16} /> ویرایش مالک</button>
-          <button onClick={() => setShowDeleteConfirm(true)} className="btn-danger" aria-label="حذف مالک"><Trash2 size={16} /></button>
+          <button onClick={() => setShowEdit(true)} className="btn-secondary"><Pencil size={16} /> ویرایش سازنده</button>
+          <button onClick={() => setShowDeleteConfirm(true)} className="btn-danger" aria-label="حذف سازنده"><Trash2 size={16} /></button>
         </div>
-        {owner.notes && <p className="text-sm text-slate-600 bg-slate-50 p-3 rounded-lg mt-4">{owner.notes}</p>}
-        {visibleOwnerTags(owner.tags).length > 0 && <div className="flex flex-wrap gap-1.5 mt-3">{visibleOwnerTags(owner.tags).map((t, i) => <Badge key={i} color="blue">{t}</Badge>)}</div>}
+        {builder.notes && <p className="text-sm text-slate-600 bg-slate-50 p-3 rounded-lg mt-4">{builder.notes}</p>}
+        {visibleOwnerTags(builder.tags).filter((t) => t !== BUILDER_TAG).length > 0 && <div className="flex flex-wrap gap-1.5 mt-3">{visibleOwnerTags(builder.tags).filter((t) => t !== BUILDER_TAG).map((t, i) => <Badge key={i} color="teal">{t}</Badge>)}</div>}
       </div>
 
-      {!isMyOwner && (
+      {!isMyBuilder && (
         <div className="card flex flex-col gap-3 border-indigo-200 bg-indigo-50/60 p-4 animate-fade-in sm:flex-row sm:items-center">
           <div className="flex items-start gap-3">
             <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-indigo-100 text-indigo-600">
@@ -299,7 +299,7 @@ function OwnerDetail({ ownerId, onBack, onPropertyOpen }: { ownerId: string; onB
             </span>
             <div>
               <p className="text-sm font-bold text-indigo-900">
-                {owner.assigned_consultant_id ? `این مالک منتسب به «${ownerConsultantName}» است` : 'این مالک هنوز به کسی انتساب نشده است'}
+                {builder.assigned_consultant_id ? `این سازنده منتسب به «${builderConsultantName}» است` : 'این سازنده هنوز به کسی انتساب نشده است'}
               </p>
               <p className="mt-0.5 text-xs text-indigo-700/70">
                 اگر این مالک از سمت مدیر یا هم‌تیمی به شما داده شده، با «مال من است» مسئولیت آن را بر عهده بگیرید.
@@ -313,7 +313,7 @@ function OwnerDetail({ ownerId, onBack, onPropertyOpen }: { ownerId: string; onB
       )}
 
       <div className="detail-section !p-0 overflow-hidden">
-        <h3 className="detail-section-title !mb-0 px-5 py-4"><Building2 size={17} className="text-blue-500" /> املاک مالک <span className="mr-auto text-xs font-normal text-slate-400">{properties.length} ملک</span></h3>
+        <h3 className="detail-section-title !mb-0 px-5 py-4"><Building2 size={17} className="text-teal-500" /> فایل‌های سازنده <span className="mr-auto text-xs font-normal text-slate-400">{properties.length} فایل</span></h3>
         {properties.length > 0 ? (
           <div className="divide-y divide-slate-100">
             {properties.map((p) => (
@@ -342,34 +342,34 @@ function OwnerDetail({ ownerId, onBack, onPropertyOpen }: { ownerId: string; onB
       <div className="detail-section !p-0 overflow-hidden">
         <h3 className="detail-section-title !mb-0 px-5 py-4"><Phone size={17} className="text-blue-500" /> تماس‌ها <span className="mr-auto text-xs font-normal text-slate-400">{calls.length} تماس</span></h3>
         {calls.length > 0 ? (
-          <div className="space-y-3 p-3">{calls.map((call) => <CallRecordCard key={call.id} call={call} targetName={owner.name} />)}</div>
+          <div className="space-y-3 p-3">{calls.map((call) => <CallRecordCard key={call.id} call={call} targetName={builder.name} />)}</div>
         ) : <EmptyState icon={<Phone size={36} />} title="تماسی ثبت نشده" />}
       </div>
 
       <div className="detail-section !p-0 overflow-hidden">
         <h3 className="detail-section-title !mb-0 px-5 py-4"><Clock size={17} className="text-amber-500" /> پیگیری‌ها <span className="mr-auto text-xs font-normal text-slate-400">{followups.length} مورد</span></h3>
-        {followups.length > 0 ? <div className="space-y-3 p-3">{followups.map((item) => <FollowupRecordCard key={item.id} followup={item} targetName={owner.name} onChanged={loadDetail} />)}</div> : <EmptyState icon={<Clock size={36} />} title="پیگیری‌ای ثبت نشده" />}
+        {followups.length > 0 ? <div className="space-y-3 p-3">{followups.map((item) => <FollowupRecordCard key={item.id} followup={item} targetName={builder.name} onChanged={loadDetail} />)}</div> : <EmptyState icon={<Clock size={36} />} title="پیگیری‌ای ثبت نشده" />}
       </div>
 
       {showCallModal && (
-        <CallFormModal ownerId={ownerId} ownerName={owner.name} allowPropertySelection onClose={() => setShowCallModal(false)} onSaved={loadDetail} />
+        <CallFormModal ownerId={builderId} ownerName={builder.name} allowPropertySelection onClose={() => setShowCallModal(false)} onSaved={loadDetail} />
       )}
       {showFollowupModal && (
-        <FollowupFormModal ownerId={ownerId} ownerName={owner.name} allowPropertySelection onClose={() => setShowFollowupModal(false)} onSaved={loadDetail} />
+        <FollowupFormModal ownerId={builderId} ownerName={builder.name} allowPropertySelection onClose={() => setShowFollowupModal(false)} onSaved={loadDetail} />
       )}
       {showEdit && (
-        <OwnerForm
-          owner={owner}
+        <BuilderForm
+          owner={builder}
           onClose={() => setShowEdit(false)}
           onSaved={() => { setShowEdit(false); loadDetail(); }}
         />
       )}
-      <ConfirmDialog open={showDeleteConfirm} onClose={() => setShowDeleteConfirm(false)} onConfirm={handleDelete} title="حذف مالک" message="آیا از حذف این مالک مطمئن هستید؟" confirmLabel="حذف" danger />
+      <ConfirmDialog open={showDeleteConfirm} onClose={() => setShowDeleteConfirm(false)} onConfirm={handleDelete} title="حذف سازنده" message="آیا از حذف این سازنده مطمئن هستید؟" confirmLabel="حذف" danger />
     </div>
   );
 }
 
-function OwnerForm({ owner, onClose, onSaved }: { owner?: Owner; onClose: () => void; onSaved: () => void }) {
+function BuilderForm({ owner, onClose, onSaved }: { owner?: Owner; onClose: () => void; onSaved: () => void }) {
   const { user, profile } = useAuth();
   const colleagues = useColleagues();
   const consultants = useConsultants();
@@ -398,7 +398,10 @@ function OwnerForm({ owner, onClose, onSaved }: { owner?: Owner; onClose: () => 
       phone: normalizePhone(phone),
       secondary_phone: secondaryPhone ? normalizePhone(secondaryPhone) : null,
       notes: notes.trim() || null,
-      tags: withColleagueRef(withOwnerSource(tags ? tags.split('،').map((tag) => tag.trim()).filter(Boolean) : [], source), colleagueId),
+      // ردیف سازنده همیشه تگ «سازنده» را دارد — همان‌طور که همکاران تگ «همکار» دارند
+      tags: withColleagueRef(withOwnerSource(tags ? tags.split('،').map((tag) => tag.trim()).filter(Boolean) : [], source), colleagueId)
+        .filter((tag) => tag !== BUILDER_TAG)
+        .concat(BUILDER_TAG),
       status,
       // مالک جدید به ثبت‌کننده انتساب می‌شود؛ مالک موجود، به مشاور مسئول انتخابی
       assigned_consultant_id: isEditing ? editingConsultantId || user?.id : user?.id,
@@ -415,15 +418,15 @@ function OwnerForm({ owner, onClose, onSaved }: { owner?: Owner; onClose: () => 
       user_id: user?.id,
       entity_type: 'owner',
       entity_id: data.id,
-      action: isEditing ? 'owner_updated' : 'owner_created',
-      description: isEditing ? `مالک ${name} ویرایش شد` : `مالک جدید ${name} ثبت شد`,
+      action: isEditing ? 'builder_updated' : 'builder_created',
+      description: isEditing ? `سازنده ${name} ویرایش شد` : `سازنده جدید ${name} ثبت شد`,
     });
     setSaving(false);
     onSaved();
   };
 
   return (
-    <Modal open={true} onClose={onClose} title={isEditing ? 'ویرایش مالک' : 'مالک جدید'}>
+    <Modal open={true} onClose={onClose} title={isEditing ? 'ویرایش سازنده' : 'سازنده جدید'}>
       <div className="space-y-4">
         {error && <div className="text-sm text-red-500 bg-red-50 px-3 py-2 rounded-lg">{error}</div>}
         <div><label className="label">نام *</label><input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="نام و نام خانوادگی" /></div>
@@ -436,7 +439,7 @@ function OwnerForm({ owner, onClose, onSaved }: { owner?: Owner; onClose: () => 
               : <><span>همکار معرف</span> <span className="font-normal text-slate-400">(اختیاری)</span></>}
           </label>
           <select className="input" value={colleagueId} onChange={(e) => setColleagueId(e.target.value)}>
-            <option value="">{source === 'colleague_transfer' ? 'همکار را انتخاب کنید' : 'این مالک متعلق به خودم است'}</option>
+            <option value="">{source === 'colleague_transfer' ? 'همکار را انتخاب کنید' : 'این سازنده متعلق به خودم است'}</option>
             {colleagues.map((colleague) => (
               <option key={colleague.id} value={colleague.id} disabled={colleague.status === 'inactive' && colleague.id !== colleagueId}>
                 {colleague.name}{colleague.agency_name ? ` — ${colleague.agency_name}` : ''}{colleague.status === 'inactive' ? ' (غیرفعال)' : ''}
@@ -458,7 +461,7 @@ function OwnerForm({ owner, onClose, onSaved }: { owner?: Owner; onClose: () => 
         <div><label className="label">یادداشت</label><textarea className="input min-h-[60px]" value={notes} onChange={(e) => setNotes(e.target.value)} /></div>
         {isEditing && (
           <div>
-            <label className="label">مشاور مسئول مالک</label>
+            <label className="label">مشاور مسئول سازنده</label>
             <select className="input" value={editingConsultantId ?? user?.id ?? ''} onChange={(e) => setEditingConsultantId(e.target.value || null)}>
               {(user?.id
                 ? [
@@ -481,7 +484,7 @@ function OwnerForm({ owner, onClose, onSaved }: { owner?: Owner; onClose: () => 
               )}
             </select>
             <p className="mt-1 text-xs text-slate-400">
-              مالک به این منتقل شده یا باید منتقل شود؛ فایل‌های او در «فایل‌های من» این مشاور دیده می‌شوند.
+              سازنده به این منتقل شده یا باید منتقل شود؛ فایل‌های او در «فایل‌های من» این مشاور دیده می‌شوند.
             </p>
           </div>
         )}

@@ -32,6 +32,7 @@ import type { Customer } from '@/lib/types';
 import { getFieldSections, getFieldLabel, type FieldDef } from '@/lib/propertyFields';
 import { POWER_LABELS, GAS_LABELS } from '@/lib/shopUtils';
 import { useColleagues } from '@/lib/colleagues';
+import { useBuilders, usePlainOwners, useOwnersByIds } from '@/lib/builders';
 import { useConsultants, consultantName } from '@/lib/consultants';
 import { CallFormModal, CallRecordCard } from '@/components/calls';
 import { FollowupFormModal, FollowupRecordCard } from '@/components/followups';
@@ -648,6 +649,9 @@ export function CustomersPage({ initialId, initialFilter, onNavigate, onGoBack }
 function CustomerDetail({ customerId, onBack, onEdit, onNavigate }: { customerId: string; onBack: () => void; onEdit: () => void; onNavigate?: (page: string, params?: Record<string, unknown>) => void }) {
   const colleagues = useColleagues();
   const consultants = useConsultants();
+  // طرف مقابل مشارکت (سازنده/مالک) — hook باید قبل از early-return صدا زده شود
+  const [counterpartyId, setCounterpartyId] = useState('');
+  const counterpartyMap = useOwnersByIds([counterpartyId || null]);
   // نقشهٔ id شهر → نام، برای نمایش شهرهای موردنظر
   const [cityNames, setCityNames] = useState<Record<string, string>>({});
   useEffect(() => {
@@ -678,6 +682,12 @@ function CustomerDetail({ customerId, onBack, onEdit, onNavigate }: { customerId
       supabase.from('property_matches').select('*, properties(id, title, transaction_type, category, sale_price, deposit_price, monthly_rent, land_area, building_area, bedrooms, parking, elevator)').eq('customer_id', customerId).order('score', { ascending: false }).limit(5),
     ]);
     setCustomer(custRes.data as Customer);
+    const cust = custRes.data as Customer | null;
+    setCounterpartyId(
+      cust?.transaction_intention === 'partnership'
+        ? ((cust.property_preferences as Record<string, unknown> | null)?.counterparty_id as string) ?? ''
+        : '',
+    );
     setCalls(callsRes.data ?? []);
     setFollowups(fuRes.data ?? []);
     setActivities(actRes.data ?? []);
@@ -701,6 +711,10 @@ function CustomerDetail({ customerId, onBack, onEdit, onNavigate }: { customerId
   const customerPreferences = customer.property_preferences as Record<string, unknown> | null;
   const custAddress = (customerPreferences?.address as string) || customer.address || '';
   const referringColleague = colleagues.find((colleague) => colleague.id === customerPreferences?.colleague_id);
+  const counterparty = counterpartyMap[counterpartyId];
+  const counterpartyLabel = customer.transaction_intention === 'partnership'
+    ? (customer.transaction_role === 'owner' ? 'سازندهٔ مشارکت' : customer.transaction_role === 'builder' ? 'مالک مشارکت' : null)
+    : null;
 
   const temp = getTemperatureInfo(customer.temperature);
   const status = getStatusInfo(CUSTOMER_STATUSES, customer.status);
@@ -803,6 +817,9 @@ function CustomerDetail({ customerId, onBack, onEdit, onNavigate }: { customerId
           <div className="detail-info-grid">
             <InfoField label="نوع معامله" value={customer.transaction_intention ? getTransactionLabel(customer.transaction_intention) : '-'} />
             <InfoField label="نقش در معامله" value={customer.transaction_role ? (ROLE_LABELS[customer.transaction_role] ?? customer.transaction_role) : '-'} />
+            {counterpartyLabel && (
+              <InfoField label={counterpartyLabel} value={counterparty ? `${counterparty.name} — ${counterparty.phone}` : 'ثبت نشده'} />
+            )}
             <InfoField label="دسته‌بندی" value={customer.preferred_category ? getCategoryLabel(customer.preferred_category) : '-'} />
             <InfoField label="انواع ملک مورد نظر" value={customer.preferred_property_types?.length
               ? customer.preferred_property_types.map((pt) => PROPERTY_TYPES[customer.preferred_category!]?.find((p) => p.value === pt)?.label ?? pt).join('، ')
@@ -1159,6 +1176,8 @@ function StepSummary({ items }: { items: { label: string; value: string }[] }) {
 function CustomerForm({ customerId, onBack, onSaved }: { customerId?: string; onBack: () => void; onSaved: () => void }) {
   const { user } = useAuth();
   const colleagues = useColleagues();
+  const builders = useBuilders();
+  const plainOwners = usePlainOwners();
   const isEditing = Boolean(customerId);
   const [step, setStep] = useState(0);
   const [saving, setSaving] = useState(false);
@@ -1182,6 +1201,8 @@ function CustomerForm({ customerId, onBack, onSaved }: { customerId?: string; on
   const [location, setLocation] = useState({ county_id: '', neighborhood_id: '' });
   const [address, setAddress] = useState('');
   const [colleagueId, setColleagueId] = useState('');
+  // طرف مقابل در مشارکت: مالک ← سازنده / سازنده ← مالک
+  const [counterpartyId, setCounterpartyId] = useState('');
   const [typePrefs, setTypePrefs] = useState<Record<string, Record<string, string | boolean>>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
 
@@ -1224,6 +1245,7 @@ function CustomerForm({ customerId, onBack, onSaved }: { customerId?: string; on
       });
       setAddress((preferences.address as string) ?? data.address ?? '');
       setColleagueId((preferences.colleague_id as string) ?? '');
+      setCounterpartyId((preferences.counterparty_id as string) ?? '');
       setTypePrefs(savedTypePrefs);
       setEditingStatus((data.status as Customer['status']) ?? 'active');
       setEditingConsultantId(data.assigned_consultant_id ?? null);
@@ -1290,6 +1312,9 @@ function CustomerForm({ customerId, onBack, onSaved }: { customerId?: string; on
     }
     if (colleagueId) {
       propertyPreferences.colleague_id = colleagueId;
+    }
+    if (form.transaction_intention === 'partnership' && counterpartyId) {
+      propertyPreferences.counterparty_id = counterpartyId;
     }
     for (const type of form.preferred_property_types) {
       const prefs = typePrefs[type] ?? {};
@@ -1432,7 +1457,7 @@ function CustomerForm({ customerId, onBack, onSaved }: { customerId?: string; on
                 {TRANSACTION_TYPES.map((t) => (
                   <button
                     key={t.value}
-                    onClick={() => setForm({ ...form, transaction_intention: t.value })}
+                    onClick={() => { setForm({ ...form, transaction_intention: t.value, transaction_role: '' }); setCounterpartyId(''); }}
                     className={`p-3 rounded-lg border-2 text-sm font-medium transition-all ${
                       form.transaction_intention === t.value ? 'border-slate-900 bg-slate-50' : 'border-slate-200 hover:border-slate-300'
                     }`}
@@ -1449,7 +1474,7 @@ function CustomerForm({ customerId, onBack, onSaved }: { customerId?: string; on
                   {(TRANSACTION_TYPES.find(t => t.value === form.transaction_intention)?.roles ?? []).map((r: string) => (
                     <button
                       key={r}
-                      onClick={() => setForm({ ...form, transaction_role: r })}
+                      onClick={() => { setForm({ ...form, transaction_role: r }); setCounterpartyId(''); }}
                       className={`p-3 rounded-lg border-2 text-sm font-medium transition-all ${
                         form.transaction_role === r ? 'border-slate-900 bg-slate-50' : 'border-slate-200 hover:border-slate-300'
                       }`}
@@ -1458,6 +1483,34 @@ function CustomerForm({ customerId, onBack, onSaved }: { customerId?: string; on
                     </button>
                   ))}
                 </div>
+              </div>
+            )}
+            {form.transaction_intention === 'partnership' && form.transaction_role === 'owner' && (
+              <div>
+                <label className="label">سازندهٔ مشارکت <span className="font-normal text-slate-400">(اختیاری)</span></label>
+                <select className="input" value={counterpartyId} onChange={(e) => setCounterpartyId(e.target.value)}>
+                  <option value="">سازنده را انتخاب کنید</option>
+                  {builders.map((builder) => (
+                    <option key={builder.id} value={builder.id} disabled={builder.status !== 'active' && builder.id !== counterpartyId}>
+                      {builder.name} — {builder.phone}{builder.status !== 'active' ? ' (غیرفعال)' : ''}
+                    </option>
+                  ))}
+                </select>
+                {builders.length === 0 && <p className="mt-1.5 text-xs text-amber-600">هنوز سازنده‌ای ثبت نشده؛ از بخش «سازندگان» ثبت کنید.</p>}
+              </div>
+            )}
+            {form.transaction_intention === 'partnership' && form.transaction_role === 'builder' && (
+              <div>
+                <label className="label">مالک مشارکت <span className="font-normal text-slate-400">(اختیاری)</span></label>
+                <select className="input" value={counterpartyId} onChange={(e) => setCounterpartyId(e.target.value)}>
+                  <option value="">مالک را انتخاب کنید</option>
+                  {plainOwners.map((owner) => (
+                    <option key={owner.id} value={owner.id} disabled={owner.status !== 'active' && owner.id !== counterpartyId}>
+                      {owner.name} — {owner.phone}{owner.status !== 'active' ? ' (غیرفعال)' : ''}
+                    </option>
+                  ))}
+                </select>
+                {plainOwners.length === 0 && <p className="mt-1.5 text-xs text-amber-600">هنوز مالکی ثبت نشده؛ از بخش «مالکین» ثبت کنید.</p>}
               </div>
             )}
           </>
