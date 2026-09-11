@@ -1,4 +1,5 @@
-import { Suspense, lazy, useEffect, useState } from 'react';
+import { Component, Suspense, lazy, useState, type ReactNode } from 'react';
+import { AlertTriangle } from 'lucide-react';
 import { AuthProvider, useAuth } from '@/lib/auth';
 import { AuthPage } from '@/pages/AuthPage';
 import { Layout } from '@/components/Layout';
@@ -26,9 +27,14 @@ function AppContent() {
   const [params, setParams] = useState<Record<string, unknown>>({});
   // تاریخچهٔ ناوبری: برای اینکه «بازگشت» کاربر را به همان صفحه‌ای برگرداند که از آن آمده
   const [history, setHistory] = useState<{ page: string; params: Record<string, unknown> }[]>([]);
+  // هر ناوبری، صفحهٔ مقصد را تازه (remount) می‌کند — تا «رفتن به همان صفحه‌ای
+  // که روی آن هستیم» (مثلاً دکمهٔ فایل‌ها در حالی که در جزئیات فایلیم)
+  // به نمای تازهٔ فهرست برسد و نه بی‌اثر بماند
+  const [navSeq, setNavSeq] = useState(0);
 
   const navigate = (newPage: string, newParams: Record<string, unknown> = {}) => {
     setHistory((h) => [...h, { page, params }]);
+    setNavSeq((s) => s + 1);
     setPage(newPage);
     setParams(newParams);
   };
@@ -89,58 +95,57 @@ function AppContent() {
   };
 
   return (
-    <>
-      <OverflowDebugger />
-      <Layout currentPage={page} onNavigate={navigate}>
+    <Layout currentPage={page} onNavigate={navigate}>
+      <PageErrorBoundary key={navSeq} onRetry={() => setNavSeq((s) => s + 1)}>
         <Suspense fallback={<FullPageSpinner />}>
           {renderPage()}
         </Suspense>
-      </Layout>
-    </>
+      </PageErrorBoundary>
+    </Layout>
   );
 }
 
-/** ابزار موقتِ تشخیص: اگر چیزی عرض صفحه را بیش از عرض گوشی کند،
- *  عناصر مقصر را در بنر قرمز بالای صفحه فهرست می‌کند (فقط وقتی overflow هست).
- *  بعد از عیب‌یابی حذف می‌شود. */
-function OverflowDebugger() {
-  useEffect(() => {
-    const check = () => {
-      const vw = window.innerWidth;
-      const sw = document.documentElement.scrollWidth;
-      let el = document.getElementById('__overflow_debug') as HTMLDivElement | null;
-      if (sw <= vw + 1) {
-        el?.remove();
-        return;
-      }
-      const bad: string[] = [];
-      document.querySelectorAll('body *').forEach((node) => {
-        const target = node as HTMLElement;
-        const r = target.getBoundingClientRect();
-        if (r.width > 0 && (r.left < -1 || r.right > vw + 1)) {
-          const cls = (typeof target.className === 'string' ? target.className : '')
-            .trim().split(/\s+/).slice(0, 5).join('.');
-          const text = target.childElementCount === 0 ? (target.textContent ?? '').trim().slice(0, 30) : '';
-          bad.push(`${target.tagName.toLowerCase()}${cls ? `.${cls}` : ''} left=${Math.round(r.left)} right=${Math.round(r.right)} w=${Math.round(r.width)}${text ? ` «${text}»` : ''}`);
-        }
-      });
-      if (!el) {
-        el = document.createElement('div');
-        el.id = '__overflow_debug';
-        el.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:2147483647;background:#b91c1c;color:#fff;font-family:monospace;font-size:10px;line-height:1.6;padding:8px 10px;white-space:pre-wrap;word-break:break-all;max-height:45vh;overflow:auto;direction:ltr;text-align:left;border-bottom:2px solid #7f1d1d;';
-        document.body.appendChild(el);
-      }
-      el.textContent = `OVERFLOW: viewport=${vw}px document=${sw}px (excess=${sw - vw}px)\noffending elements (top 30):\n` + bad.slice(0, 30).join('\n');
-    };
-    const first = window.setTimeout(check, 800);
-    const timer = window.setInterval(check, 1500);
-    return () => {
-      window.clearTimeout(first);
-      window.clearInterval(timer);
-      document.getElementById('__overflow_debug')?.remove();
-    };
-  }, []);
-  return null;
+/** اگر رندر صفحه خطا بدهد (مثلاً خطای شبکه/چانک در گوشی)، به‌جای صفحهٔ
+ *  سفید، پیام + دکمهٔ تلاش دوباره نشان داده شود و منوها دست‌نخورده بمانند. */
+class PageErrorBoundary extends Component<
+  { children: ReactNode; onRetry: () => void },
+  { error: Error | null }
+> {
+  state: { error: Error | null } = { error: null };
+
+  static getDerivedStateFromError(error: Error) {
+    return { error };
+  }
+
+  componentDidCatch(error: Error) {
+    console.error('[page-error]', error);
+  }
+
+  render() {
+    if (this.state.error) {
+      return (
+        <div className="card mx-auto max-w-md space-y-3 p-6 text-center">
+          <AlertTriangle size={32} className="mx-auto text-red-500" />
+          <h2 className="text-sm font-bold text-slate-800">خطا در نمایش این صفحه</h2>
+          <p className="text-xs leading-6 text-slate-500">ممکن است مشکل موقت شبکه یا بارگذاری باشد. یک بار دیگر امتحان کن.</p>
+          <p dir="ltr" className="break-words rounded-lg bg-slate-50 p-2 text-left font-mono text-[10px] text-slate-400">
+            {String(this.state.error?.message ?? this.state.error)}
+          </p>
+          <button
+            type="button"
+            className="btn-primary mx-auto"
+            onClick={() => {
+              this.setState({ error: null });
+              this.props.onRetry();
+            }}
+          >
+            تلاش دوباره
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
 }
 
 function App() {
