@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback, useMemo, type ComponentType, type Rea
 import {
   Target, ArrowLeft, Zap, Search, TrendingUp, Check, ChevronDown, ChevronUp,
   Building2, Users, Flame, AlertTriangle, Info, Minus, X, Ruler, BedDouble,
-  Home, Wallet, ShieldCheck, Star,
+  Home, Wallet, ShieldCheck, Star, CheckCircle2, Handshake,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { scoreMatch, rankMatches, persistMatches, type ScoredMatchOutput, type ScoredComponent } from '@/lib/matchingEngine';
@@ -281,26 +281,65 @@ function ComponentMeters({ components }: { components: ScoredComponent[] }) {
 
 interface ReasonLine { icon: 'ok' | 'warn' | 'info'; text: string }
 
-function ReasonList({ title, lines }: { title: string; lines: ReasonLine[] }) {
+const REASON_TONES = {
+  ok: {
+    panel: 'bg-green-50/60 border-green-200/70',
+    header: 'text-green-800',
+    count: 'bg-white/80 text-green-700 border-green-200',
+    btn: 'text-green-700 hover:text-green-900',
+    Icon: CheckCircle2,
+  },
+  warn: {
+    panel: 'bg-amber-50/70 border-amber-200/70',
+    header: 'text-amber-800',
+    count: 'bg-white/80 text-amber-700 border-amber-200',
+    btn: 'text-amber-700 hover:text-amber-900',
+    Icon: Handshake,
+  },
+  mismatch: {
+    panel: 'bg-rose-50/60 border-rose-200/70',
+    header: 'text-rose-800',
+    count: 'bg-white/80 text-rose-700 border-rose-200',
+    btn: 'text-rose-700 hover:text-rose-900',
+    Icon: AlertTriangle,
+  },
+} as const;
+type ReasonTone = keyof typeof REASON_TONES;
+
+function ReasonList({ tone, title, lines }: { tone: ReasonTone; title: string; lines: ReasonLine[] }) {
   const [expanded, setExpanded] = useState(false);
+  const t = REASON_TONES[tone];
+  const HeaderIcon = t.Icon;
   const visible = expanded ? lines : lines.slice(0, 8);
+  const rowStyle = (icon: ReasonLine['icon']): { box: string; text: string } => {
+    if (icon === 'ok') return { box: 'bg-white text-green-600 border border-green-200', text: 'text-green-900/80' };
+    if (icon === 'warn') return tone === 'warn'
+      ? { box: 'bg-white text-amber-600 border border-amber-200', text: 'text-amber-900/90 font-medium' }
+      : { box: 'bg-white text-rose-500 border border-rose-200', text: 'text-rose-900/85 font-medium' };
+    return { box: 'bg-white text-slate-400 border border-slate-200', text: 'text-slate-500' };
+  };
   return (
-    <div className="mt-3 pt-3 border-t border-slate-100">
-      <p className="text-[11px] font-bold text-slate-400 mb-1.5 flex items-center gap-1">
-        <Info size={12} /> {title}
-      </p>
+    <div className={`rounded-xl border p-3 ${t.panel}`}>
+      <div className="flex items-center gap-1.5 mb-2">
+        <HeaderIcon size={13} className={t.header} />
+        <span className={`text-[11px] font-extrabold ${t.header}`}>{title}</span>
+        <span className={`text-[10px] font-bold rounded-full border px-1.5 leading-4 ${t.count}`}>{formatPrice(lines.length)}</span>
+      </div>
       <div className="space-y-1.5">
-        {visible.map((l, i) => (
-          <div key={i} className="flex items-start gap-2 text-xs leading-5">
-            {l.icon === 'ok' && <span className="mt-0.5 w-4 h-4 rounded-full bg-green-50 text-green-600 flex items-center justify-center flex-shrink-0"><Check size={10} /></span>}
-            {l.icon === 'warn' && <span className="mt-0.5 w-4 h-4 rounded-full bg-orange-50 text-orange-500 flex items-center justify-center flex-shrink-0"><AlertTriangle size={9} /></span>}
-            {l.icon === 'info' && <span className="mt-0.5 w-4 h-4 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center flex-shrink-0"><Info size={9} /></span>}
-            <span className={l.icon === 'warn' ? 'text-orange-700 font-medium' : l.icon === 'info' ? 'text-slate-400' : 'text-slate-600'}>{l.text}</span>
-          </div>
-        ))}
+        {visible.map((l, i) => {
+          const s = rowStyle(l.icon);
+          return (
+            <div key={i} className="flex items-start gap-2 text-xs leading-5">
+              <span className={`mt-0.5 w-4 h-4 rounded-full flex items-center justify-center flex-shrink-0 ${s.box}`}>
+                {l.icon === 'ok' ? <Check size={10} /> : l.icon === 'warn' ? <AlertTriangle size={9} /> : <Info size={9} />}
+              </span>
+              <span className={s.text}>{l.text}</span>
+            </div>
+          );
+        })}
       </div>
       {lines.length > 8 && (
-        <button onClick={() => setExpanded(!expanded)} className="flex items-center gap-1 text-[11px] text-slate-400 mt-2 hover:text-slate-600 transition-colors">
+        <button onClick={() => setExpanded(!expanded)} className={`flex items-center gap-1 text-[11px] mt-2 transition-colors ${t.btn}`}>
           {expanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
           {expanded ? 'بستن' : `${formatPrice(lines.length - 8)} مورد دیگر`}
         </button>
@@ -421,11 +460,11 @@ function MatchCard({ entry, customer, property, geo }: {
 
         {/* توضیح اجباری: دلایل تطبیق + موارد قابل مذاکره + دلایل عدم تطبیق */}
         {matchLines.length > 0 || finalGapLines.length > 0 ? (
-          <>
-            {matchLines.length > 0 && <ReasonList title="دلایل تطبیق" lines={matchLines} />}
-            {negotiableLines.length > 0 && <ReasonList title="موارد قابل مذاکره" lines={negotiableLines} />}
-            {mismatchLines.length > 0 && <ReasonList title="دلایل عدم تطبیق" lines={mismatchLines} />}
-          </>
+          <div className="mt-3 space-y-2">
+            {matchLines.length > 0 && <ReasonList tone="ok" title="دلایل تطبیق" lines={matchLines} />}
+            {negotiableLines.length > 0 && <ReasonList tone="warn" title="موارد قابل مذاکره" lines={negotiableLines} />}
+            {mismatchLines.length > 0 && <ReasonList tone="mismatch" title="دلایل عدم تطبیق" lines={mismatchLines} />}
+          </div>
         ) : (
           <div className="mt-3 pt-3 border-t border-slate-100">
             <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 text-slate-500 border border-slate-200 px-3 py-1 text-[11px] font-medium">
