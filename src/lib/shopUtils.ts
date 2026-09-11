@@ -32,6 +32,7 @@ export const GAS_OPTIONS = [
   { value: 'g25', label: 'G25 (تا ۲۵ مترمکعب/ساعت)' },
   { value: 'g40', label: 'G40 (تا ۴۰ مترمکعب/ساعت)' },
   { value: 'g63', label: 'G63 و بیشتر (صنعتی)' },
+  { value: 'lb', label: 'گاز به پوند (مصرف صنعتی سنگین)' },
 ] as const;
 
 // انواع ملکی که برق ۳‌فاز / گاز تجاری برای‌شان معنی دارد
@@ -64,6 +65,7 @@ export const GAS_RANKS: Record<string, number> = {
   g25: 6,
   g40: 7,
   g63: 8,
+  lb: 9,
 };
 
 const SHOP_POWER_MARKER = /(?:^|\n)\[shop_power:([a-z0-9_]+)\](?=\n|$)/;

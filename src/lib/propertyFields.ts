@@ -482,7 +482,7 @@ function specsOfficeApartment(role: string): FieldSection {
   };
 }
 
-function specsFactory(role: string): FieldSection {
+function specsFactory(role: string, withStructure = false): FieldSection {
   const isOwner = isOwnerRole(role);
   return {
     title: 'مشخصات ملک',
@@ -498,13 +498,13 @@ function specsFactory(role: string): FieldSection {
           { key: 'max_land_area', label: 'حداکثر متراژ زمین', type: 'text', placeholder: '5000', ltr: true },
           { key: 'min_hall_area', label: 'حداقل متراژ سالن', type: 'text', placeholder: '300', ltr: true },
           { key: 'road_width', label: 'حداقل عرض گذر', type: 'text', placeholder: '12', ltr: true },
-          { key: 'structure_type', label: 'نوع سازه مورد نظر', type: 'select', options: structureTypeOptions },
+          ...(withStructure ? [] : [{ key: 'structure_type', label: 'نوع سازه مورد نظر', type: 'select', options: structureTypeOptions }]),
         ],
   };
 }
 
 // ---- Floor preference section (role-aware) ----
-function floorPreferenceSection(role: string): FieldSection {
+function floorPreferenceSection(role: string, withStructure = false): FieldSection {
   const isOwner = isOwnerRole(role);
   if (isOwner) {
     return {
@@ -515,8 +515,9 @@ function floorPreferenceSection(role: string): FieldSection {
     };
   }
   return {
-    title: 'ترجیح طبقه',
+    title: withStructure ? 'سازه و طبقه' : 'ترجیح طبقه',
     fields: [
+      ...(withStructure ? [{ key: 'structure_type', label: 'نوع سازه مورد نظر', type: 'select', options: structureTypeOptions }] : []),
       { key: 'floor_preference', label: 'ترجیح طبقه', type: 'select', options: floorPreferenceOptions },
     ],
   };
@@ -595,7 +596,7 @@ export function getFieldSections(
 
     // ---- Industrial ----
     case 'factory':
-      return [locationSection, finSection, specsFactory(role), floorPreferenceSection(role), powerGasSection(role), { title: 'امکانات', fields: featuresFactory(role) }];
+      return [locationSection, finSection, specsFactory(role, true), floorPreferenceSection(role, true), powerGasSection(role), { title: 'امکانات', fields: featuresFactory(role) }];
 
     case 'workshop':
       return [locationSection, finSection, specsFactory(role), powerGasSection(role), { title: 'امکانات', fields: featuresFactory(role) }];
