@@ -11,20 +11,31 @@
 
 export const POWER_OPTIONS = [
   { value: 'single', label: 'تک‌فاز' },
+  { value: 'three_32', label: '۳‌فاز ۳۲ آمپر' },
+  { value: 'three_50', label: '۳‌فاز ۵۰ آمپر' },
   { value: 'three_63', label: '۳‌فاز ۶۳ آمپر' },
+  { value: 'three_80', label: '۳‌فاز ۸۰ آمپر' },
   { value: 'three_100', label: '۳‌فاز ۱۰۰ آمپر' },
   { value: 'three_125', label: '۳‌فاز ۱۲۵ آمپر' },
   { value: 'three_160', label: '۳‌فاز ۱۶۰ آمپر' },
-  { value: 'three_200', label: '۳‌فاز ۲۰۰ آمپر و بیشتر' },
+  { value: 'three_200', label: '۳‌فاز ۲۰۰ آمپر' },
+  { value: 'three_250', label: '۳‌فاز ۲۵۰ آمپر' },
+  { value: 'three_300', label: '۳‌فاز ۳۰۰ آمپر و بیشتر' },
 ] as const;
 
 export const GAS_OPTIONS = [
+  { value: 'g2', label: 'G2 (تا ۲ مترمکعب/ساعت)' },
   { value: 'g4', label: 'G4 (تا ۴ مترمکعب/ساعت)' },
   { value: 'g6', label: 'G6 (تا ۶ مترمکعب/ساعت)' },
   { value: 'g10', label: 'G10 (تا ۱۰ مترمکعب/ساعت)' },
   { value: 'g16', label: 'G16 (تا ۱۶ مترمکعب/ساعت)' },
-  { value: 'g25', label: 'G25 و بیشتر (صنعتی)' },
+  { value: 'g25', label: 'G25 (تا ۲۵ مترمکعب/ساعت)' },
+  { value: 'g40', label: 'G40 (تا ۴۰ مترمکعب/ساعت)' },
+  { value: 'g63', label: 'G63 و بیشتر (صنعتی)' },
 ] as const;
+
+// انواع ملکی که برق ۳‌فاز / گاز تجاری برای‌شان معنی دارد
+export const POWER_GAS_PROPERTY_TYPES = ['shop', 'factory', 'workshop', 'industrial_unit', 'warehouse', 'garage'];
 
 export const POWER_LABELS: Record<string, string> = Object.fromEntries(POWER_OPTIONS.map((o) => [o.value, o.label]));
 export const GAS_LABELS: Record<string, string> = Object.fromEntries(GAS_OPTIONS.map((o) => [o.value, o.label]));
@@ -32,19 +43,27 @@ export const GAS_LABELS: Record<string, string> = Object.fromEntries(GAS_OPTIONS
 // رتبهٔ ظرفیت برای مقایسهٔ تطبیق (بزرگ‌تر = ظرفیت بیشتر)
 export const POWER_RANKS: Record<string, number> = {
   single: 1,
-  three_63: 2,
-  three_100: 3,
-  three_125: 4,
-  three_160: 5,
-  three_200: 6,
+  three_32: 2,
+  three_50: 3,
+  three_63: 4,
+  three_80: 5,
+  three_100: 6,
+  three_125: 7,
+  three_160: 8,
+  three_200: 9,
+  three_250: 10,
+  three_300: 11,
 };
 
 export const GAS_RANKS: Record<string, number> = {
-  g4: 1,
-  g6: 2,
-  g10: 3,
-  g16: 4,
-  g25: 5,
+  g2: 1,
+  g4: 2,
+  g6: 3,
+  g10: 4,
+  g16: 5,
+  g25: 6,
+  g40: 7,
+  g63: 8,
 };
 
 const SHOP_POWER_MARKER = /(?:^|\n)\[shop_power:([a-z0-9_]+)\](?=\n|$)/;

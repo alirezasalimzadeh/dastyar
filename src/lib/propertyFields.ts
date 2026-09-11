@@ -151,6 +151,10 @@ function powerGasFields(role: string): FieldDef[] {
   ];
 }
 
+function powerGasSection(role: string): FieldSection {
+  return { title: 'برق و گاز', fields: powerGasFields(role) };
+}
+
 function featuresApartment(role: string): FieldDef[] {
   return [
     feat('parking', 'پارکینگ', role),
@@ -211,7 +215,6 @@ function featuresShop(role: string): FieldDef[] {
     feat('electric_shutter', 'کرکره برقی', role),
     feat('signage', 'تابلوخور', role),
     feat('restroom', 'سرویس بهداشتی', role),
-    ...powerGasFields(role),
   ];
 }
 
@@ -256,7 +259,6 @@ function featuresFactory(role: string): FieldDef[] {
     feat('security', 'نگهبانی', role),
     feat('ceiling_crane', 'جرثقیل سقفی', role),
     feat('water', 'آب', role),
-    ...powerGasFields(role),
   ];
 }
 
@@ -569,7 +571,7 @@ export function getFieldSections(
 
     // ---- Commercial ----
     case 'shop':
-      return [locationSection, finSection, commercialLocationSection(role), specsShop(role), { title: 'امکانات', fields: featuresShop(role) }];
+      return [locationSection, finSection, commercialLocationSection(role), specsShop(role), powerGasSection(role), { title: 'امکانات', fields: featuresShop(role) }];
 
     case 'mall_booth':
       return [locationSection, finSection, specsMallBooth(role), { title: 'امکانات', fields: featuresMallBooth(role) }];
@@ -593,19 +595,19 @@ export function getFieldSections(
 
     // ---- Industrial ----
     case 'factory':
-      return [locationSection, finSection, specsFactory(role), floorPreferenceSection(role), { title: 'امکانات', fields: featuresFactory(role) }];
+      return [locationSection, finSection, specsFactory(role), floorPreferenceSection(role), powerGasSection(role), { title: 'امکانات', fields: featuresFactory(role) }];
 
     case 'workshop':
-      return [locationSection, finSection, specsFactory(role), { title: 'امکانات', fields: featuresFactory(role) }];
+      return [locationSection, finSection, specsFactory(role), powerGasSection(role), { title: 'امکانات', fields: featuresFactory(role) }];
 
     case 'industrial_unit':
-      return [locationSection, finSection, specsFactory(role), { title: 'امکانات', fields: featuresFactory(role) }];
+      return [locationSection, finSection, specsFactory(role), powerGasSection(role), { title: 'امکانات', fields: featuresFactory(role) }];
 
     case 'warehouse':
-      return [locationSection, finSection, specsFactory(role), { title: 'امکانات', fields: featuresFactory(role) }];
+      return [locationSection, finSection, specsFactory(role), powerGasSection(role), { title: 'امکانات', fields: featuresFactory(role) }];
 
     case 'garage':
-      return [locationSection, finSection, specsFactory(role), { title: 'امکانات', fields: featuresFactory(role) }];
+      return [locationSection, finSection, specsFactory(role), powerGasSection(role), { title: 'امکانات', fields: featuresFactory(role) }];
 
     case 'industrial_land':
       return [locationSection, finSection, specsResidentialLand(role)];

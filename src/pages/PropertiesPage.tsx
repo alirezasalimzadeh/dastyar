@@ -43,7 +43,7 @@ import {
 } from '@/lib/propertyImages';
 import { getArchiveInfo, markPropertyArchived, clearPropertyArchive, type ArchiveInfo } from '@/lib/propertyArchive';
 import { getFileSource, hasDivarSource, hasManagerSource, markDivarSource, markManagerSource, FILE_SOURCE_LABELS } from '@/lib/propertySource';
-import { POWER_OPTIONS, GAS_OPTIONS, POWER_LABELS, GAS_LABELS, getShopPower, getShopGas, setShopPower, setShopGas } from '@/lib/shopUtils';
+import { POWER_OPTIONS, GAS_OPTIONS, POWER_LABELS, GAS_LABELS, POWER_GAS_PROPERTY_TYPES, getShopPower, getShopGas, setShopPower, setShopGas } from '@/lib/shopUtils';
 
 
 const PAGE_SIZE = 20;
@@ -634,6 +634,13 @@ export function PropertiesPage({ initialId, onNavigate, onGoBack }: { initialId?
               if (p.garden) specs.push('باغ');
               if (p.pool) specs.push('استخر');
               if (p.security) specs.push('امنیت');
+              const pPower = getShopPower(p.owner_followup_status);
+              const pGas = getShopGas(p.owner_followup_status);
+              const powerGasSpec = [
+                pPower ? `برق: ${POWER_LABELS[pPower] ?? pPower}` : null,
+                pGas ? `گاز: ${GAS_LABELS[pGas] ?? pGas}` : null,
+              ].filter(Boolean).join('، ');
+              if (powerGasSpec) specs.push(powerGasSpec);
 
               const hasRentPrice = p.deposit_price != null || p.monthly_rent != null;
               const cardImages = pageImages[p.id] ?? p.images ?? [];
@@ -1855,9 +1862,9 @@ function PropertyForm({ propertyId, onBack, onSaved }: { propertyId?: string; on
             ),
             form.contact_type === 'manager',
           ),
-          form.property_type === PROPERTY_TYPES.shop ? form.shop_power : null,
+          POWER_GAS_PROPERTY_TYPES.includes(form.property_type) ? form.shop_power : null,
         ),
-        form.property_type === PROPERTY_TYPES.shop ? form.shop_gas : null,
+        POWER_GAS_PROPERTY_TYPES.includes(form.property_type) ? form.shop_gas : null,
       ),
       images: [...existingImages, ...preparedImages],
     };
@@ -2115,7 +2122,7 @@ function PropertyForm({ propertyId, onBack, onSaved }: { propertyId?: string; on
                   </div>
                 </>
               )}
-              {form.property_type === PROPERTY_TYPES.shop && (
+              {POWER_GAS_PROPERTY_TYPES.includes(form.property_type) && (
                 <>
                   <div>
                     <label className="label">برق ۳‌فاز</label>
