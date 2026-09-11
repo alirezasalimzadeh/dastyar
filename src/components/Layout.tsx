@@ -284,8 +284,12 @@ export function Layout({
       )}
 
       {/* Main Content */}
-      <div className="flex-1 lg:mr-64 flex flex-col min-h-screen">
-        <main className="flex-1 px-4 py-4 lg:px-8 lg:py-6 pt-16 lg:pt-6 pb-20 lg:pb-6 max-w-7xl mx-auto w-full">
+      {/* min-w-0: محتوای پهن (مثلاً یک عنصر با عرض ذاتی بزرگ) نباید این آیتم
+          فلکس را از عرض صفحه پهن‌تر کند — ریشهٔ مشکل «بریده/زوم شدن» موبایل
+          overflow-x-clip روی main: باقی‌ماندهٔ overflow در خودِ محتوا بریده می‌شود
+          بدون اینکه کل سند/viewport دست بخورد (و بدون تأثیر روی nav ثابت پایین) */}
+      <div className="flex-1 min-w-0 lg:mr-64 flex flex-col min-h-screen">
+        <main className="flex-1 px-4 py-4 lg:px-8 lg:py-6 pt-16 lg:pt-6 pb-20 lg:pb-6 max-w-7xl mx-auto w-full overflow-x-clip">
           {children}
         </main>
       </div>
