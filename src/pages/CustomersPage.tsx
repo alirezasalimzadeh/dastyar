@@ -25,6 +25,8 @@ import {
   toPersianDigits,
   stripPhoneSpaces,
   ROBAT_KARIM_COUNTY_NAME,
+  BUILDER_TAG,
+  COLLEAGUE_TAG,
 } from '@/lib/constants';
 import { Badge, EmptyState, Spinner, Modal, MoneyInput, PageHeader, Pagination, ConfirmDialog, CopyButton } from '@/components/ui';
 import { useActiveCounties, useCountyNeighborhoods } from '@/lib/geo';
@@ -1203,6 +1205,9 @@ function CustomerForm({ customerId, onBack, onSaved }: { customerId?: string; on
   const [colleagueId, setColleagueId] = useState('');
   // طرف مقابل در مشارکت: مالک ← سازنده / سازنده ← مالک
   const [counterpartyId, setCounterpartyId] = useState('');
+  const [counterpartyAdding, setCounterpartyAdding] = useState(false);
+  const [counterpartyName, setCounterpartyName] = useState('');
+  const [counterpartyPhone, setCounterpartyPhone] = useState('');
   const [typePrefs, setTypePrefs] = useState<Record<string, Record<string, string | boolean>>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
 
@@ -1270,6 +1275,12 @@ function CustomerForm({ customerId, onBack, onSaved }: { customerId?: string; on
       if (!form.mobile.trim()) errs.mobile = 'موبایل الزامی است';
       else if (!validatePhone(form.mobile)) errs.mobile = 'فرمت موبایل صحیح نیست (09123456789)';
     }
+    if (step === 1 && form.transaction_intention === 'partnership' && form.transaction_role && counterpartyAdding) {
+      const cpName = form.transaction_role === 'owner' ? 'سازنده' : 'مالک';
+      if (!counterpartyName.trim()) errs.counterparty_name = `نام ${cpName} الزامی است`;
+      if (!counterpartyPhone.trim()) errs.counterparty_phone = `تلفن ${cpName} الزامی است`;
+      else if (!validatePhone(counterpartyPhone)) errs.counterparty_phone = 'فرمت موبایل صحیح نیست (09123456789)';
+    }
     if (step === 2 && !form.preferred_category) errs.preferred_category = 'دسته‌بندی الزامی است';
     if (step === 4 && !form.lead_source) errs.lead_source = 'منبع آشنایی را انتخاب کنید';
     setErrors(errs);
@@ -1313,8 +1324,37 @@ function CustomerForm({ customerId, onBack, onSaved }: { customerId?: string; on
     if (colleagueId) {
       propertyPreferences.colleague_id = colleagueId;
     }
-    if (form.transaction_intention === 'partnership' && counterpartyId) {
-      propertyPreferences.counterparty_id = counterpartyId;
+    if (form.transaction_intention === 'partnership') {
+      let cpId = counterpartyId;
+      if (counterpartyAdding && counterpartyName.trim() && counterpartyPhone.trim()) {
+        const cpIsBuilder = form.transaction_role === 'owner';
+        const normalizedCpPhone = normalizePhone(counterpartyPhone);
+        const { data: samePhoneRows } = await supabase.from('owners').select('id, tags').eq('phone', normalizedCpPhone);
+        const existing = samePhoneRows?.find((row) => {
+          const t = (row.tags as string[] | null) ?? [];
+          if (t.includes(COLLEAGUE_TAG)) return false;
+          return cpIsBuilder ? t.includes(BUILDER_TAG) : !t.includes(BUILDER_TAG);
+        });
+        if (existing) {
+          cpId = existing.id;
+        } else {
+          const { data: newPerson, error: personError } = await supabase.from('owners').insert({
+            name: counterpartyName.trim(),
+            phone: normalizedCpPhone,
+            assigned_consultant_id: user?.id,
+            status: 'active',
+            // سازندهٔ ثبت‌شده از فرم مشتری، تگ «سازنده» می‌گیرد (مثل فرم فایل‌ها)
+            ...(cpIsBuilder ? { tags: [BUILDER_TAG] } : {}),
+          }).select().single();
+          if (personError || !newPerson) {
+            setSaveError(`ثبت ${cpIsBuilder ? 'سازنده' : 'مالک'} انجام نشد: ${personError?.message ?? 'خطای نامشخص'}`);
+            setSaving(false);
+            return;
+          }
+          cpId = newPerson.id;
+        }
+      }
+      if (cpId) propertyPreferences.counterparty_id = cpId;
     }
     for (const type of form.preferred_property_types) {
       const prefs = typePrefs[type] ?? {};
@@ -1377,6 +1417,47 @@ function CustomerForm({ customerId, onBack, onSaved }: { customerId?: string; on
   };
 
   const roleLabels: Record<string, string> = { buyer: 'متقاضی', owner: 'مالک هستم', applicant: 'متقاضی هستم', builder: 'سازنده هستم', seller: 'مالک' };
+
+  // طرف مقابل مشارکت: انتخاب از لیست + ثبت سریع (همان الگوی فرم فایل‌ها)
+  const renderCounterparty = (name: string, list: typeof builders) => (
+    <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-4 space-y-3">
+      <div>
+        <label className="label">{name} مشارکت <span className="font-normal text-slate-400">(اختیاری)</span></label>
+        <select className="input" value={counterpartyId} onChange={(e) => setCounterpartyId(e.target.value)}>
+          <option value="">{name} را انتخاب کنید</option>
+          {list.map((person) => (
+            <option key={person.id} value={person.id} disabled={person.status !== 'active' && person.id !== counterpartyId}>
+              {person.name} — {person.phone}{person.status !== 'active' ? ' (غیرفعال)' : ''}
+            </option>
+          ))}
+        </select>
+      </div>
+      {!counterpartyAdding ? (
+        <button type="button" onClick={() => { setCounterpartyAdding(true); setErrors({}); }} className="btn-secondary w-full">
+          <Plus size={16} /> {name} در لیست نیست؛ افزودن {name} جدید
+        </button>
+      ) : (
+        <>
+          <div className="flex items-center justify-between">
+            <p className="text-sm font-bold text-slate-700">افزودن {name} جدید</p>
+            {list.length > 0 && (
+              <button type="button" onClick={() => setCounterpartyAdding(false)} className="text-xs font-medium text-slate-500 hover:text-slate-700">انتخاب از لیست</button>
+            )}
+          </div>
+          <div>
+            <label className="label">نام {name} *</label>
+            <input className={`input ${errors.counterparty_name ? 'input-error' : ''}`} value={counterpartyName} onChange={(e) => setCounterpartyName(e.target.value)} placeholder={`نام و نام خانوادگی ${name}`} />
+            {errors.counterparty_name && <p className="mt-1 text-xs text-red-500">{errors.counterparty_name}</p>}
+          </div>
+          <div>
+            <label className="label">تلفن {name} *</label>
+            <input className={`input ${errors.counterparty_phone ? 'input-error' : ''}`} value={counterpartyPhone} onChange={(e) => setCounterpartyPhone(stripPhoneSpaces(e.target.value))} placeholder="09123456789" dir="ltr" />
+            {errors.counterparty_phone && <p className="mt-1 text-xs text-red-500">{errors.counterparty_phone}</p>}
+          </div>
+        </>
+      )}
+    </div>
+  );
 
   if (formLoading) return <div className="flex justify-center py-16"><Spinner size={32} /></div>;
 
@@ -1457,7 +1538,7 @@ function CustomerForm({ customerId, onBack, onSaved }: { customerId?: string; on
                 {TRANSACTION_TYPES.map((t) => (
                   <button
                     key={t.value}
-                    onClick={() => { setForm({ ...form, transaction_intention: t.value, transaction_role: '' }); setCounterpartyId(''); }}
+                    onClick={() => { setForm({ ...form, transaction_intention: t.value, transaction_role: '' }); setCounterpartyId(''); setCounterpartyAdding(false); setCounterpartyName(''); setCounterpartyPhone(''); }}
                     className={`p-3 rounded-lg border-2 text-sm font-medium transition-all ${
                       form.transaction_intention === t.value ? 'border-slate-900 bg-slate-50' : 'border-slate-200 hover:border-slate-300'
                     }`}
@@ -1474,7 +1555,7 @@ function CustomerForm({ customerId, onBack, onSaved }: { customerId?: string; on
                   {(TRANSACTION_TYPES.find(t => t.value === form.transaction_intention)?.roles ?? []).map((r: string) => (
                     <button
                       key={r}
-                      onClick={() => { setForm({ ...form, transaction_role: r }); setCounterpartyId(''); }}
+                      onClick={() => { setForm({ ...form, transaction_role: r }); setCounterpartyId(''); setCounterpartyAdding(false); setCounterpartyName(''); setCounterpartyPhone(''); }}
                       className={`p-3 rounded-lg border-2 text-sm font-medium transition-all ${
                         form.transaction_role === r ? 'border-slate-900 bg-slate-50' : 'border-slate-200 hover:border-slate-300'
                       }`}
@@ -1485,34 +1566,8 @@ function CustomerForm({ customerId, onBack, onSaved }: { customerId?: string; on
                 </div>
               </div>
             )}
-            {form.transaction_intention === 'partnership' && form.transaction_role === 'owner' && (
-              <div>
-                <label className="label">سازندهٔ مشارکت <span className="font-normal text-slate-400">(اختیاری)</span></label>
-                <select className="input" value={counterpartyId} onChange={(e) => setCounterpartyId(e.target.value)}>
-                  <option value="">سازنده را انتخاب کنید</option>
-                  {builders.map((builder) => (
-                    <option key={builder.id} value={builder.id} disabled={builder.status !== 'active' && builder.id !== counterpartyId}>
-                      {builder.name} — {builder.phone}{builder.status !== 'active' ? ' (غیرفعال)' : ''}
-                    </option>
-                  ))}
-                </select>
-                {builders.length === 0 && <p className="mt-1.5 text-xs text-amber-600">هنوز سازنده‌ای ثبت نشده؛ از بخش «سازندگان» ثبت کنید.</p>}
-              </div>
-            )}
-            {form.transaction_intention === 'partnership' && form.transaction_role === 'builder' && (
-              <div>
-                <label className="label">مالک مشارکت <span className="font-normal text-slate-400">(اختیاری)</span></label>
-                <select className="input" value={counterpartyId} onChange={(e) => setCounterpartyId(e.target.value)}>
-                  <option value="">مالک را انتخاب کنید</option>
-                  {plainOwners.map((owner) => (
-                    <option key={owner.id} value={owner.id} disabled={owner.status !== 'active' && owner.id !== counterpartyId}>
-                      {owner.name} — {owner.phone}{owner.status !== 'active' ? ' (غیرفعال)' : ''}
-                    </option>
-                  ))}
-                </select>
-                {plainOwners.length === 0 && <p className="mt-1.5 text-xs text-amber-600">هنوز مالکی ثبت نشده؛ از بخش «مالکین» ثبت کنید.</p>}
-              </div>
-            )}
+            {form.transaction_intention === 'partnership' && form.transaction_role === 'owner' && renderCounterparty('سازنده', builders)}
+            {form.transaction_intention === 'partnership' && form.transaction_role === 'builder' && renderCounterparty('مالک', plainOwners)}
           </>
         )}
 
