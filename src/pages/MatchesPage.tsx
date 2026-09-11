@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useCallback, useMemo, type ComponentType, type ReactNode } from 'react';
 import {
   Target, ArrowLeft, Zap, Search, Check, ChevronDown, ChevronUp,
-  Building2, Users, Flame, AlertTriangle, Info, Minus, ShieldCheck, Star, CheckCircle2, Handshake,
+  Building2, Users, Flame, AlertTriangle, Info, Minus, ShieldCheck, Star, CheckCircle2, Handshake, ArrowUpLeft,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { scoreMatch, rankMatches, persistMatches, type ScoredMatchOutput, type ScoredComponent } from '@/lib/matchingEngine';
@@ -188,21 +188,36 @@ function FeatureChips({ property }: { property: Property }) {
   );
 }
 
-function SpecPanel({ title, icon: Icon, rows, children, tone }: {
+function SpecPanel({ title, icon: Icon, rows, children, tone, onTitleClick, titleHint }: {
   title: string;
   icon: ComponentType<{ size?: number | string; className?: string }>;
   rows: SpecRow[];
   children?: ReactNode;
   tone: 'blue' | 'slate';
+  /** کلیک روی عنوان → رفتن به صفحهٔ همان مورد */
+  onTitleClick?: () => void;
+  titleHint?: string;
 }) {
   const toneCls = tone === 'blue'
     ? { box: 'bg-blue-50/50 border-blue-100', head: 'text-blue-600' }
     : { box: 'bg-slate-50 border-slate-200', head: 'text-slate-500' };
   return (
     <div className={`rounded-lg border p-2.5 ${toneCls.box}`}>
-      <p className={`text-[10px] font-bold mb-1.5 flex items-center gap-1 ${toneCls.head}`}>
-        <Icon size={10} /> {title}
-      </p>
+      {onTitleClick ? (
+        <button
+          type="button"
+          onClick={onTitleClick}
+          title={titleHint ?? title}
+          className={`w-full flex items-center gap-1 text-[10px] font-bold mb-1.5 group ${toneCls.head} hover:opacity-80 transition-opacity text-right`}
+        >
+          <Icon size={10} /> {title}
+          <ArrowUpLeft size={10} className="mr-auto opacity-40 group-hover:opacity-100 transition-opacity" />
+        </button>
+      ) : (
+        <p className={`text-[10px] font-bold mb-1.5 flex items-center gap-1 ${toneCls.head}`}>
+          <Icon size={10} /> {title}
+        </p>
+      )}
       {rows.length > 0 ? (
         <div className="space-y-0.5">
           {rows.map((r, i) => (
@@ -355,11 +370,12 @@ function ReasonList({ tone, title, lines }: { tone: ReasonTone; title: string; l
 
 // ---- کارت نتیجه: دیتای کامل هر دو طرف با یک نگاه ----
 
-function MatchCard({ entry, customer, property, geo }: {
+function MatchCard({ entry, customer, property, geo, onNavigate }: {
   entry: MatchEntry;
   customer: Customer; // سمت «درخواست» این جفت
   property: Property; // سمت «فایل» این جفت
   geo: GeoNames;
+  onNavigate?: (page: string, params?: Record<string, unknown>) => void;
 }) {
   const result = entry.result;
   const score = result.score ?? 0;
@@ -431,10 +447,24 @@ function MatchCard({ entry, customer, property, geo }: {
           <ScoreRing score={score} />
         </div>
 
-        {/* درخواست ↔ فایل: دادهٔ کامل هر دو طرف */}
+        {/* درخواست ↔ فایل: دادهٔ کامل هر دو طرف — کلیک روی عنوان = صفحهٔ همان مورد */}
         <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-2">
-          <SpecPanel title="درخواست مشتری" icon={Users} tone="blue" rows={customerRequestRows(customer, bestType, geo)} />
-          <SpecPanel title="اطلاعات فایل" icon={Building2} tone="slate" rows={propertyFactsRows(property, geo)}>
+          <SpecPanel
+            title="درخواست مشتری"
+            icon={Users}
+            tone="blue"
+            rows={customerRequestRows(customer, bestType, geo)}
+            onTitleClick={onNavigate ? () => onNavigate('customers', { id: customer.id }) : undefined}
+            titleHint="باز کردن صفحهٔ این مشتری"
+          />
+          <SpecPanel
+            title="اطلاعات فایل"
+            icon={Building2}
+            tone="slate"
+            rows={propertyFactsRows(property, geo)}
+            onTitleClick={onNavigate ? () => onNavigate('properties', { id: property.id }) : undefined}
+            titleHint="باز کردن صفحهٔ این فایل"
+          >
             <FeatureChips property={property} />
           </SpecPanel>
         </div>
@@ -470,7 +500,7 @@ function MatchCard({ entry, customer, property, geo }: {
 
 // ---- صفحه ----
 
-export function MatchesPage({ initialPropertyId, initialCustomerId }: { initialPropertyId?: string; initialCustomerId?: string }) {
+export function MatchesPage({ initialPropertyId, initialCustomerId, onNavigate }: { initialPropertyId?: string; initialCustomerId?: string; onNavigate?: (page: string, params?: Record<string, unknown>) => void }) {
   const [mode, setMode] = useState<'property_to_customer' | 'customer_to_property'>('property_to_customer');
   const [properties, setProperties] = useState<Property[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -882,7 +912,7 @@ export function MatchesPage({ initialPropertyId, initialCustomerId }: { initialP
             <div className="space-y-3">
               {matches.map((m, i) => {
                 const pair = pairOf(m);
-                return <MatchCard key={i} entry={m} customer={pair.customer} property={pair.property} geo={geoNames} />;
+                return <MatchCard key={i} entry={m} customer={pair.customer} property={pair.property} geo={geoNames} onNavigate={onNavigate} />;
               })}
             </div>
           )}

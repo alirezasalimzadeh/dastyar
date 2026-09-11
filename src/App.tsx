@@ -57,7 +57,7 @@ function AppContent() {
       case 'properties':
         return <PropertiesPage initialId={params.id as string | undefined} onNavigate={navigate} />;
       case 'matches':
-        return <MatchesPage initialPropertyId={params.propertyId as string | undefined} initialCustomerId={params.customerId as string | undefined} />;
+        return <MatchesPage initialPropertyId={params.propertyId as string | undefined} initialCustomerId={params.customerId as string | undefined} onNavigate={navigate} />;
       case 'calls':
         return <CallsPage />;
       case 'followups':
