@@ -218,7 +218,7 @@ export function Layout({
       </aside>
 
       {/* Mobile Header */}
-      <header className="lg:hidden fixed top-0 inset-x-0 z-30 bg-white border-b border-slate-200 px-4 h-14 flex items-center justify-between">
+      <header className="lg:hidden fixed top-0 inset-x-0 z-30 bg-white border-b border-slate-200 px-4 min-h-14 pt-[env(safe-area-inset-top)] pb-1.5 flex items-center justify-between">
         <button onClick={() => setMobileMenuOpen(true)} className="p-2 -mr-2 text-slate-600">
           <Menu size={22} />
         </button>
@@ -235,7 +235,7 @@ export function Layout({
 
       {/* Mobile Search Bar */}
       {showSearch && (
-        <div className="lg:hidden fixed top-14 inset-x-0 z-20 bg-white border-b border-slate-200 p-3 animate-slide-up">
+        <div className="lg:hidden fixed top-[calc(3.5rem+env(safe-area-inset-top))] inset-x-0 z-20 bg-white border-b border-slate-200 p-3 animate-slide-up">
           <input
             type="text"
             placeholder="جستجوی مشتری، فایل، مالک، شماره..."
@@ -289,13 +289,13 @@ export function Layout({
           overflow-x-clip روی main: باقی‌ماندهٔ overflow در خودِ محتوا بریده می‌شود
           بدون اینکه کل سند/viewport دست بخورد (و بدون تأثیر روی nav ثابت پایین) */}
       <div className="flex-1 min-w-0 lg:mr-64 flex flex-col min-h-screen">
-        <main className="flex-1 px-4 py-4 lg:px-8 lg:py-6 pt-16 lg:pt-6 pb-20 lg:pb-6 max-w-7xl mx-auto w-full overflow-x-clip">
+        <main className="flex-1 px-4 py-4 lg:px-8 lg:py-6 pt-[calc(4rem+env(safe-area-inset-top))] lg:pt-6 pb-[calc(5.5rem+env(safe-area-inset-bottom))] lg:pb-6 max-w-7xl mx-auto w-full overflow-x-clip">
           {children}
         </main>
       </div>
 
       {(!online || offlineQueue.length > 0) && (
-        <div className="fixed left-3 top-16 z-40 flex flex-col items-start gap-2 lg:top-4">
+        <div className="fixed left-3 top-[calc(4rem+env(safe-area-inset-top))] z-40 flex flex-col items-start gap-2 lg:top-4">
           {!online && (
             <div className="inline-flex items-center gap-2 rounded-full bg-amber-100 px-3 py-1.5 text-xs font-bold text-amber-800 shadow-sm">
               <WifiOff size={14} /> حالت آفلاین؛ تغییرات بعداً همگام می‌شوند
@@ -315,7 +315,7 @@ export function Layout({
       )}
 
       {installPrompt && !installDismissed && (
-        <div className="fixed bottom-20 left-3 right-3 z-40 mx-auto flex max-w-md items-center gap-3 rounded-2xl border border-blue-200 bg-white p-3 shadow-xl lg:bottom-5 lg:left-5 lg:right-auto">
+        <div className="fixed bottom-[calc(5rem+env(safe-area-inset-bottom))] left-3 right-3 z-40 mx-auto flex max-w-md items-center gap-3 rounded-2xl border border-blue-200 bg-white p-3 shadow-xl lg:bottom-5 lg:left-5 lg:right-auto">
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600"><Download size={19} /></div>
           <div className="min-w-0 flex-1"><p className="text-sm font-bold text-slate-800">نصب دستیار روی گوشی</p><p className="text-[11px] text-slate-500">دسترسی سریع مثل یک اپلیکیشن</p></div>
           <button type="button" onClick={installApp} className="rounded-lg bg-slate-900 px-3 py-2 text-xs font-bold text-white">نصب</button>
@@ -375,7 +375,7 @@ export function Layout({
       </Modal>
 
       {/* Mobile Bottom Nav */}
-      <nav className="lg:hidden fixed bottom-0 inset-x-0 z-30 bg-white border-t border-slate-200 flex items-center justify-around px-2 py-1.5">
+      <nav className="lg:hidden fixed bottom-0 inset-x-0 z-30 bg-white border-t border-slate-200 flex items-center justify-around px-2 pt-1.5 pb-[calc(env(safe-area-inset-bottom)+0.375rem)]">
         {MOBILE_NAV_KEYS.map((key) => {
           const item = NAV_ITEMS.find((n) => n.key === key)!;
           const active = currentPage === key;
@@ -383,7 +383,7 @@ export function Layout({
             <button
               key={key}
               onClick={() => handleNav(key)}
-              className={`flex flex-col items-center gap-0.5 px-2 py-1.5 rounded-lg transition-colors ${
+              className={`flex flex-col items-center gap-1 px-2 py-2 rounded-lg transition-colors ${
                 active ? 'text-slate-900' : 'text-slate-400'
               }`}
             >
