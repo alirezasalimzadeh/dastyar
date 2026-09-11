@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useMemo, type ReactNode } from 'react';
+import { useEffect, useState, useCallback, useMemo, useRef, type ReactNode } from 'react';
 import { Plus, Search, Users, Phone, X, Filter, ArrowLeft, ArrowUpDown, Trash2, Tag, Clock, Target, MapPin, Pencil, Key, ShoppingBag, Handshake, Wallet, Ruler, BedDouble, Building2, Landmark, Sparkles, StickyNote, UserPlus, CalendarClock, ChevronDown, ChevronLeft, type LucideIcon } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth';
@@ -87,7 +87,7 @@ const CUSTOMER_SORTS = [
   { value: 'urgency', label: 'فوری‌ترین' },
 ];
 
-export function CustomersPage({ initialId, initialFilter, onNavigate }: { initialId?: string; initialFilter?: string; onNavigate?: (page: string, params?: Record<string, unknown>) => void }) {
+export function CustomersPage({ initialId, initialFilter, onNavigate, onGoBack }: { initialId?: string; initialFilter?: string; onNavigate?: (page: string, params?: Record<string, unknown>) => void; onGoBack?: () => void }) {
   const { user } = useAuth();
   const colleagues = useColleagues();
   // نقشهٔ id شهر → نام، برای نمایش شهرِ موردنظر در کارت‌های لیست
@@ -118,6 +118,9 @@ export function CustomersPage({ initialId, initialFilter, onNavigate }: { initia
     category: '',
     property_type: '',
   });
+
+  // آیا جزئیات همین‌جا (از روی فهرست) باز شده یا با لینک عمقی از صفحهٔ دیگری آمده‌ایم؟
+  const openedFromListRef = useRef(false);
 
   useEffect(() => {
     if (initialId) {
@@ -207,7 +210,19 @@ export function CustomersPage({ initialId, initialFilter, onNavigate }: { initia
     return (
       <CustomerDetail
         customerId={selectedId}
-        onBack={() => { setView('list'); setSelectedId(null); }}
+        onBack={() => {
+          // اگر جزئیات از فهرست باز شده → فهرست؛ اگر از صفحهٔ دیگری آمده‌ایم → همان صفحه
+          if (openedFromListRef.current) {
+            openedFromListRef.current = false;
+            setView('list');
+            setSelectedId(null);
+          } else if (onGoBack) {
+            onGoBack();
+          } else {
+            setView('list');
+            setSelectedId(null);
+          }
+        }}
         onEdit={() => setView('edit')}
         onNavigate={onNavigate}
       />
@@ -499,7 +514,7 @@ export function CustomersPage({ initialId, initialFilter, onNavigate }: { initia
                 return (
                   <div
                     key={c.id}
-                    onClick={() => { setSelectedId(c.id); setView('detail'); }}
+                    onClick={() => { openedFromListRef.current = true; setSelectedId(c.id); setView('detail'); }}
                     className="card p-4 pr-5 cursor-pointer transition-all hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md"
                   >
                     {/* ۱. نوع معامله — بج رنگی با آیکون */}
@@ -1320,7 +1335,7 @@ function CustomerForm({ customerId, onBack, onSaved }: { customerId?: string; on
 
   return (
     <div className="animate-fade-in max-w-2xl mx-auto">
-      <button onClick={onBack} className="flex items-center gap-1 text-sm text-slate-500 hover:text-slate-700 mb-4">
+      <button onClick={onBack} className="detail-back mb-4">
         <ArrowLeft size={16} /> بازگشت
       </button>
 

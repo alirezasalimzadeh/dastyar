@@ -500,7 +500,7 @@ function MatchCard({ entry, customer, property, geo, onNavigate }: {
 
 // ---- صفحه ----
 
-export function MatchesPage({ initialPropertyId, initialCustomerId, onNavigate }: { initialPropertyId?: string; initialCustomerId?: string; onNavigate?: (page: string, params?: Record<string, unknown>) => void }) {
+export function MatchesPage({ initialPropertyId, initialCustomerId, onNavigate, onGoBack, canGoBack }: { initialPropertyId?: string; initialCustomerId?: string; onNavigate?: (page: string, params?: Record<string, unknown>) => void; onGoBack?: () => void; canGoBack?: boolean }) {
   const [mode, setMode] = useState<'property_to_customer' | 'customer_to_property'>('property_to_customer');
   const [properties, setProperties] = useState<Property[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -604,6 +604,10 @@ export function MatchesPage({ initialPropertyId, initialCustomerId, onNavigate }
     setRejectedCount(rejected);
     setComputing(false);
   }, [mode, customers, properties, minScore]);
+
+  // آیا مورد انتخابی همین‌جا (از روی فهرست) انتخاب شده یا با لینک عمقی آمده‌ایم؟
+  // برای رفتار صحیح دکمهٔ «بازگشت»
+  const selectedFromListRef = useRef(false);
 
   // ورود عمیق از صفحهٔ جزئیات فایل/مشتری: تطبیق‌های همان مورد را مستقیم باز کن
   const autoSelectedRef = useRef(false);
@@ -753,7 +757,7 @@ export function MatchesPage({ initialPropertyId, initialCustomerId, onNavigate }
                   return (
                     <div
                       key={p.id}
-                      onClick={() => computeMatches(p)}
+                      onClick={() => { selectedFromListRef.current = true; computeMatches(p); }}
                       className="card p-3.5 cursor-pointer hover:shadow-md transition-all hover:border-slate-300"
                     >
                       <div className="flex items-center gap-3">
@@ -787,7 +791,7 @@ export function MatchesPage({ initialPropertyId, initialCustomerId, onNavigate }
                 return (
                   <div
                     key={c.id}
-                    onClick={() => computeMatches(c)}
+                    onClick={() => { selectedFromListRef.current = true; computeMatches(c); }}
                     className="card p-3.5 cursor-pointer hover:shadow-md transition-all hover:border-slate-300"
                   >
                     <div className="flex items-center gap-3">
@@ -832,10 +836,22 @@ export function MatchesPage({ initialPropertyId, initialCustomerId, onNavigate }
           <div className="card p-4 bg-gradient-to-l from-slate-50 to-white">
             <div className="flex items-center gap-3">
               <button
-                onClick={() => { setSelected(null); setMatches([]); }}
-                className="flex items-center gap-1 text-xs font-medium text-slate-500 hover:text-slate-700 bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 transition-all"
+                onClick={() => {
+                  // اگر مورد از فهرست انتخاب شده → لیست تطبیق‌ها؛ اگر از صفحهٔ دیگری آمده‌ایم → همان صفحه
+                  if (selectedFromListRef.current) {
+                    selectedFromListRef.current = false;
+                    setSelected(null);
+                    setMatches([]);
+                  } else if (canGoBack) {
+                    onGoBack?.();
+                  } else {
+                    setSelected(null);
+                    setMatches([]);
+                  }
+                }}
+                className="detail-back"
               >
-                <ArrowLeft size={14} /> بازگشت
+                <ArrowLeft size={13} /> بازگشت
               </button>
               <div className="w-10 h-10 rounded-xl bg-slate-900 flex items-center justify-center flex-shrink-0">
                 {selectedIsProperty ? <Building2 size={18} className="text-white" /> : <Users size={18} className="text-white" />}

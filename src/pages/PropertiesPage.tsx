@@ -141,7 +141,7 @@ const databaseErrorMessage = (error: unknown, fallback: string) => {
   return error instanceof Error ? error.message : fallback;
 };
 
-export function PropertiesPage({ initialId, onNavigate }: { initialId?: string; onNavigate?: (page: string, params?: Record<string, unknown>) => void }) {
+export function PropertiesPage({ initialId, onNavigate, onGoBack }: { initialId?: string; onNavigate?: (page: string, params?: Record<string, unknown>) => void; onGoBack?: () => void }) {
   const { user } = useAuth();
   const colleagueOptions = useColleagues();
   const { counties: filterCounties } = useActiveCounties();
@@ -158,6 +158,9 @@ export function PropertiesPage({ initialId, onNavigate }: { initialId?: string; 
   const [filters, setFilters] = useState<PropertyFilters>({ ...EMPTY_PROPERTY_FILTERS });
   // نمای اصلی: فایل‌های فعال (بدون بایگانی) یا فایل‌های بایگانی‌شده
   const [archiveView, setArchiveView] = useState<'active' | 'archived'>('active');
+
+  // آیا جزئیات همین‌جا (از روی فهرست) باز شده یا با لینک عمقی از صفحهٔ دیگری آمده‌ایم؟
+  const openedFromListRef = useRef(false);
 
   useEffect(() => {
     if (initialId) {
@@ -349,7 +352,19 @@ export function PropertiesPage({ initialId, onNavigate }: { initialId?: string; 
     return (
       <PropertyDetail
         propertyId={selectedId}
-        onBack={() => { setView('list'); setSelectedId(null); }}
+        onBack={() => {
+          // اگر جزئیات از فهرست باز شده → فهرست؛ اگر از صفحهٔ دیگری آمده‌ایم → همان صفحه
+          if (openedFromListRef.current) {
+            openedFromListRef.current = false;
+            setView('list');
+            setSelectedId(null);
+          } else if (onGoBack) {
+            onGoBack();
+          } else {
+            setView('list');
+            setSelectedId(null);
+          }
+        }}
         onEdit={() => setView('edit')}
         onNavigate={onNavigate}
       />
@@ -625,7 +640,7 @@ export function PropertiesPage({ initialId, onNavigate }: { initialId?: string; 
               return (
                 <div
                   key={p.id}
-                  onClick={() => { setSelectedId(p.id); setView('detail'); }}
+                  onClick={() => { openedFromListRef.current = true; setSelectedId(p.id); setView('detail'); }}
                   className={`card p-4 cursor-pointer hover:shadow-md hover:border-slate-300 transition-all overflow-hidden ${archive ? 'opacity-70 hover:opacity-100' : ''}`}
                 >
                   <div className="relative -mx-4 -mt-4 mb-4 h-40 bg-slate-100 overflow-hidden">
@@ -1875,7 +1890,7 @@ function PropertyForm({ propertyId, onBack, onSaved }: { propertyId?: string; on
 
   return (
     <div className="animate-fade-in max-w-2xl mx-auto">
-      <button onClick={onBack} className="flex items-center gap-1 text-sm text-slate-500 hover:text-slate-700 mb-4">
+      <button onClick={onBack} className="detail-back mb-4">
         <ArrowLeft size={16} /> بازگشت
       </button>
 

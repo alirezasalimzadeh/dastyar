@@ -24,10 +24,21 @@ function AppContent() {
   const { user, profile, loading, signOut } = useAuth();
   const [page, setPage] = useState('dashboard');
   const [params, setParams] = useState<Record<string, unknown>>({});
+  // تاریخچهٔ ناوبری: برای اینکه «بازگشت» کاربر را به همان صفحه‌ای برگرداند که از آن آمده
+  const [history, setHistory] = useState<{ page: string; params: Record<string, unknown> }[]>([]);
 
   const navigate = (newPage: string, newParams: Record<string, unknown> = {}) => {
+    setHistory((h) => [...h, { page, params }]);
     setPage(newPage);
     setParams(newParams);
+  };
+
+  const goBack = () => {
+    const prev = history[history.length - 1];
+    if (!prev) return;
+    setHistory((h) => h.slice(0, -1));
+    setPage(prev.page);
+    setParams(prev.params);
   };
 
   if (loading) return <FullPageSpinner />;
@@ -49,15 +60,15 @@ function AppContent() {
       case 'dashboard':
         return <DashboardPage onNavigate={navigate} />;
       case 'customers':
-        return <CustomersPage initialId={params.id as string | undefined} initialFilter={params.filter as string | undefined} onNavigate={navigate} />;
+        return <CustomersPage initialId={params.id as string | undefined} initialFilter={params.filter as string | undefined} onNavigate={navigate} onGoBack={goBack} />;
       case 'owners':
         return <OwnersPage initialId={params.id as string | undefined} onNavigate={navigate} />;
       case 'colleagues':
         return <ColleaguesPage onNavigate={navigate} />;
       case 'properties':
-        return <PropertiesPage initialId={params.id as string | undefined} onNavigate={navigate} />;
+        return <PropertiesPage initialId={params.id as string | undefined} onNavigate={navigate} onGoBack={goBack} />;
       case 'matches':
-        return <MatchesPage initialPropertyId={params.propertyId as string | undefined} initialCustomerId={params.customerId as string | undefined} onNavigate={navigate} />;
+        return <MatchesPage initialPropertyId={params.propertyId as string | undefined} initialCustomerId={params.customerId as string | undefined} onNavigate={navigate} onGoBack={goBack} canGoBack={history.length > 0} />;
       case 'calls':
         return <CallsPage />;
       case 'followups':
