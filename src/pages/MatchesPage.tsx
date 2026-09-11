@@ -353,6 +353,11 @@ function MatchCard({ entry, customer, property, geo }: {
     .filter((c) => c.active && c.value < 0.999)
     .map((c) => ({ icon: 'info' as const, text: `${c.label} ${formatPrice(Math.round(c.value * 100))}٪` }));
   const finalGapLines = gapLines.length > 0 || score >= 100 ? gapLines : componentGapLines;
+  // جداسازی: «قابل مذاکره» (موتور فقط برای فایل قابل‌مذاکره این برچسب را می‌زند)
+  // در برابر مواردی که اصلاً قابل مذاکره نیستند → «دلایل عدم تطبیق»
+  const isNegotiable = (l: ReasonLine) => l.icon === 'warn' && l.text.includes('— قابل مذاکره');
+  const negotiableLines = finalGapLines.filter(isNegotiable);
+  const mismatchLines = finalGapLines.filter((l) => !isNegotiable(l));
 
   return (
     <div className="card overflow-hidden transition-all hover:shadow-md" style={{ borderRight: `3px solid ${tier.border}` }}>
@@ -414,13 +419,12 @@ function MatchCard({ entry, customer, property, geo }: {
           </p>
         )}
 
-        {/* توضیح اجباری: دلایل تطبیق + دلایل کسری (آنچه مانع ۱۰۰٪ شده) */}
+        {/* توضیح اجباری: دلایل تطبیق + موارد قابل مذاکره + دلایل عدم تطبیق */}
         {matchLines.length > 0 || finalGapLines.length > 0 ? (
           <>
             {matchLines.length > 0 && <ReasonList title="دلایل تطبیق" lines={matchLines} />}
-            {score < 100 && finalGapLines.length > 0 && (
-              <ReasonList title="دلایل کسری امتیاز" lines={finalGapLines} />
-            )}
+            {negotiableLines.length > 0 && <ReasonList title="موارد قابل مذاکره" lines={negotiableLines} />}
+            {mismatchLines.length > 0 && <ReasonList title="دلایل عدم تطبیق" lines={mismatchLines} />}
           </>
         ) : (
           <div className="mt-3 pt-3 border-t border-slate-100">
