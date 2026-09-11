@@ -141,7 +141,7 @@ const databaseErrorMessage = (error: unknown, fallback: string) => {
   return error instanceof Error ? error.message : fallback;
 };
 
-export function PropertiesPage({ initialId }: { initialId?: string }) {
+export function PropertiesPage({ initialId, onNavigate }: { initialId?: string; onNavigate?: (page: string, params?: Record<string, unknown>) => void }) {
   const { user } = useAuth();
   const colleagueOptions = useColleagues();
   const { counties: filterCounties } = useActiveCounties();
@@ -351,6 +351,7 @@ export function PropertiesPage({ initialId }: { initialId?: string }) {
         propertyId={selectedId}
         onBack={() => { setView('list'); setSelectedId(null); }}
         onEdit={() => setView('edit')}
+        onNavigate={onNavigate}
       />
     );
   }
@@ -746,7 +747,7 @@ export function PropertiesPage({ initialId }: { initialId?: string }) {
 }
 
 // Property Detail
-function PropertyDetail({ propertyId, onBack, onEdit }: { propertyId: string; onBack: () => void; onEdit: () => void }) {
+function PropertyDetail({ propertyId, onBack, onEdit, onNavigate }: { propertyId: string; onBack: () => void; onEdit: () => void; onNavigate?: (page: string, params?: Record<string, unknown>) => void }) {
   const user = useAuth().user;
   const [property, setProperty] = useState<(PropertyListItem) | null>(null);
   const [owner, setOwner] = useState<Owner | null>(null);
@@ -1136,29 +1137,52 @@ function PropertyDetail({ propertyId, onBack, onEdit }: { propertyId: string; on
             </div>
           ) : null}
 
-          <div className="border-t border-slate-100 pt-4">
-            <h4 className="text-sm font-bold text-slate-700 mb-3">منبع فایل</h4>
-            <div className="grid grid-cols-2 gap-4">
-              <InfoField label="منبع فایل" value={FILE_SOURCE_LABELS[getFileSource(property)]} />
+          {/* منبع فایل — فقط وقتی بلوک اختصاصی (مدیر/همکار/مالک) نمایش داده نشده،
+              تا «منبع فایل» دو بار قید نشود */}
+          {!isManager && !colleague && !owner && (
+            <div className="border-t border-slate-100 pt-4">
+              <h4 className="text-sm font-bold text-slate-700 mb-3">منبع فایل</h4>
+              <div className="grid grid-cols-2 gap-4">
+                <InfoField label="منبع فایل" value={FILE_SOURCE_LABELS[getFileSource(property)]} />
+              </div>
             </div>
-          </div>
+          )}
         </div>
       )}
 
       {activeTab === 'matches' && (
         <div className="space-y-3">
           {matches.length > 0 ? (
-            matches.map((m) => (
-              <div key={m.id} className="card p-4 flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-slate-800">{m.customers?.first_name} {m.customers?.last_name}</p>
-                  <p className="text-xs text-slate-400" dir="ltr">{m.customers?.mobile}</p>
-                </div>
-                <div className="w-12 h-12 rounded-full flex items-center justify-center text-sm font-bold text-white" style={{ backgroundColor: m.score >= 80 ? '#16a34a' : m.score >= 60 ? '#f97316' : '#64748b' }}>
-                  {m.score}%
-                </div>
-              </div>
-            ))
+            <>
+              <p className="text-[11px] text-slate-400">روی هر تطبیق کلیک کنید تا صفحهٔ تطبیق‌های این فایل باز شود</p>
+              {matches.map((m) => {
+                const scoreColor = m.score >= 85 ? '#2563eb' : m.score >= 70 ? '#059669' : m.score >= 55 ? '#ca8a04' : m.score >= 40 ? '#ea580c' : '#dc2626';
+                return (
+                  <button
+                    key={m.id}
+                    type="button"
+                    onClick={() => onNavigate?.('matches', { id: property.id })}
+                    className="card p-4 w-full flex items-center justify-between text-right hover:shadow-md hover:border-slate-300 transition-all"
+                  >
+                    <div>
+                      <p className="text-sm font-medium text-slate-800">{m.customers?.first_name} {m.customers?.last_name}</p>
+                      <p className="text-xs text-slate-400" dir="ltr">{m.customers?.mobile}</p>
+                    </div>
+                    <div className="w-12 h-12 rounded-full flex items-center justify-center text-sm font-bold text-white" style={{ backgroundColor: scoreColor }}>
+                      {m.score}%
+                    </div>
+                  </button>
+                );
+              })}
+              <button
+                type="button"
+                onClick={() => onNavigate?.('matches', { id: property.id })}
+                className="w-full flex items-center justify-center gap-1.5 rounded-xl border border-blue-200 bg-blue-50/60 px-3 py-2.5 text-xs font-bold text-blue-700 hover:bg-blue-100/60 transition-colors"
+              >
+                <Target size={13} /> دیدن تطبیق‌های کامل این فایل
+                <ChevronLeft size={13} />
+              </button>
+            </>
           ) : (
             <EmptyState icon={<Target size={36} />} title="تطبیقی یافت نشده" />
           )}

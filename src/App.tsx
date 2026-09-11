@@ -55,9 +55,9 @@ function AppContent() {
       case 'colleagues':
         return <ColleaguesPage onNavigate={navigate} />;
       case 'properties':
-        return <PropertiesPage initialId={params.id as string | undefined} />;
+        return <PropertiesPage initialId={params.id as string | undefined} onNavigate={navigate} />;
       case 'matches':
-        return <MatchesPage />;
+        return <MatchesPage initialPropertyId={params.id as string | undefined} />;
       case 'calls':
         return <CallsPage />;
       case 'followups':

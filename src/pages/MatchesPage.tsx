@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useMemo, type ComponentType, type ReactNode } from 'react';
+import { useEffect, useRef, useState, useCallback, useMemo, type ComponentType, type ReactNode } from 'react';
 import {
   Target, ArrowLeft, Zap, Search, Check, ChevronDown, ChevronUp,
   Building2, Users, Flame, AlertTriangle, Info, Minus, ShieldCheck, Star, CheckCircle2, Handshake,
@@ -470,7 +470,7 @@ function MatchCard({ entry, customer, property, geo }: {
 
 // ---- صفحه ----
 
-export function MatchesPage() {
+export function MatchesPage({ initialPropertyId }: { initialPropertyId?: string }) {
   const [mode, setMode] = useState<'property_to_customer' | 'customer_to_property'>('property_to_customer');
   const [properties, setProperties] = useState<Property[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -541,7 +541,8 @@ export function MatchesPage() {
     return () => clearTimeout(t);
   }, [mode, properties, customers]);
 
-  const computeMatches = useCallback((item: Property | Customer) => {
+  const computeMatches = useCallback((item: Property | Customer, forcedMode?: 'property_to_customer' | 'customer_to_property') => {
+    const m = forcedMode ?? mode;
     setSelected(item);
     setComputing(true);
     setPersistStatus(null);
@@ -549,7 +550,7 @@ export function MatchesPage() {
     let results: MatchEntry[] = [];
     let rejected = 0;
 
-    if (mode === 'property_to_customer') {
+    if (m === 'property_to_customer') {
       const prop = item as Property;
       const pairs = customers.map((c) => ({ property: prop, customer: c, result: scoreMatch(c, prop) }));
       rejected = pairs.filter((p) => !p.result.compatible).length;
@@ -573,6 +574,18 @@ export function MatchesPage() {
     setRejectedCount(rejected);
     setComputing(false);
   }, [mode, customers, properties, minScore]);
+
+  // ورود عمیق از صفحهٔ جزئیات فایل: تطبیق‌های همان فایل را مستقیم باز کن
+  const autoSelectedRef = useRef(false);
+  useEffect(() => {
+    if (!initialPropertyId || autoSelectedRef.current) return;
+    if (properties.length === 0 || customers.length === 0) return;
+    const prop = properties.find((p) => p.id === initialPropertyId);
+    if (!prop) return;
+    autoSelectedRef.current = true;
+    setMode('property_to_customer');
+    computeMatches(prop, 'property_to_customer');
+  }, [initialPropertyId, properties, customers, computeMatches]);
 
   const filteredList = useMemo(() => {
     const q = search.trim().toLowerCase();
