@@ -281,13 +281,13 @@ function ComponentMeters({ components }: { components: ScoredComponent[] }) {
 
 interface ReasonLine { icon: 'ok' | 'warn' | 'info'; text: string }
 
-function ReasonList({ lines }: { lines: ReasonLine[] }) {
+function ReasonList({ title, lines }: { title: string; lines: ReasonLine[] }) {
   const [expanded, setExpanded] = useState(false);
   const visible = expanded ? lines : lines.slice(0, 8);
   return (
     <div className="mt-3 pt-3 border-t border-slate-100">
       <p className="text-[11px] font-bold text-slate-400 mb-1.5 flex items-center gap-1">
-        <Info size={12} /> دلایل تطبیق
+        <Info size={12} /> {title}
       </p>
       <div className="space-y-1.5">
         {visible.map((l, i) => (
@@ -341,11 +341,18 @@ function MatchCard({ entry, customer, property, geo }: {
     ? entry.data.name ?? `${entry.data.first_name} ${entry.data.last_name}`
     : entry.data.title;
 
-  const lines: ReasonLine[] = [
+  // «دلایل تطبیق»: فقط موارد تأییدشده (✓)
+  const matchLines: ReasonLine[] = (result.explanation?.positives ?? []).map((text) => ({ icon: 'ok' as const, text }));
+  // «چرا ۱۰۰٪ نشد؟»: همان کسری — افت‌های کنترل‌شده (⚠) + موارد قابل تأیید نیست (ℹ)
+  const gapLines: ReasonLine[] = [
     ...(result.explanation?.warnings ?? []).map((text) => ({ icon: 'warn' as const, text })),
-    ...(result.explanation?.positives ?? []).map((text) => ({ icon: 'ok' as const, text })),
     ...(result.explanation?.unverifiable ?? []).map((text) => ({ icon: 'info' as const, text })),
   ];
+  // اگر مؤلفه‌ای زیر ۱۰۰٪ است ولی سطر توضیحی ندارد: درصد خود مؤلفه گزارش می‌شود
+  const componentGapLines: ReasonLine[] = (result.components ?? [])
+    .filter((c) => c.active && c.value < 0.999)
+    .map((c) => ({ icon: 'info' as const, text: `${c.label} ${formatPrice(Math.round(c.value * 100))}٪` }));
+  const finalGapLines = gapLines.length > 0 || score >= 100 ? gapLines : componentGapLines;
 
   return (
     <div className="card overflow-hidden transition-all hover:shadow-md" style={{ borderRight: `3px solid ${tier.border}` }}>
@@ -407,9 +414,14 @@ function MatchCard({ entry, customer, property, geo }: {
           </p>
         )}
 
-        {/* قانون توضیح اجباری */}
-        {lines.length > 0 ? (
-          <ReasonList lines={lines} />
+        {/* توضیح اجباری: دلایل تطبیق + دلایل کسری (آنچه مانع ۱۰۰٪ شده) */}
+        {matchLines.length > 0 || finalGapLines.length > 0 ? (
+          <>
+            {matchLines.length > 0 && <ReasonList title="دلایل تطبیق" lines={matchLines} />}
+            {score < 100 && finalGapLines.length > 0 && (
+              <ReasonList title={`چرا ۱۰۰٪ نشد؟ (${formatPrice(100 - score)}٪ کسری)`} lines={finalGapLines} />
+            )}
+          </>
         ) : (
           <div className="mt-3 pt-3 border-t border-slate-100">
             <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 text-slate-500 border border-slate-200 px-3 py-1 text-[11px] font-medium">
