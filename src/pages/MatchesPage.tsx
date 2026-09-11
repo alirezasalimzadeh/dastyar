@@ -106,6 +106,20 @@ const REJECT_TITLES: Record<string, string> = {
   INCOMPLETE_CUSTOMER_PROFILE: 'پروفایل مشتری ناقص است',
 };
 
+// برچسب‌های کوتاه برای تفکیک دلایل رد (سربرگ بخش + تایل)
+const SHORT_REASONS: Record<string, string> = {
+  BUDGET_TOO_HIGH: 'قیمت',
+  DEPOSIT_TOO_HIGH: 'ودیعه',
+  RENT_TOO_HIGH: 'اجاره',
+  AREA_TOO_LARGE: 'متراژ',
+  INSUFFICIENT_ROOMS: 'اتاق',
+  LOCATION_OUTSIDE_REQUEST: 'موقعیت',
+  TRANSACTION_INCOMPATIBLE: 'نوع معامله',
+  CATEGORY_INCOMPATIBLE: 'دسته',
+  PROPERTY_TYPE_INCOMPATIBLE: 'نوع ملک',
+  INCOMPLETE_CUSTOMER_PROFILE: 'پروفایل ناقص',
+};
+
 // ---- ردیف‌های داده «با یک نگاه» ----
 
 interface SpecRow { k: string; v: string }
@@ -448,6 +462,23 @@ export function MatchesPage() {
   const [rejectedCount, setRejectedCount] = useState(0);
   const [rejectedEntries, setRejectedEntries] = useState<MatchEntry[]>([]);
   const [showAllRejected, setShowAllRejected] = useState(false);
+  const [mismatchFlash, setMismatchFlash] = useState(false);
+
+  // تفکیک دلایل رد — «ناسازگار (رد شد) از چه ساخته شده»
+  const rejectionBreakdown = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const e of rejectedEntries) {
+      const k = e.result.rejectionReason ?? 'OTHER';
+      m.set(k, (m.get(k) ?? 0) + 1);
+    }
+    return [...m.entries()].sort((a, b) => b[1] - a[1]);
+  }, [rejectedEntries]);
+
+  const scrollToMismatchReasons = useCallback(() => {
+    document.getElementById('mismatch-reasons')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    setMismatchFlash(true);
+    window.setTimeout(() => setMismatchFlash(false), 1600);
+  }, []);
   const [loading, setLoading] = useState(true);
   const [computing, setComputing] = useState(false);
   const [search, setSearch] = useState('');
@@ -538,8 +569,7 @@ export function MatchesPage() {
       .sort((a, b) =>
         (a.result.rejectionReason ?? '').localeCompare(b.result.rejectionReason ?? '') ||
         (a.type === 'customer' ? (a.data.name ?? '') : a.data.title).localeCompare(
-          b.type === 'customer' ? (b.data.name ?? '') : b.data.title, 'fa'))
-      .slice(0, 50);
+          b.type === 'customer' ? (b.data.name ?? '') : b.data.title, 'fa'));
 
     persistMatches(pairs).then(setPersistStatus).catch((e: unknown) => setPersistStatus({ saved: 0, error: String(e) }));
 
@@ -808,13 +838,23 @@ export function MatchesPage() {
                   <p className="text-[10px] text-slate-400">عالی (≥ 85٪)</p>
                 </div>
               </div>
-              <div className="rounded-xl border border-slate-200 bg-white p-3 flex items-center gap-2.5 h-full">
+              <button
+                type="button"
+                onClick={scrollToMismatchReasons}
+                title="دیدن دلایل عدم تطبیق"
+                className={`rounded-xl border p-3 flex items-center gap-2.5 h-full text-right transition-colors ${
+                  rejectedCount > 0 ? 'border-red-200 bg-white hover:border-red-300 hover:bg-red-50/40 cursor-pointer' : 'border-slate-200 bg-white cursor-default'
+                }`}
+              >
                 <span className="w-9 h-9 rounded-lg bg-red-50 text-red-500 flex items-center justify-center flex-shrink-0"><X size={16} /></span>
                 <div className="min-w-0">
                   <p className="text-base font-extrabold text-slate-800 leading-5">{formatPrice(rejectedCount)}</p>
-                  <p className="text-[10px] text-slate-400">ناسازگار (رد شد)</p>
+                  <p className="text-[10px] text-slate-400">
+                    ناسازگار (رد شد)
+                    {rejectedCount > 0 && <span className="text-red-400 font-medium"> — دلایل را ببینید</span>}
+                  </p>
                 </div>
-              </div>
+              </button>
             </div>
 
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-2.5">
@@ -853,15 +893,28 @@ export function MatchesPage() {
 
           {/* دلایل عدم تطبیق — جفت‌هایی که از فهرست خارج شدند و چرا */}
           {rejectedEntries.length > 0 && (
-            <section className="mt-4">
+            <section
+              id="mismatch-reasons"
+              className={`mt-4 rounded-2xl transition-shadow duration-700 ${mismatchFlash ? 'ring-2 ring-rose-300 shadow-lg shadow-rose-100' : ''}`}
+            >
               <div className="flex flex-wrap items-center gap-2 mb-2.5">
                 <span className="w-7 h-7 rounded-lg bg-rose-50 text-rose-500 flex items-center justify-center"><AlertTriangle size={14} /></span>
                 <h3 className="text-sm font-bold text-slate-700">دلایل عدم تطبیق</h3>
                 <span className="text-[11px] px-2 py-0.5 rounded-full bg-rose-50 text-rose-600 border border-rose-200">{formatPrice(rejectedCount)} مورد</span>
                 <span className="text-[11px] text-slate-400">این جفت‌ها به دلیل موارد زیر از فهرست تطبیق‌ها حذف شدند</span>
+                {/* تفکیک دلایل رد — «رد شد» از چه ساخته شده */}
+                {rejectionBreakdown.length > 1 && (
+                  <span className="flex flex-wrap items-center gap-1 mr-auto">
+                    {rejectionBreakdown.map(([code, n]) => (
+                      <span key={code} className="text-[10px] px-1.5 py-0.5 rounded-md bg-white border border-rose-200 text-rose-600">
+                        {formatPrice(n)} × {SHORT_REASONS[code] ?? REJECT_TITLES[code] ?? 'سایر'}
+                      </span>
+                    ))}
+                  </span>
+                )}
               </div>
               <div className="space-y-2">
-                {(showAllRejected ? rejectedEntries : rejectedEntries.slice(0, 6)).map((m, i) => {
+                {(showAllRejected ? rejectedEntries.slice(0, 50) : rejectedEntries.slice(0, 6)).map((m, i) => {
                   const d = m.data;
                   const isProp = m.type === 'property';
                   const p = isProp ? (d as Property) : null;
@@ -931,6 +984,9 @@ export function MatchesPage() {
                   {showAllRejected ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
                   {showAllRejected ? 'بستن' : `${formatPrice(Math.min(rejectedEntries.length, 50) - 6)} مورد دیگر`}
                 </button>
+              )}
+              {showAllRejected && rejectedEntries.length > 50 && (
+                <p className="text-[10px] text-slate-400 mt-1.5">۵۰ مورد از {formatPrice(rejectedEntries.length)} مورد نمایش داده شد (مرتب‌شده بر اساس دلیل رد)</p>
               )}
             </section>
           )}
