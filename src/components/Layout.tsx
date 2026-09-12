@@ -1,4 +1,4 @@
-import { ReactNode, useCallback, useEffect, useState } from 'react';
+import { ReactNode, useEffect, useState } from 'react';
 import {
   LayoutDashboard,
   Users,
@@ -17,20 +17,11 @@ import {
   Menu,
   X,
   LogOut,
-  Bell,
   Search,
   Download,
-  WifiOff,
-  CloudUpload,
-  AlertTriangle,
-  RefreshCw,
-  Trash2,
 } from 'lucide-react';
 import { useAuth } from '@/lib/auth';
-import { supabase } from '@/lib/supabase';
-import { getUserRoleLabel, toPersianDigits, timeAgo } from '@/lib/constants';
-import { getOfflineQueue, syncOfflineQueue, removeOfflineEntry, type OfflineQueueItem } from '@/lib/offlineFetch';
-import { Modal } from '@/components/ui';
+import { getUserRoleLabel } from '@/lib/constants';
 
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>;
@@ -62,17 +53,7 @@ const NAV_ITEMS: NavItem[] = [
 
 const MOBILE_NAV_KEYS = ['dashboard', 'customers', 'properties', 'followups', 'profile'];
 
-const TABLE_LABELS: Record<string, string> = {
-  customers: 'مشتری',
-  owners: 'مالک',
-  properties: 'فایل',
-  calls: 'تماس',
-  follow_ups: 'پیگیری',
-  activities: 'فعالیت',
-  deals: 'معامله',
-  tasks: 'وظیفه',
-  property_matches: 'تطبیق',
-};
+
 
 export function Layout({
   currentPage,
@@ -88,68 +69,6 @@ export function Layout({
   const [showSearch, setShowSearch] = useState(false);
   const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [installDismissed, setInstallDismissed] = useState(false);
-  const [online, setOnline] = useState(() => navigator.onLine);
-
-  const [offlineQueue, setOfflineQueue] = useState<OfflineQueueItem[]>([]);
-  const [showQueue, setShowQueue] = useState(false);
-  const [syncing, setSyncing] = useState(false);
-  const [syncMessage, setSyncMessage] = useState<{ ok: boolean; text: string } | null>(null);
-
-  useEffect(() => {
-    const updateConnection = () => setOnline(navigator.onLine);
-    window.addEventListener('online', updateConnection);
-    window.addEventListener('offline', updateConnection);
-    return () => {
-      window.removeEventListener('online', updateConnection);
-      window.removeEventListener('offline', updateConnection);
-    };
-  }, []);
-
-  // صف تغییرات آفلاین همیشه برای کاربر قابل مشاهده باشد تا چیزی «گم» به نظر نرسد
-  const refreshQueue = useCallback(() => {
-    void getOfflineQueue().then(setOfflineQueue).catch(() => setOfflineQueue([]));
-  }, []);
-
-  useEffect(() => {
-    refreshQueue();
-    const interval = window.setInterval(refreshQueue, 10000);
-    window.addEventListener('online', refreshQueue);
-    window.addEventListener('offline', refreshQueue);
-    return () => {
-      window.clearInterval(interval);
-      window.removeEventListener('online', refreshQueue);
-      window.removeEventListener('offline', refreshQueue);
-    };
-  }, [refreshQueue]);
-
-  const handleSync = async () => {
-    setSyncing(true);
-    setSyncMessage(null);
-    try {
-      const { data } = await supabase.auth.getSession();
-      const token = data.session?.access_token;
-      const summary = await syncOfflineQueue({ authorization: token ? `Bearer ${token}` : null });
-      if (!summary) {
-        setSyncMessage({ ok: false, text: 'همگام‌سازی انجام نشد؛ اتصال اینترنت را بررسی کنید.' });
-      } else if (summary.total === 0) {
-        setSyncMessage({ ok: true, text: 'تغییری در صف نبود.' });
-      } else if (summary.remaining === 0) {
-        setSyncMessage({ ok: true, text: 'همهٔ تغییرات با موفقیت به سرور ارسال شد.' });
-      } else {
-        setSyncMessage({
-          ok: false,
-          text: `${toPersianDigits(summary.remaining)} از ${toPersianDigits(summary.total)} مورد ارسال نشد.${summary.lastError ? ` آخرین خطا: ${summary.lastError}` : ''}`,
-        });
-      }
-    } catch (err) {
-      console.error('[dastyar-sync] manual sync error', err);
-      setSyncMessage({ ok: false, text: 'همگام‌سازی به پایان نرسید؛ جزئیات در کنسول مرورگر (F12) ثبت شد.' });
-    } finally {
-      setSyncing(false);
-      refreshQueue();
-    }
-  };
-
   useEffect(() => {
     const onInstallPrompt = (event: Event) => {
       event.preventDefault();
@@ -296,26 +215,6 @@ export function Layout({
         </main>
       </div>
 
-      {(!online || offlineQueue.length > 0) && (
-        <div className="fixed left-3 top-[calc(4rem+env(safe-area-inset-top))] z-40 flex flex-col items-start gap-2 lg:top-4">
-          {!online && (
-            <div className="inline-flex items-center gap-2 rounded-full bg-amber-100 px-3 py-1.5 text-xs font-bold text-amber-800 shadow-sm">
-              <WifiOff size={14} /> حالت آفلاین؛ تغییرات بعداً همگام می‌شوند
-            </div>
-          )}
-          {offlineQueue.length > 0 && (
-            <button
-              type="button"
-              onClick={() => setShowQueue(true)}
-              className={`inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-bold shadow-sm ${offlineQueue.some((item) => item.failed) ? 'bg-red-100 text-red-800' : 'bg-indigo-100 text-indigo-800'}`}
-            >
-              {offlineQueue.some((item) => item.failed) ? <AlertTriangle size={14} /> : <CloudUpload size={14} />}
-              {toPersianDigits(offlineQueue.length)} تغییر در صف همگام‌سازی — مشاهده
-            </button>
-          )}
-        </div>
-      )}
-
       {installPrompt && !installDismissed && (
         <div className="fixed bottom-[calc(5rem+env(safe-area-inset-bottom))] left-3 right-3 z-40 mx-auto flex max-w-md items-center gap-3 rounded-2xl border border-blue-200 bg-white p-3 shadow-xl lg:bottom-5 lg:left-5 lg:right-auto">
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600"><Download size={19} /></div>
@@ -324,57 +223,6 @@ export function Layout({
           <button type="button" onClick={() => setInstallDismissed(true)} className="p-1 text-slate-400" aria-label="بستن"><X size={16} /></button>
         </div>
       )}
-
-      <Modal open={showQueue} onClose={() => setShowQueue(false)} title="تغییرات در صف همگام‌سازی">
-        <div className="space-y-3">
-          <p className="text-xs leading-6 text-slate-500">
-            تغییراتی که در حالت آفلاین ثبت می‌کنید اینجا نگهداری می‌شوند و پس از اتصال اینترنت به سرور ارسال می‌شوند؛ تا آن زمان در همین دستگاه قابل مشاهده و ویرایش هستند.
-          </p>
-          {syncMessage && (
-            <p className={`rounded-lg p-2.5 text-xs leading-6 break-words ${syncMessage.ok ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}>
-              {syncMessage.text}
-            </p>
-          )}
-          {offlineQueue.length === 0 ? (
-            <p className="rounded-lg bg-slate-50 p-3 text-center text-sm text-slate-500">تغییری در صف نیست.</p>
-          ) : (
-            <div className="max-h-72 space-y-2 overflow-y-auto">
-              {offlineQueue.map((item) => (
-                <div key={item.id} className={`rounded-lg border p-3 ${item.failed ? 'border-red-200 bg-red-50/60' : 'border-slate-200'}`}>
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="text-sm font-bold text-slate-700">
-                      {TABLE_LABELS[item.table] || item.table || 'رکورد'}
-                      <span className="mr-1 text-[10px] font-normal text-slate-400">({item.method})</span>
-                    </p>
-                    <button
-                      type="button"
-                      onClick={() => { void removeOfflineEntry(item.id).then(refreshQueue); }}
-                      className="p-1 text-slate-400 hover:text-red-500"
-                      aria-label="حذف از صف"
-                    >
-                      <Trash2 size={14} />
-                    </button>
-                  </div>
-                  <p className="mt-0.5 text-[11px] text-slate-400">
-                    {timeAgo(item.createdAt)}
-                    {item.lastAttempt ? ` — آخرین تلاش: ${timeAgo(item.lastAttempt)}` : ''}
-                  </p>
-                  {item.lastError && (
-                    <p className="mt-1 rounded bg-red-100/70 p-1.5 text-[11px] leading-5 text-red-700 break-words">{item.lastError}</p>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
-          <div className="flex justify-end gap-2">
-            <button type="button" onClick={() => setShowQueue(false)} className="btn-secondary">بستن</button>
-            <button type="button" onClick={handleSync} disabled={syncing || !online} className="btn-primary">
-              <RefreshCw size={15} className={syncing ? 'animate-spin' : ''} />
-              {syncing ? 'در حال همگام‌سازی...' : 'همگام‌سازی حالا'}
-            </button>
-          </div>
-        </div>
-      </Modal>
 
       {/* Mobile Bottom Nav */}
       <nav className="lg:hidden fixed bottom-0 inset-x-0 z-30 bg-white border-t border-slate-200 flex items-center justify-around px-2 pt-1.5 pb-[calc(env(safe-area-inset-bottom)+0.375rem)]">

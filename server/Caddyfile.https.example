@@ -1,0 +1,23 @@
+# =============================================================================
+# دستیار مشاور — Caddy برای دامنه (HTTPS خودکار با Let's Encrypt)
+# وقتی دامنه دارید: این فایل را جایگزین Caddyfile کنید و: docker compose restart web
+# (پورت 80 و 443 باید باز باشند)
+# =============================================================================
+
+dastyar.example.com {
+    handle /rest/v1/* {
+        uri strip_prefix /rest/v1
+        reverse_proxy rest:3000
+    }
+
+    handle /auth/v1/* {
+        uri strip_prefix /auth/v1
+        reverse_proxy auth:9999
+    }
+
+    handle {
+        root * /srv/dastyar
+        encode gzip zstd
+        file_server
+    }
+}

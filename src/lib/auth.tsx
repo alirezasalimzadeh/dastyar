@@ -16,16 +16,6 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
-const OFFLINE_TABLES = [
-  'profiles', 'counties', 'cities', 'neighborhoods', 'tags', 'customers', 'owners',
-  'properties', 'calls', 'follow_ups', 'tasks', 'deals', 'activities', 'property_matches',
-];
-
-async function warmOfflineData() {
-  if (!navigator.onLine) return;
-  await Promise.allSettled(OFFLINE_TABLES.map((table) => supabase.from(table).select('*').limit(10000)));
-}
-
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [user, setUser] = useState<User | null>(null);
@@ -39,7 +29,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .eq('id', userId)
       .maybeSingle();
     if (data) setProfile(data as Profile);
-    void warmOfflineData();
   };
 
   useEffect(() => {
@@ -69,26 +58,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const signUp = async (email: string, password: string, firstName: string, lastName: string, mobile: string) => {
+    // پروفایل + تگ‌های پیش‌فرض به‌صورت خودکار توسط تریگر سرور ساخته می‌شوند
+    // (server/schema/0002_profile_trigger.sql) — اطلاعات از options.data می‌آیند.
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
-        data: { first_name: firstName, last_name: lastName, mobile },
+        data: { first_name: firstName, last_name: lastName, mobile, email },
       },
     });
     if (error) return { error: error.message };
 
     if (data.user) {
-      const { error: profileError } = await supabase.from('profiles').insert({
-        id: data.user.id,
-        first_name: firstName,
-        last_name: lastName,
-        mobile,
-        email,
-        role: 'consultant',
-        account_status: 'active',
-      });
-      if (profileError) return { error: profileError.message };
       setProfile(null);
       await fetchProfile(data.user.id);
     }

@@ -1,0 +1,25 @@
+# =============================================================================
+# دستیار مشاور — پیکربندی Caddy
+# فعلاً HTTP ساده (برای شروع با آی‌پی سرور) — برای دامنه ببینید Caddyfile.https
+# =============================================================================
+
+:80 {
+    # API داده‌ها (PostgREST) — مسیر دقیقِ supabase-js
+    handle /rest/v1/* {
+        uri strip_prefix /rest/v1
+        reverse_proxy rest:3000
+    }
+
+    # احرازهویت (GoTrue)
+    handle /auth/v1/* {
+        uri strip_prefix /auth/v1
+        reverse_proxy auth:9999
+    }
+
+    # سایت
+    handle {
+        root * /srv/dastyar
+        encode gzip zstd
+        file_server
+    }
+}
