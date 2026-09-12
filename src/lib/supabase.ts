@@ -1,19 +1,20 @@
-// ---------------------------------------------------------------------------
-// اتصال به سرور خودِ شما (VPS) — ببینید: server/ و راهنمای-اجرا-روی-گوشی.md
-// سرور = PostgreSQL + PostgREST + GoTrue (همان API که supabase-js می‌فهمد)
-// ---------------------------------------------------------------------------
-import { createClient } from '@supabase/supabase-js';
+// ============================================================================
+// لایهٔ دادهٔ دستیار — کاملاً محلی (از نسخهٔ ۷۰ به بعد)
+//
+// هر داده در IndexedDB مرورگر همین دستگاه ذخیره می‌شود. هیچ سروری در
+// حلقهٔ کار نیست و «بخش آنلاین» حذف شده است:
+//   • ورود/خروج کاربر: حذف شد — پروفایل محلی به‌صورت خودکار ساخته می‌شود.
+//   • سینک بین گوشی و کامپیوتر: فقط با «بکاپ کامل» (تنظیمات → پشتیبان‌گیری)
+//     و انتقال دستی همان فایل JSON به دستگاه دیگر (تنظیمات → بازیابی =
+//     جایگزینی کامل داده‌ها).
+//
+// شکل سوپرپیز برای همهٔ ۱۹۰ نقطهٔ استفاده حفظ شده: `supabase.from(...)` دقیقاً
+// همان query-builder محلی (src/lib/localdb) است.
+// ============================================================================
+import { createLocalClient } from './localdb/client';
+import { ensureLocalSeed } from './localdb/seed';
 
-const supabaseUrl = (import.meta.env.VITE_SUPABASE_URL as string) || 'http://localhost';
-const supabaseAnonKey = (import.meta.env.VITE_SUPABASE_ANON_KEY as string) || 'anon';
+export const supabase = createLocalClient();
 
-if (!import.meta.env.VITE_SUPABASE_URL) {
-  console.warn('[dastyar] VITE_SUPABASE_URL تنظیم نشده — فایل .env.production را ببینید');
-}
-
-export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-  auth: {
-    persistSession: true,
-    autoRefreshToken: true,
-  },
-});
+// seed اولیهٔ مناطق تهران (یک‌بار) — بی‌اثر در محیط بدون idb (مثل تست‌های node)
+void ensureLocalSeed();

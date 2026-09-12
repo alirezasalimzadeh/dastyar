@@ -1,107 +1,121 @@
-import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
-import type { Session, User } from '@supabase/supabase-js';
-import { supabase } from '@/lib/supabase';
-import type { Profile } from '@/lib/types';
+// ============================================================================
+// هویت محلی — بدون ورود و بدون سرور (از نسخهٔ ۷۰ به بعد)
+//
+// یک «کاربر محلی» با شناسهٔ پایدار (UUID) روی همین دستگاه ساخته می‌شود و
+// ردیف پروفایلش در جدول محلی profiles ذخیره می‌شود. شکل `useAuth` دقیقاً
+// همان قبل است (user / profile / loading / signOut) تا هیچ بخشی از برنامه
+// دست نخورده بماند.
+// ============================================================================
+import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
+import { supabase } from './supabase';
+import { ensureLocalSeed } from './localdb/seed';
 
-interface AuthContextValue {
-  session: Session | null;
-  user: User | null;
+// شکل ردیف جدول profiles — مثل supabase بدون schema، فیلدها آزادند
+export interface Profile {
+  id: string;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  [key: string]: any;
+}
+
+export interface SessionUser {
+  id: string;
+  email: string | null;
+  created_at: string;
+}
+
+interface AuthContextType {
+  user: SessionUser | null;
   profile: Profile | null;
   loading: boolean;
-  signUp: (email: string, password: string, firstName: string, lastName: string, mobile: string) => Promise<{ error: string | null }>;
-  signIn: (email: string, password: string) => Promise<{ error: string | null }>;
-  signOut: () => Promise<void>;
+  signOut: () => void;
   refreshProfile: () => Promise<void>;
 }
 
-const AuthContext = createContext<AuthContextValue | undefined>(undefined);
+const AuthContext = createContext<AuthContextType>({
+  user: null,
+  profile: null,
+  loading: true,
+  signOut: () => {},
+  refreshProfile: async () => {},
+});
+
+const USER_ID_KEY = 'dastyar.local.user.id';
+
+/** شناسهٔ کاربر محلی (پایدار روی دستگاه) + اطمینان از وجود ردیف پروفایل */
+async function getOrCreateLocalUser(): Promise<SessionUser> {
+  let stored: string | null = null;
+  try {
+    stored = localStorage.getItem(USER_ID_KEY);
+  } catch {
+    // localStorage در دسترس نیست (نایم/حریم) — هر بار یه شناسهٔ جدید
+  }
+  if (!stored) {
+    stored = crypto.randomUUID();
+    try {
+      localStorage.setItem(USER_ID_KEY, stored);
+    } catch {
+      // بی‌اهمیت
+    }
+  }
+
+  const { data } = await supabase.from('profiles').select('*').eq('id', stored).maybeSingle();
+  if (!data) {
+    await supabase.from('profiles').upsert({
+      id: stored,
+      full_name: 'دستیار من',
+      first_name: 'دستیار',
+      last_name: 'من',
+      role: 'system_admin',
+      account_status: 'active',
+    });
+  }
+  const row: Profile = (data as Profile | null) ?? ({} as Profile);
+  return { id: stored, email: null, created_at: (row.created_at as string) ?? new Date().toISOString() };
+}
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [session, setSession] = useState<Session | null>(null);
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<SessionUser | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const fetchProfile = async (userId: string) => {
-    const { data } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', userId)
-      .maybeSingle();
-    if (data) setProfile(data as Profile);
-  };
-
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      if (session?.user) {
-        fetchProfile(session.user.id).finally(() => setLoading(false));
-      } else {
-        setLoading(false);
+    let cancelled = false;
+    (async () => {
+      try {
+        await ensureLocalSeed();
+        const u = await getOrCreateLocalUser();
+        if (cancelled) return;
+        const { data } = await supabase.from('profiles').select('*').eq('id', u.id).maybeSingle();
+        if (cancelled) return;
+        setUser(u);
+        setProfile((data as Profile | null) ?? null);
+      } catch (err) {
+        console.error('[dastyar-auth] خطا در راه‌اندازی هویت محلی', err);
+      } finally {
+        if (!cancelled) setLoading(false);
       }
-    });
-
-    const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      if (session?.user) {
-        fetchProfile(session.user.id);
-      } else {
-        setProfile(null);
-      }
-    });
-
+    })();
     return () => {
-      authListener.subscription.unsubscribe();
+      cancelled = true;
     };
   }, []);
 
-  const signUp = async (email: string, password: string, firstName: string, lastName: string, mobile: string) => {
-    // پروفایل + تگ‌های پیش‌فرض به‌صورت خودکار توسط تریگر سرور ساخته می‌شوند
-    // (server/schema/0002_profile_trigger.sql) — اطلاعات از options.data می‌آیند.
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: { first_name: firstName, last_name: lastName, mobile, email },
-      },
-    });
-    if (error) return { error: error.message };
+  const refreshProfile = useCallback(async () => {
+    const u = await getOrCreateLocalUser();
+    const { data } = await supabase.from('profiles').select('*').eq('id', u.id).maybeSingle();
+    setProfile((data as Profile | null) ?? null);
+  }, []);
 
-    if (data.user) {
-      setProfile(null);
-      await fetchProfile(data.user.id);
-    }
-    return { error: null };
-  };
-
-  const signIn = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) return { error: error.message };
-    return { error: null };
-  };
-
-  const signOut = async () => {
-    await supabase.auth.signOut();
-    setProfile(null);
-    setSession(null);
-    setUser(null);
-  };
-
-  const refreshProfile = async () => {
-    if (user) await fetchProfile(user.id);
-  };
+  // «خروج» دیگر معنای لغو ورود ندارد؛ داده‌ها در این دستگاه می‌مانند
+  const signOut = useCallback(() => {
+    window.location.reload();
+  }, []);
 
   return (
-    <AuthContext.Provider value={{ session, user, profile, loading, signUp, signIn, signOut, refreshProfile }}>
+    <AuthContext.Provider value={{ user, profile, loading, signOut, refreshProfile }}>
       {children}
     </AuthContext.Provider>
   );
 }
 
-export function useAuth() {
-  const ctx = useContext(AuthContext);
-  if (!ctx) throw new Error('useAuth must be used within AuthProvider');
-  return ctx;
-}
+export const useAuth = () => useContext(AuthContext);

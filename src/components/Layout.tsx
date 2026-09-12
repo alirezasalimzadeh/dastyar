@@ -16,7 +16,7 @@ import {
   Settings,
   Menu,
   X,
-  LogOut,
+  Bell,
   Search,
   Download,
 } from 'lucide-react';
@@ -64,7 +64,7 @@ export function Layout({
   onNavigate: (page: string) => void;
   children: ReactNode;
 }) {
-  const { profile, signOut } = useAuth();
+  const { profile } = useAuth();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
   const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null);
@@ -131,10 +131,6 @@ export function Layout({
               <p className="text-[10px] text-slate-400">{getUserRoleLabel(profile?.role ?? 'consultant')}</p>
             </div>
           </div>
-          <button onClick={signOut} className="nav-item w-full nav-item-inactive text-red-500 hover:bg-red-50">
-            <LogOut size={18} />
-            <span>خروج</span>
-          </button>
         </div>
       </aside>
 
@@ -195,10 +191,6 @@ export function Layout({
               ))}
             </nav>
             <div className="px-3 py-4 border-t border-slate-100">
-              <button onClick={signOut} className="nav-item w-full nav-item-inactive text-red-500 hover:bg-red-50">
-                <LogOut size={18} />
-                <span>خروج</span>
-              </button>
             </div>
           </div>
         </div>

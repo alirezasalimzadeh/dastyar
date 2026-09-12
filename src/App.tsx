@@ -1,7 +1,6 @@
 import { Component, Suspense, lazy, useState, type ReactNode } from 'react';
 import { AlertTriangle } from 'lucide-react';
 import { AuthProvider, useAuth } from '@/lib/auth';
-import { AuthPage } from '@/pages/AuthPage';
 import { Layout } from '@/components/Layout';
 import { FullPageSpinner } from '@/components/ui';
 
@@ -23,7 +22,7 @@ const ProfilePage = lazy(() => import('@/pages/ProfilePage').then((m) => ({ defa
 const SettingsPage = lazy(() => import('@/pages/SettingsPage').then((m) => ({ default: m.SettingsPage })));
 
 function AppContent() {
-  const { user, profile, loading, signOut } = useAuth();
+  const { user, loading } = useAuth();
   const [page, setPage] = useState('dashboard');
   const [params, setParams] = useState<Record<string, unknown>>({});
   // تاریخچهٔ ناوبری: برای اینکه «بازگشت» کاربر را به همان صفحه‌ای برگرداند که از آن آمده
@@ -48,19 +47,9 @@ function AppContent() {
     setParams(prev.params);
   };
 
+  // بدون ورود: فقط منتظر راه‌اندازی هویت محلی (seed + پروفایل) می‌مانیم
   if (loading) return <FullPageSpinner />;
-  if (!user) return <AuthPage />;
-  if (!profile) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-50 p-4" dir="rtl">
-        <div className="card max-w-sm space-y-4 p-6 text-center">
-          <h1 className="text-lg font-bold text-slate-800">حساب فعال نیست</h1>
-          <p className="text-sm leading-6 text-slate-500">برای این حساب پروفایل فعال برنامه وجود ندارد.</p>
-          <button type="button" onClick={signOut} className="btn-secondary w-full">بازگشت به ورود</button>
-        </div>
-      </div>
-    );
-  }
+  if (!user) return <FullPageSpinner />;
 
   const renderPage = () => {
     switch (page) {

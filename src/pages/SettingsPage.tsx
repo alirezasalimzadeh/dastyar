@@ -1,21 +1,17 @@
 import { useEffect, useState, useCallback, type ReactNode } from 'react';
 import { Settings as SettingsIcon, MapPin, Plus, Edit2, X, Search, Power, Lock, Download, Upload, Database, Tag as TagIcon, AlertTriangle, CheckCircle2, Loader2, Clock, UserRound, Mail, Smartphone, ShieldCheck, CalendarDays } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import { exportBackup, importBackup, parseBackup } from '@/lib/localdb/backup';
 import { useAuth } from '@/lib/auth';
 import { EmptyState, Spinner, Modal, PageHeader, ConfirmDialog } from '@/components/ui';
 import type { Province, County, City, Neighborhood, Tag } from '@/lib/types';
 
-type Tab = 'account' | 'security' | 'geographic' | 'tags' | 'backup';
+type Tab = 'account' | 'geographic' | 'tags' | 'backup';
 type GeoLevel = 'provinces' | 'counties' | 'cities' | 'neighborhoods';
 
 const TAG_COLORS = ['slate', 'red', 'orange', 'amber', 'green', 'teal', 'blue', 'cyan', 'purple', 'pink'];
 
-const BACKUP_TABLES = [
-  'provinces', 'counties', 'districts', 'cities', 'neighborhoods',
-  'agencies', 'branches', 'profiles', 'tags', 'customers', 'owners', 'properties',
-  'customer_preferred_cities', 'customer_preferred_neighborhoods', 'customer_tags', 'property_tags',
-  'calls', 'follow_ups', 'tasks', 'deals', 'property_matches', 'property_requests', 'activities', 'notifications',
-];
+
 
 function AccountInfoCard({ icon, label, value, color, ltr = false }: { icon: ReactNode; label: string; value: string; color: 'blue' | 'emerald' | 'violet' | 'amber'; ltr?: boolean }) {
   const tones = {
@@ -68,9 +64,6 @@ export function SettingsPage() {
   const [editTag, setEditTag] = useState<Tag | null>(null);
 
   // Security
-  const [pwForm, setPwForm] = useState({ next: '', confirm: '' });
-  const [pwMsg, setPwMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
-  const [pwSaving, setPwSaving] = useState(false);
 
   // Backup
   const [backing, setBacking] = useState(false);
@@ -110,39 +103,13 @@ export function SettingsPage() {
     loadItems();
   };
 
-  const handleChangePassword = async () => {
-    setPwMsg(null);
-    if (pwForm.next !== pwForm.confirm) {
-      setPwMsg({ type: 'error', text: 'رمز جدید و تکرار آن یکسان نیستند' });
-      return;
-    }
-    if (pwForm.next.length < 6) {
-      setPwMsg({ type: 'error', text: 'رمز جدید باید حداقل ۶ کاراکتر باشد' });
-      return;
-    }
-    setPwSaving(true);
-    const { error } = await supabase.auth.updateUser({ password: pwForm.next });
-    setPwSaving(false);
-    if (error) {
-      setPwMsg({ type: 'error', text: error.message });
-    } else {
-      setPwMsg({ type: 'success', text: 'رمز عبور با موفقیت تغییر یافت' });
-      setPwForm({ next: '', confirm: '' });
-    }
-  };
-
   // --- Backup ---
   const handleBackup = async () => {
     setBacking(true);
     setBackupMsg(null);
     try {
-      const backup: Record<string, unknown[]> = {};
-      for (const table of BACKUP_TABLES) {
-        const { data, error } = await supabase.from(table).select('*').limit(10000);
-        if (error) { backup[table] = []; continue; }
-        backup[table] = data ?? [];
-      }
-      const backupObj = { version: 1, created_at: new Date().toISOString(), data: backup };
+      // بکاپ کامل از همهٔ جدول‌های محلی
+      const backupObj = await exportBackup();
       const json = JSON.stringify(backupObj, null, 2);
       const blob = new Blob([json], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
@@ -173,19 +140,9 @@ export function SettingsPage() {
     setRestoring(true);
     setBackupMsg(null);
     try {
-      const parsed = JSON.parse(restoreData);
-      const data = parsed.data as Record<string, any[]>;
-      const tables = Object.keys(data);
-      for (const table of tables) {
-        const rows = data[table];
-        if (!rows || !rows.length) continue;
-        // Upsert rows
-        const { error } = await supabase.from(table).upsert(rows, { onConflict: 'id', ignoreDuplicates: true });
-        if (error) {
-          // If upsert fails (no unique constraint), try insert
-          await supabase.from(table).insert(rows);
-        }
-      }
+      // بازیابی = جایگزینی کامل: داده‌های این دستگاه با محتوای بکاپ یکی می‌شود
+      const parsed = parseBackup(restoreData);
+      await importBackup(parsed);
       setBackupMsg({ type: 'success', text: 'بازگردانی با موفقیت انجام شد' });
     } catch (e) {
       setBackupMsg({ type: 'error', text: 'فایل پشتیبان نامعتبر است' });
@@ -193,6 +150,8 @@ export function SettingsPage() {
     setRestoring(false);
     setShowRestoreConfirm(false);
     setRestoreData('');
+    // همهٔ صفحات دادهٔ تازه را ببینند
+    window.setTimeout(() => window.location.reload(), 600);
   };
 
   const levelLabels: Record<GeoLevel, string> = {
@@ -210,7 +169,6 @@ export function SettingsPage() {
       <div className="flex gap-1 border-b border-slate-200 mb-4 overflow-x-auto no-scrollbar">
         {([
           { key: 'account', label: 'حساب کاربری', icon: SettingsIcon },
-          { key: 'security', label: 'امنیت', icon: Lock },
           { key: 'backup', label: 'پشتیبان‌گیری', icon: Database },
           { key: 'tags', label: 'برچسب‌ها', icon: TagIcon },
           ...(isAdmin ? [{ key: 'geographic' as Tab, label: 'داده‌های جغرافیایی', icon: MapPin }] : []),
@@ -276,34 +234,6 @@ export function SettingsPage() {
         </div>
       )}
 
-      {/* Security Tab */}
-      {tab === 'security' && (
-        <div className="space-y-4 animate-fade-in">
-          <div className="card p-5 space-y-4">
-            <h3 className="text-sm font-bold text-slate-700 flex items-center gap-1.5"><Lock size={16} /> تغییر رمز عبور</h3>
-            <div><label className="label">رمز جدید</label><input className="input" type="password" value={pwForm.next} onChange={(e) => setPwForm({ ...pwForm, next: e.target.value })} dir="ltr" /></div>
-            <div><label className="label">تکرار رمز جدید</label><input className="input" type="password" value={pwForm.confirm} onChange={(e) => setPwForm({ ...pwForm, confirm: e.target.value })} dir="ltr" /></div>
-            {pwMsg && (
-              <p className={`text-sm flex items-center gap-1.5 ${pwMsg.type === 'success' ? 'text-green-600' : 'text-red-500'}`}>
-                {pwMsg.type === 'success' ? <CheckCircle2 size={15} /> : <AlertTriangle size={15} />}
-                {pwMsg.text}
-              </p>
-            )}
-            <button onClick={handleChangePassword} disabled={pwSaving || !pwForm.next || !pwForm.confirm} className="btn-primary text-sm">
-              {pwSaving ? 'در حال ذخیره...' : 'تغییر رمز'}
-            </button>
-          </div>
-
-          <div className="card p-5 space-y-3">
-            <h3 className="text-sm font-bold text-slate-700">اطلاعات نشست</h3>
-            <div className="flex items-center justify-between"><p className="text-xs text-slate-400">ایمیل ورود</p><p className="text-sm text-slate-700" dir="ltr">{user?.email ?? '-'}</p></div>
-            <div className="flex items-center justify-between"><p className="text-xs text-slate-400">شناسه کاربر</p><p className="text-sm text-slate-700" dir="ltr">{user?.id?.slice(0, 8) ?? '-'}...</p></div>
-            <div className="flex items-center justify-between"><p className="text-xs text-slate-400">آخرین به‌روزرسانی</p><p className="text-sm text-slate-700">{profile?.updated_at ? new Date(profile.updated_at).toLocaleDateString('fa-IR') : '-'}</p></div>
-          </div>
-        </div>
-      )}
-
-      {/* Backup Tab */}
       {tab === 'backup' && (
         <div className="space-y-4 animate-fade-in">
           {/* Backup */}

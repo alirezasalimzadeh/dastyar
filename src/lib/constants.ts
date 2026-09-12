@@ -189,6 +189,26 @@ export const USER_ROLES = [
 // reads them — no hard-coded list of counties)
 export const ROBAT_KARIM_COUNTY_NAME = 'رباط کریم';
 
+// شهرستان‌های فعال استان تهران — مرجع seed پایگاه محلی (localdb/seed.ts)
+export const ACTIVE_COUNTY_NAMES = ['رباط کریم', 'شهریار', 'اسلامشهر', 'گلستان', 'ورامین', 'قرچک'];
+
+// Neighborhoods (محله) — only for Robat Karim county — مرجع seed محلی
+export const ROBAT_KARIM_NEIGHBORHOODS = [
+  'رباط کریم',
+  'نصیرشهر',
+  'پرند',
+  'آبشناسان',
+  'پرندک',
+  'آلارد',
+  'وهن آباد',
+  'حصارمهتر',
+  'انجم آباد',
+  'شهرآباد',
+  'یقه',
+  'منجیل آباد',
+  'امام زاده ابوطالب',
+];
+
 // Colleagues (همکاران) are stored as owner rows carrying this tag
 export const COLLEAGUE_TAG = 'همکار';
 

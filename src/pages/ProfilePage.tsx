@@ -1,11 +1,11 @@
 import { useEffect, useState, useCallback } from 'react';
-import { User, Phone, Mail, MapPin, Calendar, Briefcase, Edit, Save, X, Lock, Camera, TrendingUp, Award, Activity as ActivityIcon, Clock, CheckCircle2, Target, DollarSign } from 'lucide-react';
+import { User, Phone, Mail, MapPin, Calendar, Briefcase, Edit, Save, X, Camera, TrendingUp, Award, Activity as ActivityIcon, Clock, CheckCircle2, Target, DollarSign } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth';
 import { getUserRoleLabel, formatDate, timeAgo, formatPrice, stripPhoneSpaces } from '@/lib/constants';
 import { Spinner, PageHeader, StatCard, Modal } from '@/components/ui';
 
-type Tab = 'overview' | 'edit' | 'security' | 'activity';
+type Tab = 'overview' | 'edit' | 'activity';
 
 export function ProfilePage() {
   const { user, profile, refreshProfile } = useAuth();
@@ -29,9 +29,6 @@ export function ProfilePage() {
     first_name: '', last_name: '', mobile: '', email: '',
     city: '', areas_of_activity: '', years_of_experience: '', specialization: '', personal_notes: '',
   });
-  const [pwForm, setPwForm] = useState({ current: '', next: '', confirm: '' });
-  const [pwMsg, setPwMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
-  const [pwSaving, setPwSaving] = useState(false);
 
   const loadProfile = useCallback(async () => {
     if (!user) return;
@@ -120,27 +117,6 @@ export function ProfilePage() {
     setTab('overview');
   };
 
-  const handleChangePassword = async () => {
-    setPwMsg(null);
-    if (pwForm.next !== pwForm.confirm) {
-      setPwMsg({ type: 'error', text: 'رمز جدید و تکرار آن یکسان نیستند' });
-      return;
-    }
-    if (pwForm.next.length < 6) {
-      setPwMsg({ type: 'error', text: 'رمز جدید باید حداقل ۶ کاراکتر باشد' });
-      return;
-    }
-    setPwSaving(true);
-    const { error } = await supabase.auth.updateUser({ password: pwForm.next });
-    setPwSaving(false);
-    if (error) {
-      setPwMsg({ type: 'error', text: error.message });
-    } else {
-      setPwMsg({ type: 'success', text: 'رمز عبور با موفقیت تغییر یافت' });
-      setPwForm({ current: '', next: '', confirm: '' });
-    }
-  };
-
   if (loading || !profile) return <div className="flex justify-center py-16"><Spinner size={32} /></div>;
 
   const conversionRate = stats.totalCalls > 0 ? Math.round((stats.successfulCalls / stats.totalCalls) * 100) : 0;
@@ -164,7 +140,6 @@ export function ProfilePage() {
             </div>
             <div className="flex gap-2 pb-1">
               <button onClick={() => setTab('edit')} className="btn-secondary text-sm"><Edit size={15} /> ویرایش</button>
-              <button onClick={() => setTab('security')} className="btn-secondary text-sm"><Lock size={15} /> امنیت</button>
             </div>
           </div>
           <div className="flex flex-wrap gap-4 mt-4 text-xs text-slate-400">
@@ -181,7 +156,6 @@ export function ProfilePage() {
         {([
           { key: 'overview', label: 'نمای کلی', icon: TrendingUp },
           { key: 'edit', label: 'ویرایش', icon: Edit },
-          { key: 'security', label: 'امنیت', icon: Lock },
           { key: 'activity', label: 'فعالیت‌ها', icon: ActivityIcon },
         ] as { key: Tab; label: string; icon: any }[]).map((t) => (
           <button
@@ -312,30 +286,6 @@ export function ProfilePage() {
             <div><label className="label">تخصص</label><input className="input" value={form.specialization} onChange={(e) => setForm({ ...form, specialization: e.target.value })} placeholder="مثلا: آپارتمان مسکونی" /></div>
           </div>
           <div><label className="label">یادداشت شخصی</label><textarea className="input min-h-[80px]" value={form.personal_notes} onChange={(e) => setForm({ ...form, personal_notes: e.target.value })} /></div>
-        </div>
-      )}
-
-      {/* Security Tab */}
-      {tab === 'security' && (
-        <div className="space-y-4 animate-fade-in">
-          <div className="card p-5 space-y-4">
-            <h3 className="text-sm font-bold text-slate-700 flex items-center gap-1.5"><Lock size={16} /> تغییر رمز عبور</h3>
-            <div><label className="label">رمز جدید</label><input className="input" type="password" value={pwForm.next} onChange={(e) => setPwForm({ ...pwForm, next: e.target.value })} dir="ltr" /></div>
-            <div><label className="label">تکرار رمز جدید</label><input className="input" type="password" value={pwForm.confirm} onChange={(e) => setPwForm({ ...pwForm, confirm: e.target.value })} dir="ltr" /></div>
-            {pwMsg && (
-              <p className={`text-sm ${pwMsg.type === 'success' ? 'text-green-600' : 'text-red-500'}`}>{pwMsg.text}</p>
-            )}
-            <button onClick={handleChangePassword} disabled={pwSaving} className="btn-primary text-sm">
-              {pwSaving ? 'در حال ذخیره...' : 'تغییر رمز'}
-            </button>
-          </div>
-
-          <div className="card p-5 space-y-3">
-            <h3 className="text-sm font-bold text-slate-700">اطلاعات امنیتی</h3>
-            <InfoRow label="آخرین فعالیت" value={stats.lastActiveDate ? timeAgo(stats.lastActiveDate) : '-'} />
-            <InfoRow label="وضعیت حساب" value={profile.account_status === 'active' ? 'فعال' : 'غیرفعال'} />
-            <InfoRow label="شناسه کاربر" value={user?.id?.slice(0, 8) ?? '-'} />
-          </div>
         </div>
       )}
 
