@@ -11,15 +11,20 @@
     "typecheck": "tsc --noEmit -p tsconfig.app.json",
     "deploy:pwa": "npm run build && gh-pages -d dist",
     "backup:postgres": "bash scripts/postgres-backup.sh",
-    "test": "vitest run"
+    "test": "vitest run",
+    "apk:android": "npm run build && cap sync android && cd android && ./gradlew assembleDebug",
+    "cap:add:android": "cap add android"
   },
   "dependencies": {
+    "@capacitor/android": "^8.5.2",
+    "@capacitor/core": "^8.5.2",
     "idb": "^8.0.3",
     "lucide-react": "^0.446.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },
   "devDependencies": {
+    "@capacitor/cli": "^8.5.2",
     "@eslint/js": "^9.9.1",
     "@types/react": "^18.3.5",
     "@types/react-dom": "^18.3.0",
